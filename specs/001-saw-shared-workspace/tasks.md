@@ -19,7 +19,9 @@ predate that practice and have no assignee, so do not read an unassigned
 issue as unowned.
 
 Issue numbers match task IDs for T001–T053 only. After that they diverge:
-**T054 is #56**, **T055 is #57**, **T056 is #60**, **T057 is #61**.
+**T054 is #56**, **T055 is #57**, **T056 is #60**, **T057 is #61**,
+**T060 is #65**. T058 and T059 have no issue: they landed in the same pull
+request that added them.
 
 | Owner | Tasks | Scope |
 |-------|-------|-------|
@@ -214,7 +216,7 @@ verification path.
 
 ### Added after the second `/speckit-analyze` pass
 
-- [ ] T060 Tell a real "why" from a stand-in in the work log (FR-016a, SC-010 — analyze U2). The Stop hook writes `"run with no recorded trigger"` when it captured no prompt, and the relay now writes `[removed at the boundary]` when it took one out. Both read as if they were the reason. Record which case applies alongside the text — `packages/shared/src/log.ts` (the stored entry), `packages/cli/src/daemon/run-context.ts` and `packages/cli/src/hooks/stop.ts` (the capture side), `packages/cli/src/web/` (show it). Joint: the field is in the frozen `packages/shared`, so it needs a PR both members approve
+- [ ] T060 Tell a real "why" from a stand-in in the work log (FR-016a, SC-010 — analyze U2, issue #65). The Stop hook writes `"run with no recorded trigger"` when it captured no prompt, and the relay now writes `[removed at the boundary]` when it took one out. Both read as if they were the reason. Record which case applies alongside the text — `packages/shared/src/log.ts` (the stored entry), `packages/cli/src/daemon/run-context.ts` and `packages/cli/src/hooks/stop.ts` (the capture side), `packages/cli/src/web/` (show it). Joint: the field is in the frozen `packages/shared`, so it needs a PR both members approve
 
 ### Added after the review of PR #54
 
