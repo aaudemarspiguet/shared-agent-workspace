@@ -71,9 +71,9 @@ skeleton. No user story works without these.
 - [X] T016 [P] STE-written `AGENT.md` template (five tools, five message types, claim/handoff conventions, own-branch rule, messages-and-refs-only rule, missing-ref handling: when a received ref is not on the remote, post a `status` message that reports "ref not found" instead of failing silently) in `packages/cli/src/templates/agent-md.ts`
 - [X] T017 `saw init` + `saw invite` commands in `packages/cli/src/commands/init.ts` (git repo precondition, writes `.saw/config.json`, `.saw/credential`, `.saw/AGENT.md`, appends `.gitignore`) per contracts/cli.md
 - [X] T018 `saw join` command in `packages/cli/src/commands/join.ts` (remote-URL match check, invite redemption, same three files written, STE failure messages)
-- [ ] T019 Daemon relay client with reconnect/backoff + `sync` replay handling in `packages/cli/src/daemon/client.ts`
-- [ ] T020 Daemon localhost HTTP API for hooks + in-memory state cache (pause, cursor, presence) in `packages/cli/src/daemon/local-api.ts`
-- [ ] T021 `saw up` command skeleton in `packages/cli/src/commands/up.ts`: start daemon, connect relay, register MCP server (`claude mcp add saw -- saw mcp`), install hook entries in `.claude/settings.json`, print status
+- [X] T019 Daemon relay client with reconnect/backoff + `sync` replay handling in `packages/cli/src/daemon/client.ts`
+- [X] T020 Daemon localhost HTTP API for hooks + in-memory state cache (pause, cursor, presence) in `packages/cli/src/daemon/local-api.ts`
+- [X] T021 `saw up` command skeleton in `packages/cli/src/commands/up.ts`: start daemon, connect relay, register MCP server (`claude mcp add saw -- saw mcp`), install hook entries in `.claude/settings.json`, print status
 
 **Checkpoint**: Two members can init/join a workspace and both daemons hold
 authenticated relay connections. User story phases can start.
@@ -94,12 +94,12 @@ duplicate claim rejected visibly.
 - [X] T022 [US1] Relay message flow: accept `post`, assign seq, persist, broadcast `message` frames in order in `packages/relay/src/messages.ts`
 - [X] T023 [US1] Claim resolution in seq order (first wins; `claim_result` broadcast to both members; WorkItem state transitions from data-model.md) in `packages/relay/src/claims.ts`
 - [X] T024 [US1] `sync` request handling: replay missed messages ≥ since_seq in order in `packages/relay/src/sync.ts`
-- [ ] T025 [P] [US1] MCP stdio server scaffold (`saw mcp` entry) in `packages/cli/src/mcp/server.ts`
-- [ ] T026 [US1] `room_read` + `room_post` tools (schemas + error shape from contracts/mcp-tools.md) in `packages/cli/src/mcp/tools/room.ts`
-- [ ] T027 [US1] `workspace_status` tool in `packages/cli/src/mcp/tools/status.ts`
-- [ ] T028 [US1] ReadCursor tracking (last_injected_seq, unread computation) in `packages/cli/src/daemon/cursor.ts`
-- [ ] T029 [US1] `SessionStart` + `UserPromptSubmit` hook entries: inject unread messages + claim/pause state as additionalContext, advance cursor, no-op cleanly when daemon is down in `packages/cli/src/hooks/inject.ts`
-- [ ] T030 [US1] Read-only web room view: daemon web server in `packages/cli/src/web/server.ts` + `packages/cli/src/web/static/index.html`, `app.js`, `style.css` (live message list over daemon WebSocket)
+- [X] T025 [P] [US1] MCP stdio server scaffold (`saw mcp` entry) in `packages/cli/src/mcp/server.ts`
+- [X] T026 [US1] `room_read` + `room_post` tools (schemas + error shape from contracts/mcp-tools.md) in `packages/cli/src/mcp/tools/room.ts`
+- [X] T027 [US1] `workspace_status` tool in `packages/cli/src/mcp/tools/status.ts`
+- [X] T028 [US1] ReadCursor tracking (last_injected_seq, unread computation) in `packages/cli/src/daemon/cursor.ts`
+- [X] T029 [US1] `SessionStart` + `UserPromptSubmit` hook entries: inject unread messages + claim/pause state as additionalContext, advance cursor, no-op cleanly when daemon is down in `packages/cli/src/hooks/inject.ts`
+- [X] T030 [US1] Read-only web room view: daemon web server in `packages/cli/src/web/server.ts` + `packages/cli/src/web/static/index.html`, `app.js`, `style.css` (live message list over daemon WebSocket)
 - [ ] T031 [US1] Integration test in `tests/integration/room.test.ts`: two simulated members — intent/claim/handoff with ref; duplicate claim rejected with visible notice; smuggling body rejected and logged (SC-002, SC-005)
 
 **Checkpoint**: MVP — two agents coordinate through the room; humans can
@@ -120,10 +120,10 @@ order on resume; forged pause for the peer is rejected.
 
 - [X] T032 [US2] Relay pause handling: `pause_set` (own member only), PauseState persistence, hold undelivered messages for paused members in `packages/relay/src/pause.ts`
 - [X] T033 [P] [US2] Relay presence tracking (ping/pong liveness, `presence` broadcasts) in `packages/relay/src/presence.ts`
-- [ ] T034 [US2] Daemon pause mirror + ordered queued delivery on resume in `packages/cli/src/daemon/pause.ts`
-- [ ] T035 [US2] `PreToolUse` hook: deny with STE reason while paused, silent pass otherwise, matcher `*` in `packages/cli/src/hooks/pre-tool.ts`
-- [ ] T036 [US2] Web human message box: post as `sender_kind:"human"` with optional target member (redirect) via daemon local API, in `packages/cli/src/web/static/app.js` + endpoint in `packages/cli/src/web/server.ts`
-- [ ] T037 [US2] Web pause control (own member only) + presence indicators for both members in `packages/cli/src/web/static/app.js`
+- [X] T034 [US2] Daemon pause mirror + ordered queued delivery on resume in `packages/cli/src/daemon/pause.ts`
+- [X] T035 [US2] `PreToolUse` hook: deny with STE reason while paused, silent pass otherwise, matcher `*` in `packages/cli/src/hooks/pre-tool.ts`
+- [X] T036 [US2] Web human message box: post as `sender_kind:"human"` with optional target member (redirect) via daemon local API, in `packages/cli/src/web/static/app.js` + endpoint in `packages/cli/src/web/server.ts`
+- [X] T037 [US2] Web pause control (own member only) + presence indicators for both members in `packages/cli/src/web/static/app.js`
 - [ ] T038 [US2] Integration test in `tests/integration/steering.test.ts`: redirect reaches the target daemon <5 s and injects at next turn boundary, pause blocks, resume replays queue in seq order, relay rejects `pause_set` naming the peer (FR-013/014, SC-006)
 
 **Checkpoint**: Room + human steering both work independently.
@@ -141,11 +141,11 @@ by feature tag.
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] `Stop` hook run-summary composer: tool counts from transcript, branch name + head SHA + changed-file count from git (counts and git refs only — no file paths), always exit 0, in `packages/cli/src/hooks/stop.ts`
-- [ ] T040 [US3] Daemon run context: record `why_trigger` at prompt-submit/injection, attach active claimed work item (or `unassigned`) in `packages/cli/src/daemon/run-context.ts`
+- [X] T039 [US3] `Stop` hook run-summary composer: tool counts from transcript, branch name + head SHA + changed-file count from git (counts and git refs only — no file paths), always exit 0, in `packages/cli/src/hooks/stop.ts`
+- [X] T040 [US3] Daemon run context: record `why_trigger` at prompt-submit/injection, attach active claimed work item (or `unassigned`) in `packages/cli/src/daemon/run-context.ts`
 - [X] T041 [US3] Relay `log_append` + `log_query` (filters: member, work_item, since, limit) in `packages/relay/src/log.ts`
-- [ ] T042 [US3] `work_log` MCP tool in `packages/cli/src/mcp/tools/work-log.ts`
-- [ ] T043 [US3] Web log browser with feature-tag filter in `packages/cli/src/web/static/app.js` + daemon endpoint in `packages/cli/src/web/server.ts`
+- [X] T042 [US3] `work_log` MCP tool in `packages/cli/src/mcp/tools/work-log.ts`
+- [X] T043 [US3] Web log browser with feature-tag filter in `packages/cli/src/web/static/app.js` + daemon endpoint in `packages/cli/src/web/server.ts`
 - [ ] T044 [US3] Integration test in `tests/integration/log.test.ts`: a simulated run produces a complete entry automatically; boundary rejections appear in the log; filter by feature works (SC-003)
 
 **Checkpoint**: All activity is recorded with what/when/why/feature.
@@ -164,7 +164,7 @@ recorded activity".
 ### Implementation for User Story 4
 
 - [X] T045 [US4] Relay peer-activity query (runs + peer messages in window, `peer_online` flag, independent of peer connection) extending `packages/relay/src/log.ts`
-- [ ] T046 [US4] `peer_activity` MCP tool (requires `since`; returns empty arrays + honesty note when no activity) in `packages/cli/src/mcp/tools/peer-activity.ts`
+- [X] T046 [US4] `peer_activity` MCP tool (requires `since`; returns empty arrays + honesty note when no activity) in `packages/cli/src/mcp/tools/peer-activity.ts`
 - [ ] T047 [US4] Integration test in `tests/integration/peer-activity.test.ts`: peer disconnected, query answered from store; empty-window case (SC-004, FR-019)
 
 **Checkpoint**: All four user stories independently functional.

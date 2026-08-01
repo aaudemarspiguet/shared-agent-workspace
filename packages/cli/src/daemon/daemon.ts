@@ -1,0 +1,342 @@
+// The member daemon.
+// It owns the relay connection, the room state, the read cursor, the pause
+// mirror, and the run context. Hooks, MCP tools, and the web page all talk
+// to this daemon. The daemon never touches the peer's machine.
+import type {
+  ClaimResultFrame,
+  LogQuery,
+  MessagePost,
+  PresenceFrame,
+  PauseStateFrame,
+  RunWhat,
+  StoredLogEntry,
+  StoredMessage
+} from "@saw/shared";
+import { readConfig, readCredential, type SawConfig } from "../config.js";
+import { relayUrls } from "../relay-http.js";
+import {
+  RelayClient,
+  type LogAppendOutcome,
+  type PostOutcome
+} from "./client.js";
+import { ReadCursor } from "./cursor.js";
+import { PauseMirror } from "./pause.js";
+import { RunContext } from "./run-context.js";
+import { RoomState, type ClaimNotice, type WorkItemView } from "./state.js";
+
+export interface DaemonEvent {
+  kind: "message" | "presence" | "pause_state" | "claim_result" | "connection";
+  message?: StoredMessage;
+  presence?: PresenceFrame;
+  pause?: PauseStateFrame;
+  claim?: ClaimResultFrame;
+  connected?: boolean;
+}
+
+export interface InjectResult {
+  messages: StoredMessage[];
+  notices: ClaimNotice[];
+  paused: boolean;
+  work_items: WorkItemView[];
+  me: string;
+  latest_seq: number;
+}
+
+export interface WorkspaceStatus {
+  workspace: string;
+  repo_remote: string;
+  members: { github_username: string; online: boolean; paused: boolean }[];
+  me: string;
+  paused: boolean;
+  unread_count: number;
+  work_items: WorkItemView[];
+  relay_connected: boolean;
+}
+
+export interface PeerActivity {
+  peer: string | null;
+  peer_online: boolean;
+  runs: StoredLogEntry[];
+  messages: StoredMessage[];
+  note: string;
+}
+
+export interface DaemonOptions {
+  root: string;
+  clientName?: string;
+}
+
+export class Daemon {
+  readonly root: string;
+  readonly config: SawConfig;
+  readonly state: RoomState;
+  readonly cursor: ReadCursor;
+  readonly pauseMirror: PauseMirror;
+  readonly runContext: RunContext;
+  private client: RelayClient;
+  private subscribers = new Set<(event: DaemonEvent) => void>();
+  private pendingNotices: ClaimNotice[] = [];
+
+  constructor(options: DaemonOptions) {
+    this.root = options.root;
+    const config = readConfig(options.root);
+    const token = readCredential(options.root);
+    if (!config || !token) {
+      throw new Error("this repository has no SAW workspace. Run saw init or saw join first.");
+    }
+    this.config = config;
+    this.state = new RoomState(config.github_username, config.members ?? []);
+    this.cursor = new ReadCursor(options.root);
+    this.pauseMirror = new PauseMirror(config.github_username);
+    this.runContext = new RunContext(config.github_username);
+
+    this.client = new RelayClient(
+      {
+        wsUrl: relayUrls(config.relay_url).ws,
+        workspaceId: config.workspace_id,
+        token,
+        clientName: options.clientName ?? "saw-daemon/0.1",
+        // Start from zero so the room cache and the work item mirror rebuild
+        // from full history. The cursor keeps injection idempotent.
+        sinceSeq: 0
+      },
+      {
+        onHello: (frame) => {
+          this.pauseMirror.seedOwn(frame.paused);
+        },
+        onMessage: (message) => {
+          if (this.state.addMessage(message)) {
+            this.emit({ kind: "message", message });
+          }
+        },
+        onClaimResult: (frame) => {
+          this.state.addClaimNotice(frame);
+          this.pendingNotices.push({
+            work_item: frame.work_item,
+            granted: frame.granted,
+            claimed_by: frame.claimed_by,
+            at: new Date().toISOString()
+          });
+          this.emit({ kind: "claim_result", claim: frame });
+        },
+        onPresence: (frame) => {
+          this.state.applyPresence(frame);
+          this.emit({ kind: "presence", presence: frame });
+        },
+        onPauseState: (frame) => {
+          this.pauseMirror.apply(frame);
+          this.emit({ kind: "pause_state", pause: frame });
+        },
+        onConnectionChange: (connected) => {
+          this.emit({ kind: "connection", connected });
+        }
+      }
+    );
+
+    // On resume, ask the relay to replay everything held while paused.
+    // The replay arrives in seq order (FR-014).
+    this.pauseMirror.onOwnResume = () => this.client.sync(this.client.lastSeenSeq);
+  }
+
+  /** Connect to the relay. Resolve once connected, or after a short wait. */
+  start(waitMs = 4000): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const unsubscribe = this.subscribe((event) => {
+        if (event.kind === "connection" && event.connected && !settled) {
+          settled = true;
+          unsubscribe();
+          resolve(true);
+        }
+      });
+      this.client.connect();
+      setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          unsubscribe();
+          resolve(this.client.connected);
+        }
+      }, waitMs).unref?.();
+    });
+  }
+
+  stop(): void {
+    this.client.close();
+  }
+
+  get connected(): boolean {
+    return this.client.connected;
+  }
+
+  subscribe(fn: (event: DaemonEvent) => void): () => void {
+    this.subscribers.add(fn);
+    return () => this.subscribers.delete(fn);
+  }
+
+  private emit(event: DaemonEvent): void {
+    for (const fn of this.subscribers) fn(event);
+  }
+
+  // ---- Operations ----
+
+  /** Post one message. Agent posts are blocked while this member is paused. */
+  async post(post: MessagePost, senderKind: "agent" | "human"): Promise<PostOutcome> {
+    if (senderKind === "agent" && this.pauseMirror.ownPaused) {
+      return {
+        ok: false,
+        code: "rejected",
+        message: "paused"
+      } as PostOutcome;
+    }
+    const outcome = await this.client.post(post, senderKind);
+    if (outcome.ok) {
+      // The relay sends post_ok, not a message frame, for an own post.
+      // Mirror the accepted message into the local cache so the room view
+      // and room_read show both sides of the conversation.
+      const message: StoredMessage = {
+        id: `local-${outcome.seq}`,
+        seq: outcome.seq,
+        sender: this.config.github_username,
+        sender_kind: senderKind,
+        type: post.type,
+        body: post.body,
+        refs: post.refs ?? [],
+        target: post.target,
+        work_item: post.work_item,
+        sent_at: outcome.sent_at
+      };
+      this.client.noteSeq(outcome.seq);
+      if (this.state.addMessage(message)) {
+        this.emit({ kind: "message", message });
+      }
+    }
+    return outcome;
+  }
+
+  /** Read messages from the local cache. */
+  messages(sinceSeq = 0, limit = 200): { messages: StoredMessage[]; latest_seq: number } {
+    return {
+      messages: this.state.messages(sinceSeq, limit),
+      latest_seq: this.state.latestSeq()
+    };
+  }
+
+  /**
+   * Deliver unread messages for injection and advance the cursor (T028/T029).
+   * Also records the run trigger (T040).
+   */
+  inject(source: "session-start" | "prompt-submit", prompt?: string): InjectResult {
+    const raw = this.state.messages(this.cursor.value, 500);
+    // An agent already knows its own posts. Its human's messages still count.
+    const unread = raw.filter(
+      (m) => !(m.sender === this.config.github_username && m.sender_kind === "agent")
+    );
+    const notices = this.pendingNotices.splice(0);
+    this.runContext.recordInjection(source, { prompt, injected: unread });
+    const last = raw[raw.length - 1];
+    if (last) this.cursor.advance(last.seq);
+    return {
+      messages: unread,
+      notices,
+      paused: this.pauseMirror.ownPaused,
+      work_items: this.state.workItems(),
+      me: this.config.github_username,
+      latest_seq: this.state.latestSeq()
+    };
+  }
+
+  status(): WorkspaceStatus {
+    const unread = this.state
+      .messages(this.cursor.value, 500)
+      .filter(
+        (m) => !(m.sender === this.config.github_username && m.sender_kind === "agent")
+      );
+    return {
+      workspace: this.config.workspace_name,
+      repo_remote: this.config.repo_remote,
+      members: this.state.members().map((m) => ({
+        github_username: m.github_username,
+        online: m.github_username === this.config.github_username
+          ? this.connected
+          : m.online,
+        paused: this.pauseMirror.isPaused(m.github_username)
+      })),
+      me: this.config.github_username,
+      paused: this.pauseMirror.ownPaused,
+      unread_count: unread.length,
+      work_items: this.state.workItems(),
+      relay_connected: this.connected
+    };
+  }
+
+  /** Set own pause state. Resolves when the relay echo lands in the mirror. */
+  setPause(paused: boolean, waitMs = 2000): Promise<boolean> {
+    if (this.pauseMirror.ownPaused === paused) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let settled = false;
+      const unsubscribe = this.subscribe((event) => {
+        if (
+          event.kind === "pause_state" &&
+          event.pause?.member === this.config.github_username &&
+          event.pause.paused === paused &&
+          !settled
+        ) {
+          settled = true;
+          unsubscribe();
+          resolve(true);
+        }
+      });
+      this.client.setPause(paused);
+      setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          unsubscribe();
+          resolve(this.pauseMirror.ownPaused === paused);
+        }
+      }, waitMs).unref?.();
+    });
+  }
+
+  /** Compose and append the automatic run summary (T039/T040). */
+  runStop(what: RunWhat): Promise<LogAppendOutcome> {
+    const entry = this.runContext.compose(what, this.state.myActiveWorkItem());
+    return this.client.logAppend(entry);
+  }
+
+  /** Query the work log. */
+  async log(query: Partial<LogQuery>): Promise<{ ok: boolean; entries: StoredLogEntry[]; error?: string }> {
+    const outcome = await this.client.logQuery(withLogDefaults(query), false);
+    if (!outcome.ok) return { ok: false, entries: [], error: outcome.message };
+    return { ok: true, entries: outcome.result.entries };
+  }
+
+  /** Answer "what did my teammate do since X" from relay storage (T046). */
+  async peerActivity(since: string, limit = 50): Promise<{ ok: boolean; activity?: PeerActivity; error?: string }> {
+    const outcome = await this.client.logQuery(
+      withLogDefaults({ member: "peer", since, limit }),
+      true
+    );
+    if (!outcome.ok) return { ok: false, error: outcome.message };
+    const result = outcome.result;
+    return {
+      ok: true,
+      activity: {
+        peer: result.peer ?? this.state.peer()?.github_username ?? null,
+        peer_online: result.peer_online ?? false,
+        runs: result.entries,
+        messages: result.messages ?? [],
+        note: "Answer built from stored workspace history only."
+      }
+    };
+  }
+}
+
+/** Fill the LogQuery defaults the shared schema expects. */
+function withLogDefaults(query: Partial<LogQuery>): LogQuery {
+  return {
+    member: query.member ?? "any",
+    work_item: query.work_item,
+    since: query.since,
+    limit: query.limit ?? 50
+  };
+}

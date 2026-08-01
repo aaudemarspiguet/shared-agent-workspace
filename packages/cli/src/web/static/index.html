@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAW — shared room</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">SAW</span>
+      <span id="workspace-name" class="workspace">…</span>
+    </div>
+    <div id="members" class="members"></div>
+    <div class="controls">
+      <span id="relay-dot" class="relay off" title="relay connection">relay</span>
+      <button id="pause-btn" class="pause" hidden>Pause my agent</button>
+    </div>
+  </header>
+
+  <nav id="tabs">
+    <button class="tab active" data-tab="room">Room</button>
+    <button class="tab" data-tab="log">Work log</button>
+  </nav>
+
+  <main>
+    <section id="room" class="panel active">
+      <div id="feed" class="feed" aria-live="polite"></div>
+      <form id="composer">
+        <div class="row">
+          <select id="msg-type" title="message type">
+            <option value="status">status</option>
+            <option value="intent">intent</option>
+            <option value="question">question</option>
+            <option value="decision">decision</option>
+            <option value="handoff">handoff</option>
+          </select>
+          <input id="msg-work-item" type="text" placeholder="work item (optional)" />
+          <select id="msg-target" title="redirect target">
+            <option value="">to: everyone</option>
+          </select>
+        </div>
+        <div class="row">
+          <textarea id="msg-body" rows="2"
+            placeholder="Write to the room as yourself. Agents see it on their next turn."></textarea>
+          <button id="send-btn" type="submit">Send</button>
+        </div>
+        <div id="composer-error" class="error" hidden></div>
+      </form>
+    </section>
+
+    <section id="log" class="panel">
+      <div class="log-controls">
+        <select id="log-member">
+          <option value="any">both members</option>
+          <option value="me">me</option>
+          <option value="peer">peer</option>
+        </select>
+        <input id="log-work-item" type="text" placeholder="filter by work item" />
+        <button id="log-refresh">Refresh</button>
+      </div>
+      <div id="log-list" class="log-list"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
