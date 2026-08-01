@@ -18,8 +18,8 @@ numbers match task IDs); this table mirrors them for `/speckit-implement`.
 
 | Owner | Tasks | Scope |
 |-------|-------|-------|
-| @aaudemarspiguet | T001–T014, T022–T024, T032–T033, T041, T045 | Repo setup, `packages/shared`, `packages/relay` |
-| partner (friend's GitHub handle TBD) | T015–T021, T025–T030, T034–T040, T042–T043, T046 | `packages/cli` (daemon, MCP, hooks, web) |
+| @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045 | Repo setup, `packages/shared`, `packages/relay` |
+| partner (friend's GitHub handle TBD) | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
 | joint (pair or split at the time) | T031, T038, T044, T047, T048–T053 | Integration tests + polish |
 
 **Rule for `/speckit-implement` runs**: execute only the invoking member's
@@ -43,11 +43,11 @@ Monorepo per plan.md: `packages/shared/`, `packages/relay/`,
 
 **Purpose**: Monorepo skeleton that everything else builds inside
 
-- [ ] T001 Create monorepo root: `package.json` (npm workspaces), `tsconfig.base.json`, `vitest.workspace.ts`, `.gitignore` (include `.saw/credential`)
-- [ ] T002 [P] Initialize `packages/shared/` package: `package.json`, `tsconfig.json`, empty `src/index.ts`
-- [ ] T003 [P] Initialize `packages/relay/` package: `package.json` (deps: `ws`, `better-sqlite3`), `tsconfig.json`, `src/index.ts`
+- [X] T001 Create monorepo root: `package.json` (npm workspaces), `tsconfig.base.json`, `vitest.workspace.ts`, `.gitignore` (include `.saw/credential`)
+- [X] T002 [P] Initialize `packages/shared/` package: `package.json`, `tsconfig.json`, empty `src/index.ts`
+- [X] T003 [P] Initialize `packages/relay/` package: `package.json` (deps: `ws`, `better-sqlite3`), `tsconfig.json`, `src/index.ts`
 - [ ] T004 [P] Initialize `packages/cli/` package: `package.json` (bin `saw`, deps: `commander`, `ws`, `@modelcontextprotocol/sdk`), `tsconfig.json`, `src/index.ts`
-- [ ] T005 [P] Configure ESLint + Prettier at root: `eslint.config.js`, `.prettierrc`
+- [X] T005 [P] Configure ESLint + Prettier at root: `eslint.config.js`, `.prettierrc`
 
 ---
 
@@ -58,11 +58,11 @@ skeleton. No user story works without these.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 [P] Message + GitRef zod schemas in `packages/shared/src/messages.ts`: five type enum, body ≤4000, refs 0–10, branch/commit format rules, smuggling heuristics (data-model.md §Boundary rules)
-- [ ] T007 [P] Relay WebSocket frame schemas (client→relay and relay→client kinds) in `packages/shared/src/frames.ts` per contracts/relay-protocol.md
-- [ ] T008 [P] RunLogEntry + BoundaryRejection schemas in `packages/shared/src/log.ts`
-- [ ] T009 [P] Invite mint/verify helpers (base64url payload + HMAC-SHA256, expiry, nonce) in `packages/shared/src/invite.ts`
-- [ ] T010 Boundary contract tests in `packages/shared/tests/boundary.test.ts`: accept the five types and valid refs; reject unknown type, invalid ref, oversize body, code fences >20 lines, diff markers, long base64 (constitution gate: rejection of non-conforming payloads)
+- [X] T006 [P] Message + GitRef zod schemas in `packages/shared/src/messages.ts`: five type enum, body ≤4000, refs 0–10, branch/commit format rules, smuggling heuristics (data-model.md §Boundary rules)
+- [X] T007 [P] Relay WebSocket frame schemas (client→relay and relay→client kinds) in `packages/shared/src/frames.ts` per contracts/relay-protocol.md
+- [X] T008 [P] RunLogEntry + BoundaryRejection schemas in `packages/shared/src/log.ts`
+- [X] T009 [P] Invite mint/verify helpers (base64url payload + HMAC-SHA256, expiry, nonce) in `packages/shared/src/invite.ts`
+- [X] T010 Boundary contract tests in `packages/shared/tests/boundary.test.ts`: accept the five types and valid refs; reject unknown type, invalid ref, oversize body, code fences >20 lines, diff markers, long base64 (constitution gate: rejection of non-conforming payloads)
 - [ ] T011 SQLite store (all tables from data-model.md, WAL mode, gapless per-workspace seq allocation) in `packages/relay/src/store.ts`
 - [ ] T012 WebSocket server + `hello` auth (token hash check; sender identity bound to connection, never client-claimed) in `packages/relay/src/server.ts`
 - [ ] T013 Relay boundary enforcement (validate every frame with shared schemas; write BoundaryRejection without echoing payload; send `post_rejected`/`error`) in `packages/relay/src/boundary.ts`

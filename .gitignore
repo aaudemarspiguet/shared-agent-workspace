@@ -5,6 +5,15 @@ __pycache__/
 # Node
 node_modules/
 dist/
+coverage/
+*.log
+.env*
+
+# Relay database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # SAW member credential (never commit)
 .saw/credential

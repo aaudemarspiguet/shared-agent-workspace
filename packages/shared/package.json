@@ -1,0 +1,18 @@
+{
+  "name": "@saw/shared",
+  "version": "0.1.0",
+  "description": "Protocol types and schemas for SAW. One source of truth for the boundary rules.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  }
+}
