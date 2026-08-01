@@ -19,7 +19,7 @@ numbers match task IDs); this table mirrors them for `/speckit-implement`.
 | Owner | Tasks | Scope |
 |-------|-------|-------|
 | @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045 | Repo setup, `packages/shared`, `packages/relay` |
-| partner (friend's GitHub handle TBD) | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
+| @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
 | joint (pair or split at the time) | T031, T038, T044, T047, T048–T053 | Integration tests + polish |
 
 **Rule for `/speckit-implement` runs**: execute only the invoking member's
@@ -46,7 +46,7 @@ Monorepo per plan.md: `packages/shared/`, `packages/relay/`,
 - [X] T001 Create monorepo root: `package.json` (npm workspaces), `tsconfig.base.json`, `vitest.workspace.ts`, `.gitignore` (include `.saw/credential`)
 - [X] T002 [P] Initialize `packages/shared/` package: `package.json`, `tsconfig.json`, empty `src/index.ts`
 - [X] T003 [P] Initialize `packages/relay/` package: `package.json` (deps: `ws`, `better-sqlite3`), `tsconfig.json`, `src/index.ts`
-- [ ] T004 [P] Initialize `packages/cli/` package: `package.json` (bin `saw`, deps: `commander`, `ws`, `@modelcontextprotocol/sdk`), `tsconfig.json`, `src/index.ts`
+- [X] T004 [P] Initialize `packages/cli/` package: `package.json` (bin `saw`, deps: `commander`, `ws`, `@modelcontextprotocol/sdk`), `tsconfig.json`, `src/index.ts`
 - [X] T005 [P] Configure ESLint + Prettier at root: `eslint.config.js`, `.prettierrc`
 
 ---
