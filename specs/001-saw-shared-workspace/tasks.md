@@ -125,7 +125,7 @@ by feature tag.
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] `Stop` hook run-summary composer: tool counts from transcript, branch + head SHA + changed-file count from git (names/counts only), always exit 0, in `packages/cli/src/hooks/stop.ts`
+- [ ] T039 [US3] `Stop` hook run-summary composer: tool counts from transcript, branch name + head SHA + changed-file count from git (counts and git refs only — no file paths), always exit 0, in `packages/cli/src/hooks/stop.ts`
 - [ ] T040 [US3] Daemon run context: record `why_trigger` at prompt-submit/injection, attach active claimed work item (or `unassigned`) in `packages/cli/src/daemon/run-context.ts`
 - [ ] T041 [US3] Relay `log_append` + `log_query` (filters: member, work_item, since, limit) in `packages/relay/src/log.ts`
 - [ ] T042 [US3] `work_log` MCP tool in `packages/cli/src/mcp/tools/work-log.ts`
