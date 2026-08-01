@@ -11,6 +11,22 @@ user story mapped to quickstart.md scenarios. No full TDD.
 **Organization**: Tasks are grouped by user story so each story is an
 independently testable increment.
 
+## Ownership
+
+Work is split by package. Assignments live on the GitHub issues (#1–#53,
+numbers match task IDs); this table mirrors them for `/speckit-implement`.
+
+| Owner | Tasks | Scope |
+|-------|-------|-------|
+| @aaudemarspiguet | T001–T014, T022–T024, T032–T033, T041, T045 | Repo setup, `packages/shared`, `packages/relay` |
+| partner (friend's GitHub handle TBD) | T015–T021, T025–T030, T034–T040, T042–T043, T046 | `packages/cli` (daemon, MCP, hooks, web) |
+| joint (pair or split at the time) | T031, T038, T044, T047, T048–T053 | Integration tests + polish |
+
+**Rule for `/speckit-implement` runs**: execute only the invoking member's
+tasks. Do not create or modify files in the other member's package.
+`packages/shared` is frozen after T010 lands on `main`; change it only via
+a PR both members approve.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)

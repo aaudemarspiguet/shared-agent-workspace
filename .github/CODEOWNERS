@@ -1,0 +1,17 @@
+# Code owners. PRs that touch these paths need the owner's review.
+# Enable "Require review from Code Owners" in branch protection for main.
+
+# Relay and shared schemas
+/packages/relay/  @aaudemarspiguet
+/packages/shared/ @aaudemarspiguet
+
+# Spec artifacts and governance
+/specs/           @aaudemarspiguet
+/.specify/        @aaudemarspiguet
+
+# CLI package (daemon, MCP, hooks, web).
+# TODO: uncomment and set the second member's GitHub handle when known.
+# /packages/cli/  @FRIEND_HANDLE
+
+# Shared schemas need both members once the second member joins:
+# /packages/shared/ @aaudemarspiguet @FRIEND_HANDLE

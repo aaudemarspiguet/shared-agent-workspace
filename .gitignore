@@ -8,3 +8,6 @@ dist/
 
 # SAW member credential (never commit)
 .saw/credential
+
+# Per-member Claude Code settings (each member keeps their own)
+.claude/settings.local.json
