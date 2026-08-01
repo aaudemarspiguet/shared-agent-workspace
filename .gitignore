@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+
+# SAW member credential (never commit)
+.saw/credential

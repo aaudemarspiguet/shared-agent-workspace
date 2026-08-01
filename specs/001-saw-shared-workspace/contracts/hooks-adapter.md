@@ -1,0 +1,90 @@
+# Contract: Claude Code Hooks Adapter
+
+The adapter is a set of `saw hook <event>` entry points registered in the
+workspace's `.claude/settings.json` by `saw up`. Each hook reads the
+Claude Code hook JSON on stdin, talks only to the local daemon over
+localhost HTTP, and answers with hook JSON on stdout. Hooks never talk to
+the relay directly and never read the peer's data.
+
+If the daemon is not running, every hook exits 0 with no output (the agent
+works normally, uncoordinated; `workspace_status` is how agents notice SAW
+is down). Hook failures must never break the member's coding tool
+(Principle V: no wrapping, no interference).
+
+## 1. SessionStart → `saw hook session-start`
+
+Purpose: give the agent its coordination context at session open.
+
+Output (stdout JSON, `hookSpecificOutput.additionalContext`):
+
+- A short STE preamble pointing at `.saw/AGENT.md`.
+- All unread room messages (seq > ReadCursor.last_injected_seq), rendered
+  compactly with sender, type, body, refs.
+- Current claim state and own pause state.
+
+Side effect: daemon advances the ReadCursor to the last injected seq.
+
+## 2. UserPromptSubmit → `saw hook prompt-submit`
+
+Purpose: inject messages that arrived since the last injection, at the
+next turn boundary. (Chosen over PostToolUse — research.md §3.)
+
+Output: `additionalContext` with unread messages only; empty output when
+nothing is unread. Side effect: advances ReadCursor.
+
+Also: the daemon records the submitted prompt as the candidate
+`why_trigger` for this run (data-model.md §RunLogEntry).
+
+## 3. PreToolUse → `saw hook pre-tool`
+
+Purpose: block coordinated work while the member is paused (FR-013/014).
+
+Behavior:
+
+- Daemon paused → stdout:
+
+```json
+{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "deny",
+  "permissionDecisionReason": "SAW: your workspace member state is paused. Resume from the SAW web page." } }
+```
+
+- Not paused → exit 0, no output (tool call proceeds untouched).
+
+Matcher: `*` (all tools) — pause means the agent takes no further
+coordinated actions of any kind.
+
+## 4. Stop → `saw hook stop`
+
+Purpose: post the automatic run summary (FR-015/016).
+
+Behavior:
+
+1. Reads hook input (transcript path, session id).
+2. Computes the mechanical summary (research.md §8): tool-use counts from
+   the transcript, current branch name, head SHA, changed-file count via
+   `git status --porcelain`. Counts and git refs only; file paths and file
+   contents never enter the summary.
+3. Sends `{ started_at, ended_at, what, why_trigger, work_item }` to the
+   daemon; the daemon forwards a `log_append` frame to the relay.
+4. Exit 0 always; a logging failure is reported to the daemon's own log,
+   never surfaced as an agent error.
+
+## Registration shape (written by `saw up`)
+
+```json
+{
+  "hooks": {
+    "SessionStart":     [ { "hooks": [ { "type": "command", "command": "saw hook session-start" } ] } ],
+    "UserPromptSubmit": [ { "hooks": [ { "type": "command", "command": "saw hook prompt-submit" } ] } ],
+    "PreToolUse":       [ { "matcher": "*", "hooks": [ { "type": "command", "command": "saw hook pre-tool" } ] } ],
+    "Stop":             [ { "hooks": [ { "type": "command", "command": "saw hook stop" } ] } ]
+  }
+}
+```
+
+## Other tools (Codex, Cursor)
+
+The MCP server works for any MCP-capable tool today. Hook-equivalent
+adapters for Codex/Cursor are separate future adapters behind the same
+daemon HTTP endpoints; nothing in this contract is Claude-Code-specific
+except the registration shape.
