@@ -13,13 +13,15 @@ independently testable increment.
 
 ## Ownership
 
-Work is split by package. Assignments live on the GitHub issues (#1–#53,
-numbers match task IDs); this table mirrors them for `/speckit-implement`.
+Work is split by package. Assignments live on the GitHub issues; this table
+mirrors them for `/speckit-implement`. Issue numbers match task IDs for
+T001–T053. They do not match for the tasks added after the first
+`/speckit-analyze` pass: **T054 is issue #56** and **T055 is issue #57**.
 
 | Owner | Tasks | Scope |
 |-------|-------|-------|
-| @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045 | Repo setup, `packages/shared`, `packages/relay` |
-| partner (friend's GitHub handle TBD) | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
+| @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045, T054 | Repo setup, `packages/shared`, `packages/relay` |
+| @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046, T055 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
 | joint (pair or split at the time) | T031, T038, T044, T047, T048–T053 | Integration tests + polish |
 
 **Rule for `/speckit-implement` runs**: execute only the invoking member's
@@ -180,6 +182,14 @@ recorded activity".
 - [ ] T052 Security hardening: credential file permissions, hashed-token verification path, web server binds 127.0.0.1 only, in `packages/cli/src/config.ts`, `packages/relay/src/server.ts`, `packages/cli/src/web/server.ts`
 - [ ] T053 Run full quickstart.md validation with two real clones + Claude Code; record results in `specs/001-saw-shared-workspace/quickstart-results.md`
 
+### Added after the first `/speckit-analyze` pass
+
+Both close gates that the original 53 tasks left open. See the analysis
+findings referenced on each line.
+
+- [ ] T054 Content-validate every payload-bearing relay frame, not only `post` (`log_append.why_trigger` and `what.branch` cross the member boundary unchecked): extend `parseClientFrame` in `packages/relay/src/boundary.ts`, write a BoundaryRejection for a rejected append, and extend the T010 contract tests in `packages/shared/tests/boundary.test.ts` (FR-008, SC-005, Principle II — analyze D1, issue #56)
+- [ ] T055 [US3] Durable local log spool in `.saw/`: persist unsent run entries when the relay is unreachable, drain on reconnect keeping original `started_at`/`ended_at`, bound the spool size; add an integration test that fires the Stop hook against a dead relay in `packages/cli/src/daemon/` + `tests/integration/log.test.ts` (FR-015, SC-003, Principle IV — analyze C1, issue #57)
+
 ---
 
 ## Dependencies & Execution Order
@@ -193,6 +203,8 @@ recorded activity".
 - **US3 (Phase 5)**: needs Phase 2; `why_trigger` capture (T040) touches the injection path from T029
 - **US4 (Phase 6)**: needs T041 (log storage/query) from US3
 - **Polish (Phase 7)**: needs all desired stories complete
+- **T054**: needs T013 (relay boundary) and T010 (contract tests) — extends both
+- **T055**: needs T039/T040 (the Stop-hook path it makes durable)
 
 ### Within Phase 2
 
@@ -261,6 +273,7 @@ quickstart scenarios.
 
 ## Notes
 
-- Total: 53 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 6)
-- The constitution's boundary gate is enforced twice: schema tests (T010) and relay enforcement (T013), both before any story ships
+- Total: 55 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 8)
+- The constitution's boundary gate is enforced twice: schema tests (T010) and relay enforcement (T013), both before any story ships. T054 closes the gap both left: they check `post` frames only, so `log_append` crosses the boundary unchecked
+- Re-run the Constitution Check in plan.md after T054 and T055 land. Rows II and IV currently claim PASS and the implementation does not support that
 - Commit after each task or logical group; keep relay changes verifiable against a self-hosted run (Principle VII)
