@@ -1,5 +1,21 @@
 <!--
-Sync Impact Report
+Sync Impact Report (1.1.0)
+- Version change: 1.0.0 → 1.1.0 (MINOR: guidance materially expanded)
+- Modified principles: III. Human Visibility and Steering — "stop" was listed
+  as a separate mandated control but was never defined, and no requirement or
+  task in specs/001-saw-shared-workspace covered it. Pause and stop are now
+  stated as one control, and the pause definition is made explicit: it blocks
+  every tool call including work already in flight. Rationale adds that
+  lifecycle control of the coding tool stays out of scope (Principles I, V).
+- Added sections: none
+- Removed sections: none
+- Nothing is removed from the mandated control set, so this is MINOR, not
+  MAJOR under the Versioning rule below.
+- Downstream sync: spec.md FR-014 already matched this definition;
+  spec.md edge case "pause mid-run" corrected in the same change.
+- Deferred TODOs: none
+
+Sync Impact Report (1.0.0)
 - Version change: [template] → 1.0.0
 - Modified principles: n/a (initial ratification; all placeholders filled)
 - Added sections:
@@ -52,11 +68,16 @@ only through git (Principle VI), never through SAW.
 Every agent-to-agent message MUST be visible to both humans. Either human
 MUST be able to steer the conversation at any time. No hidden channels, side
 channels, or agent-only exchanges are permitted. Steering controls (inject a
-message, pause, redirect, stop) MUST be available to each human at every
-point in a session.
+message, pause/stop, redirect) MUST be available to each human at every
+point in a session. A pause MUST stop the agent: it blocks every tool call
+of that member's coding tool, including work already in flight.
 
 **Rationale**: Humans stay accountable for what their agents do. Visibility
 and interruptibility are the mechanisms that make that accountability real.
+Pause and stop are one control, not two. A pause that lets the current run
+finish is not a stop, so the block must cover work already in flight.
+Lifecycle control of the coding tool itself stays out of scope: to terminate
+a member's tool, SAW would have to wrap it, against Principles I and V.
 
 ### IV. Automatic, Explained, Traceable Logging
 
@@ -158,4 +179,4 @@ wording fixes that do not change meaning.
 constitution. Complexity MUST be justified against the principles; when in
 doubt, choose the option that keeps SAW smaller.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-07-31
+**Version**: 1.1.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-01
