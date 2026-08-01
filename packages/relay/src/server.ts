@@ -48,6 +48,10 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
     );
   });
 
+  // Sockets keep emitting 'close' while the server shuts down. Presence
+  // broadcasts read the store, so they must stop before the store does.
+  let closing = false;
+
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
   wss.on("connection", (ws) => {
     let member: MemberRow | undefined;
@@ -118,10 +122,22 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
 
     ws.on("close", () => {
       const conn = registry.remove(ws);
-      if (conn) {
+      if (conn && !closing) {
         registry.broadcastPresence(store, conn.workspaceId, conn.username, false);
       }
     });
+
+    // Without this, an 'error' event on a socket is unhandled and takes the
+    // whole relay down with it. One member's broken connection must not stop
+    // the other member from working.
+    ws.on("error", () => {
+      ws.terminate();
+    });
+  });
+
+  // Same reasoning for the server itself: report it, but stay up.
+  wss.on("error", (err) => {
+    console.error(`SAW relay: WebSocket server error: ${err.message}`);
   });
 
   const pingTimer = setInterval(() => registry.pingAll(), 30_000);
@@ -138,7 +154,9 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
         port: boundPort,
         close: () =>
           new Promise<void>((done) => {
+            closing = true;
             clearInterval(pingTimer);
+            registry.closeAll();
             wss.close();
             httpServer.close(() => {
               store.close();

@@ -47,8 +47,10 @@ URL must match the workspace's `repo_remote`; mismatch → exit 1).
 
 Effects:
 
-1. Presents the invite to the relay; on success receives member identity +
-   bearer token.
+1. Presents the invite to the relay; on success receives member identity,
+   bearer token, and the workspace's `repo_remote`. The joiner has no other
+   source for `repo_remote`, so the relay must return it for the precondition
+   above to be checkable.
 2. Writes `.saw/config.json`, `.saw/credential` (git-ignored), and
    `.saw/AGENT.md` exactly as `saw init` does.
 3. Prints confirmation with both members' names.
