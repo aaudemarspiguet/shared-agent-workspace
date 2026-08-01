@@ -73,9 +73,9 @@ lifetime.
 | # | Principle | Gate result | Evidence in this plan |
 |---|-----------|-------------|-----------------------|
 | I | Coordination layer, not a coding agent | PASS | All five MCP tools coordinate (read/post/query); none generate, edit, or execute code. Connection to agents is via MCP only. |
-| II | Messages and refs only | PASS | Relay schema (contracts/relay-protocol.md) admits only typed JSON messages with optional refs (branch name or commit SHA). Zod validation rejects and logs everything else (FR-008). |
-| III | Human visibility and steering | PASS | Web UI shows full room history live; human message box posts redirects; pause control for own agent only. No agent-only channels exist in the protocol. |
-| IV | Automatic, explained, traceable logging | PASS | Stop hook posts run summaries mechanically; relay records every message, claim, rejection, and run with what/when/why/feature tag. No agent self-reporting required. |
+| II | Messages and refs only | PASS (design) / **FAIL (as built)** | Design: relay schema admits only typed JSON messages with optional refs. As built: `parseClientFrame` runs `validatePost` for `kind:"post"` only, so `log_append.why_trigger` — the verbatim human prompt — crosses between members unchecked (FR-008, SC-005). Fix tracked as T054. |
+| III | Human visibility and steering | PASS (design) / **PARTIAL (as built)** | Design: full room history, redirects, own-agent pause. As built: correct between members, but the local room view and API accept requests from any software on the member's machine, so a web page can read the room and change pause state (FR-021, SC-009). Fix tracked as T057. |
+| IV | Automatic, explained, traceable logging | PASS (design) / **FAIL (as built)** | Design: Stop hook posts run summaries mechanically. As built: a run that ends while the relay is unreachable is dropped — no spool, no retry — so "every run" does not hold (FR-015, SC-003). Fix tracked as T055. |
 | V | Standards, not forks | PASS | Claude Code is integrated only through its documented hooks and MCP registration. No fork, wrapper, or custom runtime. Git is used as-is. |
 | VI | Git is the only code sync | PASS | SAW never moves code. Handoffs carry branch names/SHAs; agents fetch from the existing remote on their own branches. No live file editing paths exist. |
 | VII | Open core, small relay | PASS | Relay is one small WS+SQLite service with no hosted-only features; `saw` can point at any self-hosted relay URL. |
@@ -85,6 +85,21 @@ lifetime.
 entity that stores code or file contents; the relay protocol has no frame
 for file transfer or execution; the hooks adapter only reads local state
 and posts summaries. No violations to justify.
+
+**Post-implementation re-check (2026-08-01)**: three rows do not hold against
+the code as built. The design was sound; the implementation left gaps the
+design-time gate could not see. Rows I, V, VI, and VII were re-verified
+against the implementation and still pass — SAW generates no code, integrates
+only through MCP and hooks, moves no files, and the relay stays small and
+self-hostable.
+
+The three failures share one cause: the gate ran before there was code, and
+nothing re-ran it afterwards. Each now has a task (T054, T055, T057). Move a
+row back to PASS only when its task lands, and re-run this check then.
+
+Two of the three were invisible at design time for a second reason: the spec
+carried no security requirements at all, so nothing described the member's
+local surface or credential storage. FR-020 and FR-021 fill that gap.
 
 ## Project Structure
 

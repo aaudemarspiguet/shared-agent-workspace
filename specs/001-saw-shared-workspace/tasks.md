@@ -21,7 +21,7 @@ T001–T053. They do not match for the tasks added after the first
 | Owner | Tasks | Scope |
 |-------|-------|-------|
 | @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045, T054 | Repo setup, `packages/shared`, `packages/relay` |
-| @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046, T055 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
+| @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046, T055–T057 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
 | joint (pair or split at the time) | T031, T038, T044, T047, T048–T053 | Integration tests + polish |
 
 **Rule for `/speckit-implement` runs**: execute only the invoking member's
@@ -189,6 +189,13 @@ findings referenced on each line.
 
 - [ ] T054 Content-validate every payload-bearing relay frame, not only `post` (`log_append.why_trigger` and `what.branch` cross the member boundary unchecked): extend `parseClientFrame` in `packages/relay/src/boundary.ts`, write a BoundaryRejection for a rejected append, and extend the T010 contract tests in `packages/shared/tests/boundary.test.ts` (FR-008, SC-005, Principle II — analyze D1, issue #56)
 - [ ] T055 [US3] Durable local log spool in `.saw/`: persist unsent run entries when the relay is unreachable, drain on reconnect keeping original `started_at`/`ended_at`, bound the spool size; add an integration test that fires the Stop hook against a dead relay in `packages/cli/src/daemon/` + `tests/integration/log.test.ts` (FR-015, SC-003, Principle IV — analyze C1, issue #57)
+- [ ] T056 Protect the credential at rest on every supported platform, and report plainly when it cannot: `packages/cli/src/config.ts`. Windows cannot express the restriction through permission bits, so use that platform's own access control. Replace the mode-only assertion in `packages/cli/tests/config.test.ts` with a platform-aware check — it fails on Windows today (FR-020, SC-008 — analyze U1)
+- [ ] T057 Authenticate the local surface: `packages/cli/src/web/server.ts` (HTTP + the `/ws` push channel) and `packages/cli/src/daemon/local-api.ts`, with matching changes in the callers that must present proof — `packages/cli/src/mcp/call.ts` and `packages/cli/src/hooks/io.ts`. Reads need the same protection as changes: the `/ws` snapshot leaks the whole room (FR-021, SC-009 — analyze U1)
+
+**Note on T052**: FR-020 and FR-021 now own the credential-protection and
+local-surface scope that T052 listed without acceptance criteria. T056 and
+T057 are the tracking tasks for both. T052 keeps only the relay hashed-token
+verification path.
 
 ---
 
@@ -205,6 +212,8 @@ findings referenced on each line.
 - **Polish (Phase 7)**: needs all desired stories complete
 - **T054**: needs T013 (relay boundary) and T010 (contract tests) — extends both
 - **T055**: needs T039/T040 (the Stop-hook path it makes durable)
+- **T056**: needs T015 (`.saw/` credential write path it hardens)
+- **T057**: needs T020/T030 (the local API and web server it authenticates)
 
 ### Within Phase 2
 
@@ -273,7 +282,7 @@ quickstart scenarios.
 
 ## Notes
 
-- Total: 55 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 8)
+- Total: 57 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 10)
 - The constitution's boundary gate is enforced twice: schema tests (T010) and relay enforcement (T013), both before any story ships. T054 closes the gap both left: they check `post` frames only, so `log_append` crosses the boundary unchecked
-- Re-run the Constitution Check in plan.md after T054 and T055 land. Rows II and IV currently claim PASS and the implementation does not support that
+- The Constitution Check in plan.md now records the honest post-implementation state: rows II and IV FAIL, row III PARTIAL. Re-run it after T054–T057 land and move them back to PASS
 - Commit after each task or logical group; keep relay changes verifiable against a self-hosted run (Principle VII)

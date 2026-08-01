@@ -39,3 +39,31 @@
   log-linking is a team-defined work item, history is retained for the
   workspace lifetime.
 - All items pass. Ready for `/speckit-clarify` (optional) or `/speckit-plan`.
+
+## Second validation pass — 2026-08-01
+
+Re-validated after FR-020, FR-021, SC-008, and SC-009 were added, and after
+the "pause mid-run" edge case was corrected to match FR-014.
+
+All items still pass. Specific checks:
+
+- **No implementation details**: FR-020 states the outcome ("only the
+  member's own account on that machine can read it") rather than a
+  permission value, because the three supported platforms do not express
+  account-level file access the same way. FR-021 names the browser as an
+  example of untrusted local software, which is a threat, not a technology
+  choice.
+- **Requirements are testable**: both new FRs have a matching success
+  criterion. "Supported platform" is defined in the Assumptions section, so
+  SC-008 and SC-009 have a fixed test matrix rather than an open one.
+- **Success criteria are technology-agnostic**: SC-008 and SC-009 describe
+  what an attacker cannot achieve, naming no file, port, protocol, or
+  framework.
+- **Edge cases are identified**: the "pause mid-run" case no longer
+  contradicts FR-014. FR-020 covers the case where a platform cannot protect
+  the credential — the system must say so rather than report success.
+
+Why this pass was needed: `/speckit-analyze` found that the specification
+carried no security requirements at all, so the credential and the member's
+local surface had no acceptance criteria. That gap, not a coding error, is
+why both shipped unprotected.
