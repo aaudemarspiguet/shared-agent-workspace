@@ -5,9 +5,13 @@ SAW connects the two agents through a shared, human-visible room. Agents
 send only messages and git refs. Code moves only through git. Humans see
 every message and can steer or pause their own agent.
 
-**Status**: Specification phase is complete. All 53 tasks exist as GitHub
-issues (#1–#53; issue numbers match task IDs). Implementation has not
-started. The next step is `/speckit-implement`.
+**Status**: Implementation is in progress. All 53 tasks exist as GitHub
+issues (#1–#53; issue numbers match task IDs). Done: monorepo setup,
+`packages/shared` (boundary schemas, frozen — change only via a PR both
+members approve), and `packages/relay` (full protocol; 17 tests pass).
+Open: `packages/cli` (T004, T015–T021, T025–T030, T034–T040, T042–T043,
+T046) and the joint integration/polish tasks. See the checkboxes in
+`specs/001-saw-shared-workspace/tasks.md`.
 
 ## What is in this repo
 
@@ -51,8 +55,8 @@ Work is split by package. The **Ownership table** at the top of
 
 | Member | Packages | Tasks |
 |--------|----------|-------|
-| @aaudemarspiguet | `packages/shared`, `packages/relay` | T001–T014, T022–T024, T032–T033, T041, T045 |
-| second member | `packages/cli` (daemon, MCP, hooks, web) | T015–T021, T025–T030, T034–T040, T042–T043, T046 |
+| @aaudemarspiguet | `packages/shared`, `packages/relay` | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045 (all done) |
+| second member | `packages/cli` (daemon, MCP, hooks, web) | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046 |
 | joint | integration tests + polish | T031, T038, T044, T047–T053 |
 
 Guard rails, in order:
@@ -95,9 +99,13 @@ track **what is done**. `/speckit-implement` and `/speckit-converge` read
    Ownership table. Commit both.
 3. Create `.claude/settings.local.json` with the deny rules shown above.
    Restart Claude Code. Do not commit this file (it is git-ignored).
-4. Self-assign your issues (#15–#21, #25–#30, #34–#40, #42–#43, #46).
-5. Build order: the shared schemas (T006–T010) land on `main` first —
-   wait for them before you start `packages/cli` work. Then run:
+4. Self-assign your issues (#4, #15–#21, #25–#30, #34–#40, #42–#43, #46).
+5. Run `npm install` at the repo root, then `npm test` — 17 tests must
+   pass before you start.
+6. The shared schemas and the relay are already on `main`. Start the
+   relay with `npm run dev --workspace @saw/relay` (port 8787) and build
+   `packages/cli` against it. Import all protocol types and validation
+   from `@saw/shared`. Then run:
    `/speckit-implement Only execute my tasks per the Ownership table in
    tasks.md. Do not touch packages/relay or packages/shared.`
 
