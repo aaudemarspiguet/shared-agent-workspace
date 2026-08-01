@@ -157,6 +157,24 @@ async function handleHttp(
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://relay");
 
+  if (req.method === "GET" && url.pathname === "/") {
+    respond(res, 200, {
+      service: "saw-relay",
+      version: "0.1.0",
+      description:
+        "SAW relay. It carries only JSON messages and git refs between two members.",
+      endpoints: {
+        health: "GET /health",
+        register: "POST /workspaces",
+        invite: "POST /workspaces/:id/invites (Bearer token, creator only)",
+        join: "POST /join",
+        websocket: "GET /ws (see contracts/relay-protocol.md)"
+      },
+      note: "The human web interface is served by `saw up` on the member machine, not by the relay."
+    });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/health") {
     respond(res, 200, { ok: true });
     return;
