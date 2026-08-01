@@ -36,6 +36,8 @@ const COMMIT_RE = /^[0-9a-f]{7,40}$/;
 /** Check a branch name against the core git check-ref-format rules. */
 export function isValidBranchName(name: string): boolean {
   if (name.length === 0 || name.length > 250) return false;
+  // Control chars are forbidden in git ref names, so the regex must name them.
+  // eslint-disable-next-line no-control-regex
   if (/[\s~^:?*[\\\x00-\x1f\x7f]/.test(name)) return false;
   if (name.includes("..") || name.includes("@{") || name.includes("//")) return false;
   if (name.startsWith("-") || name.startsWith("/") || name.endsWith("/")) return false;

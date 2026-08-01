@@ -1,7 +1,7 @@
 // WebSocket frame schemas for the relay protocol.
 // Every frame is JSON. The relay rejects every frame that does not match.
 import { z } from "zod";
-import { MessagePostSchema, type RejectionReason, type StoredMessage } from "./messages.js";
+import type { RejectionReason, StoredMessage } from "./messages.js";
 import { LogQuerySchema, RunLogEntryInputSchema, type StoredLogEntry } from "./log.js";
 
 // ---- Client to relay ----
@@ -15,8 +15,9 @@ export const HelloFrameSchema = z.object({
 
 export const PostFrameSchema = z.object({
   kind: z.literal("post"),
-  // The post payload is validated again by validatePost for boundary reasons.
-  post: MessagePostSchema.passthrough(),
+  // The post payload stays opaque here. validatePost judges it at the
+  // boundary, so a bad post gets its true rejection reason.
+  post: z.unknown(),
   sender_kind: z.enum(["agent", "human"]).default("agent")
 });
 

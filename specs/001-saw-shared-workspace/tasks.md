@@ -63,10 +63,10 @@ skeleton. No user story works without these.
 - [X] T008 [P] RunLogEntry + BoundaryRejection schemas in `packages/shared/src/log.ts`
 - [X] T009 [P] Invite mint/verify helpers (base64url payload + HMAC-SHA256, expiry, nonce) in `packages/shared/src/invite.ts`
 - [X] T010 Boundary contract tests in `packages/shared/tests/boundary.test.ts`: accept the five types and valid refs; reject unknown type, invalid ref, oversize body, code fences >20 lines, diff markers, long base64 (constitution gate: rejection of non-conforming payloads)
-- [ ] T011 SQLite store (all tables from data-model.md, WAL mode, gapless per-workspace seq allocation) in `packages/relay/src/store.ts`
-- [ ] T012 WebSocket server + `hello` auth (token hash check; sender identity bound to connection, never client-claimed) in `packages/relay/src/server.ts`
-- [ ] T013 Relay boundary enforcement (validate every frame with shared schemas; write BoundaryRejection without echoing payload; send `post_rejected`/`error`) in `packages/relay/src/boundary.ts`
-- [ ] T014 Workspace registration, invite mint, and join redemption (single-use nonce, expiry, 2-member cap, bearer token issue + hash storage) in `packages/relay/src/join.ts`
+- [X] T011 SQLite store (all tables from data-model.md, WAL mode, gapless per-workspace seq allocation) in `packages/relay/src/store.ts`
+- [X] T012 WebSocket server + `hello` auth (token hash check; sender identity bound to connection, never client-claimed) in `packages/relay/src/server.ts`
+- [X] T013 Relay boundary enforcement (validate every frame with shared schemas; write BoundaryRejection without echoing payload; send `post_rejected`/`error`) in `packages/relay/src/boundary.ts`
+- [X] T014 Workspace registration, invite mint, and join redemption (single-use nonce, expiry, 2-member cap, bearer token issue + hash storage) in `packages/relay/src/join.ts`
 - [ ] T015 [P] `.saw/` config + credential read/write in `packages/cli/src/config.ts`
 - [ ] T016 [P] STE-written `AGENT.md` template (five tools, five message types, claim/handoff conventions, own-branch rule, messages-and-refs-only rule, missing-ref handling: when a received ref is not on the remote, post a `status` message that reports "ref not found" instead of failing silently) in `packages/cli/src/templates/agent-md.ts`
 - [ ] T017 `saw init` + `saw invite` commands in `packages/cli/src/commands/init.ts` (git repo precondition, writes `.saw/config.json`, `.saw/credential`, `.saw/AGENT.md`, appends `.gitignore`) per contracts/cli.md
@@ -91,9 +91,9 @@ duplicate claim rejected visibly.
 
 ### Implementation for User Story 1
 
-- [ ] T022 [US1] Relay message flow: accept `post`, assign seq, persist, broadcast `message` frames in order in `packages/relay/src/messages.ts`
-- [ ] T023 [US1] Claim resolution in seq order (first wins; `claim_result` broadcast to both members; WorkItem state transitions from data-model.md) in `packages/relay/src/claims.ts`
-- [ ] T024 [US1] `sync` request handling: replay missed messages ≥ since_seq in order in `packages/relay/src/sync.ts`
+- [X] T022 [US1] Relay message flow: accept `post`, assign seq, persist, broadcast `message` frames in order in `packages/relay/src/messages.ts`
+- [X] T023 [US1] Claim resolution in seq order (first wins; `claim_result` broadcast to both members; WorkItem state transitions from data-model.md) in `packages/relay/src/claims.ts`
+- [X] T024 [US1] `sync` request handling: replay missed messages ≥ since_seq in order in `packages/relay/src/sync.ts`
 - [ ] T025 [P] [US1] MCP stdio server scaffold (`saw mcp` entry) in `packages/cli/src/mcp/server.ts`
 - [ ] T026 [US1] `room_read` + `room_post` tools (schemas + error shape from contracts/mcp-tools.md) in `packages/cli/src/mcp/tools/room.ts`
 - [ ] T027 [US1] `workspace_status` tool in `packages/cli/src/mcp/tools/status.ts`
@@ -118,8 +118,8 @@ order on resume; forged pause for the peer is rejected.
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Relay pause handling: `pause_set` (own member only), PauseState persistence, hold undelivered messages for paused members in `packages/relay/src/pause.ts`
-- [ ] T033 [P] [US2] Relay presence tracking (ping/pong liveness, `presence` broadcasts) in `packages/relay/src/presence.ts`
+- [X] T032 [US2] Relay pause handling: `pause_set` (own member only), PauseState persistence, hold undelivered messages for paused members in `packages/relay/src/pause.ts`
+- [X] T033 [P] [US2] Relay presence tracking (ping/pong liveness, `presence` broadcasts) in `packages/relay/src/presence.ts`
 - [ ] T034 [US2] Daemon pause mirror + ordered queued delivery on resume in `packages/cli/src/daemon/pause.ts`
 - [ ] T035 [US2] `PreToolUse` hook: deny with STE reason while paused, silent pass otherwise, matcher `*` in `packages/cli/src/hooks/pre-tool.ts`
 - [ ] T036 [US2] Web human message box: post as `sender_kind:"human"` with optional target member (redirect) via daemon local API, in `packages/cli/src/web/static/app.js` + endpoint in `packages/cli/src/web/server.ts`
@@ -143,7 +143,7 @@ by feature tag.
 
 - [ ] T039 [US3] `Stop` hook run-summary composer: tool counts from transcript, branch name + head SHA + changed-file count from git (counts and git refs only — no file paths), always exit 0, in `packages/cli/src/hooks/stop.ts`
 - [ ] T040 [US3] Daemon run context: record `why_trigger` at prompt-submit/injection, attach active claimed work item (or `unassigned`) in `packages/cli/src/daemon/run-context.ts`
-- [ ] T041 [US3] Relay `log_append` + `log_query` (filters: member, work_item, since, limit) in `packages/relay/src/log.ts`
+- [X] T041 [US3] Relay `log_append` + `log_query` (filters: member, work_item, since, limit) in `packages/relay/src/log.ts`
 - [ ] T042 [US3] `work_log` MCP tool in `packages/cli/src/mcp/tools/work-log.ts`
 - [ ] T043 [US3] Web log browser with feature-tag filter in `packages/cli/src/web/static/app.js` + daemon endpoint in `packages/cli/src/web/server.ts`
 - [ ] T044 [US3] Integration test in `tests/integration/log.test.ts`: a simulated run produces a complete entry automatically; boundary rejections appear in the log; filter by feature works (SC-003)
@@ -163,7 +163,7 @@ recorded activity".
 
 ### Implementation for User Story 4
 
-- [ ] T045 [US4] Relay peer-activity query (runs + peer messages in window, `peer_online` flag, independent of peer connection) extending `packages/relay/src/log.ts`
+- [X] T045 [US4] Relay peer-activity query (runs + peer messages in window, `peer_online` flag, independent of peer connection) extending `packages/relay/src/log.ts`
 - [ ] T046 [US4] `peer_activity` MCP tool (requires `since`; returns empty arrays + honesty note when no activity) in `packages/cli/src/mcp/tools/peer-activity.ts`
 - [ ] T047 [US4] Integration test in `tests/integration/peer-activity.test.ts`: peer disconnected, query answered from store; empty-window case (SC-004, FR-019)
 
