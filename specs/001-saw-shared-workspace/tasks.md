@@ -67,10 +67,10 @@ skeleton. No user story works without these.
 - [X] T012 WebSocket server + `hello` auth (token hash check; sender identity bound to connection, never client-claimed) in `packages/relay/src/server.ts`
 - [X] T013 Relay boundary enforcement (validate every frame with shared schemas; write BoundaryRejection without echoing payload; send `post_rejected`/`error`) in `packages/relay/src/boundary.ts`
 - [X] T014 Workspace registration, invite mint, and join redemption (single-use nonce, expiry, 2-member cap, bearer token issue + hash storage) in `packages/relay/src/join.ts`
-- [ ] T015 [P] `.saw/` config + credential read/write in `packages/cli/src/config.ts`
-- [ ] T016 [P] STE-written `AGENT.md` template (five tools, five message types, claim/handoff conventions, own-branch rule, messages-and-refs-only rule, missing-ref handling: when a received ref is not on the remote, post a `status` message that reports "ref not found" instead of failing silently) in `packages/cli/src/templates/agent-md.ts`
-- [ ] T017 `saw init` + `saw invite` commands in `packages/cli/src/commands/init.ts` (git repo precondition, writes `.saw/config.json`, `.saw/credential`, `.saw/AGENT.md`, appends `.gitignore`) per contracts/cli.md
-- [ ] T018 `saw join` command in `packages/cli/src/commands/join.ts` (remote-URL match check, invite redemption, same three files written, STE failure messages)
+- [X] T015 [P] `.saw/` config + credential read/write in `packages/cli/src/config.ts`
+- [X] T016 [P] STE-written `AGENT.md` template (five tools, five message types, claim/handoff conventions, own-branch rule, messages-and-refs-only rule, missing-ref handling: when a received ref is not on the remote, post a `status` message that reports "ref not found" instead of failing silently) in `packages/cli/src/templates/agent-md.ts`
+- [X] T017 `saw init` + `saw invite` commands in `packages/cli/src/commands/init.ts` (git repo precondition, writes `.saw/config.json`, `.saw/credential`, `.saw/AGENT.md`, appends `.gitignore`) per contracts/cli.md
+- [X] T018 `saw join` command in `packages/cli/src/commands/join.ts` (remote-URL match check, invite redemption, same three files written, STE failure messages)
 - [ ] T019 Daemon relay client with reconnect/backoff + `sync` replay handling in `packages/cli/src/daemon/client.ts`
 - [ ] T020 Daemon localhost HTTP API for hooks + in-memory state cache (pause, cursor, presence) in `packages/cli/src/daemon/local-api.ts`
 - [ ] T021 `saw up` command skeleton in `packages/cli/src/commands/up.ts`: start daemon, connect relay, register MCP server (`claude mcp add saw -- saw mcp`), install hook entries in `.claude/settings.json`, print status
