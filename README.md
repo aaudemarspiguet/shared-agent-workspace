@@ -72,6 +72,10 @@ Commands that can help later:
 - `/speckit-implement` — execute the tasks in `tasks.md`.
 - `/speckit-taskstoissues` — convert `tasks.md` into dependency-ordered
   GitHub issues, so two people can split and track the work.
+  **Rule**: GitHub issues track *who does what*. `tasks.md` tracks *what
+  is done* (the checkboxes). Keep `tasks.md` current — `/speckit-implement`
+  and `/speckit-converge` read `tasks.md`, not GitHub. When you close an
+  issue, also check off the matching task in `tasks.md`.
 - `/speckit-converge` — after partial implementation, compare the code
   against the spec and append the missing work to `tasks.md`.
 - `/speckit-checklist` — generate a custom quality checklist for the
