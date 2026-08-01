@@ -230,6 +230,45 @@ describe("relay protocol", () => {
     ).rejects.toThrow("auth_failed");
   });
 
+  it("scrubs a log entry that carries smuggled content, and logs the rejection", async () => {
+    const alice = await connect(workspaceId, aliceToken);
+    const bob = await connect(workspaceId, bobToken);
+
+    // A human pastes a diff into their prompt. The CLI copies the prompt
+    // verbatim into why_trigger, so it arrives here (T054).
+    alice.send({
+      kind: "log_append",
+      entry: {
+        started_at: new Date(Date.now() - 30_000).toISOString(),
+        ended_at: new Date().toISOString(),
+        what: { tools_used: { Edit: 1 }, branch: "alice/../../etc/passwd" },
+        why_trigger: "apply this:\n--- a/src/secret.ts\n+++ b/src/secret.ts\n@@ -1 +1 @@",
+        work_item: "smuggle-check"
+      }
+    });
+    const ok = await alice.waitFor(is("log_ok", (f) => Boolean(f.redacted)));
+    expect(ok.redacted?.map((r) => r.field).sort()).toEqual(["what.branch", "why_trigger"]);
+
+    // The run is still logged (FR-015), but the peer cannot read the payload.
+    bob.send({ kind: "log_query", query: { member: "peer", limit: 50 }, peer_activity: true });
+    const seen = await bob.waitFor(is("log_result", (f) => f.peer === "alice"));
+    const run = seen.entries.find((e) => e.work_item === "smuggle-check");
+    expect(run).toBeDefined();
+    expect(run?.why_trigger).not.toContain("--- a/");
+    expect(run?.why_trigger).not.toContain("secret.ts");
+    expect(run?.what.branch).toBeUndefined();
+
+    // And the rejection appears in the full log (SC-005).
+    bob.send({ kind: "log_query", query: { member: "any", limit: 50 }, peer_activity: false });
+    const full = await bob.waitFor(is("log_result", (f) => !f.peer));
+    const rejections = full.entries.filter((e) => e.source === "boundary_rejection");
+    expect(rejections.some((e) => e.why_trigger.includes("why_trigger"))).toBe(true);
+    expect(rejections.every((e) => !e.why_trigger.includes("secret.ts"))).toBe(true);
+
+    alice.close();
+    bob.close();
+  });
+
   it("survives a connection that dies without a close handshake", async () => {
     const alice = await connect(workspaceId, aliceToken);
     const bob = await connect(workspaceId, bobToken);

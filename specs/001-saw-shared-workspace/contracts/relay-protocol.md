@@ -72,6 +72,18 @@ data-model.md §Boundary rules):
   echoed.
 - Target for SC-005: 100% of such payloads rejected and logged.
 
+`log_append` entries get the same content check, because the peer reads
+them back through `peer_activity`. They are scrubbed rather than refused,
+since every run must still be logged (FR-015):
+
+- `why_trigger` carrying smuggled content is replaced with a fixed
+  placeholder. The removed text is never stored or echoed.
+- `what.branch` that is not a valid branch name, and `what.head` that is
+  not a commit SHA, are dropped.
+- Each removal writes its own BoundaryRejection log entry, so the
+  rejection still appears in the log for SC-005. The `log_ok` reply
+  carries a `redacted` list naming each field and reason.
+
 ## Availability behavior (deferred item from clarify)
 
 The relay is a single small process. If it is down, daemons retry with
