@@ -100,7 +100,7 @@ duplicate claim rejected visibly.
 - [X] T028 [US1] ReadCursor tracking (last_injected_seq, unread computation) in `packages/cli/src/daemon/cursor.ts`
 - [X] T029 [US1] `SessionStart` + `UserPromptSubmit` hook entries: inject unread messages + claim/pause state as additionalContext, advance cursor, no-op cleanly when daemon is down in `packages/cli/src/hooks/inject.ts`
 - [X] T030 [US1] Read-only web room view: daemon web server in `packages/cli/src/web/server.ts` + `packages/cli/src/web/static/index.html`, `app.js`, `style.css` (live message list over daemon WebSocket)
-- [ ] T031 [US1] Integration test in `tests/integration/room.test.ts`: two simulated members — intent/claim/handoff with ref; duplicate claim rejected with visible notice; smuggling body rejected and logged (SC-002, SC-005)
+- [X] T031 [US1] Integration test in `tests/integration/room.test.ts`: two simulated members — intent/claim/handoff with ref; duplicate claim rejected with visible notice; smuggling body rejected and logged (SC-002, SC-005)
 
 **Checkpoint**: MVP — two agents coordinate through the room; humans can
 read everything.
@@ -124,7 +124,7 @@ order on resume; forged pause for the peer is rejected.
 - [X] T035 [US2] `PreToolUse` hook: deny with STE reason while paused, silent pass otherwise, matcher `*` in `packages/cli/src/hooks/pre-tool.ts`
 - [X] T036 [US2] Web human message box: post as `sender_kind:"human"` with optional target member (redirect) via daemon local API, in `packages/cli/src/web/static/app.js` + endpoint in `packages/cli/src/web/server.ts`
 - [X] T037 [US2] Web pause control (own member only) + presence indicators for both members in `packages/cli/src/web/static/app.js`
-- [ ] T038 [US2] Integration test in `tests/integration/steering.test.ts`: redirect reaches the target daemon <5 s and injects at next turn boundary, pause blocks, resume replays queue in seq order, relay rejects `pause_set` naming the peer (FR-013/014, SC-006)
+- [X] T038 [US2] Integration test in `tests/integration/steering.test.ts`: redirect reaches the target daemon <5 s and injects at next turn boundary, pause blocks, resume replays queue in seq order, relay rejects `pause_set` naming the peer (FR-013/014, SC-006)
 
 **Checkpoint**: Room + human steering both work independently.
 
@@ -146,7 +146,7 @@ by feature tag.
 - [X] T041 [US3] Relay `log_append` + `log_query` (filters: member, work_item, since, limit) in `packages/relay/src/log.ts`
 - [X] T042 [US3] `work_log` MCP tool in `packages/cli/src/mcp/tools/work-log.ts`
 - [X] T043 [US3] Web log browser with feature-tag filter in `packages/cli/src/web/static/app.js` + daemon endpoint in `packages/cli/src/web/server.ts`
-- [ ] T044 [US3] Integration test in `tests/integration/log.test.ts`: a simulated run produces a complete entry automatically; boundary rejections appear in the log; filter by feature works (SC-003)
+- [X] T044 [US3] Integration test in `tests/integration/log.test.ts`: a simulated run produces a complete entry automatically; boundary rejections appear in the log; filter by feature works (SC-003)
 
 **Checkpoint**: All activity is recorded with what/when/why/feature.
 
@@ -165,7 +165,7 @@ recorded activity".
 
 - [X] T045 [US4] Relay peer-activity query (runs + peer messages in window, `peer_online` flag, independent of peer connection) extending `packages/relay/src/log.ts`
 - [X] T046 [US4] `peer_activity` MCP tool (requires `since`; returns empty arrays + honesty note when no activity) in `packages/cli/src/mcp/tools/peer-activity.ts`
-- [ ] T047 [US4] Integration test in `tests/integration/peer-activity.test.ts`: peer disconnected, query answered from store; empty-window case (SC-004, FR-019)
+- [X] T047 [US4] Integration test in `tests/integration/peer-activity.test.ts`: peer disconnected, query answered from store; empty-window case (SC-004, FR-019)
 
 **Checkpoint**: All four user stories independently functional.
 
@@ -175,9 +175,9 @@ recorded activity".
 
 - [ ] T048 [P] STE documentation pass: root `README.md`, `packages/*/README.md`, code comments — short sentences, active voice, simple words (constitution)
 - [ ] T049 [P] Relay self-hosting: `packages/relay/Dockerfile` + run instructions in `packages/relay/README.md` (Principle VII)
-- [ ] T050 Reconnect-ordering integration test (24 h-offline replay, 100% in order) in `tests/integration/reconnect.test.ts` (SC-007, quickstart Scenario 5)
-- [ ] T051 Timing assertions in existing integration tests: redirect to target daemon <5 s, peer answer <30 s (SC-004, SC-006)
-- [ ] T052 Security hardening: credential file permissions, hashed-token verification path, web server binds 127.0.0.1 only, in `packages/cli/src/config.ts`, `packages/relay/src/server.ts`, `packages/cli/src/web/server.ts`
+- [X] T050 Reconnect-ordering integration test (24 h-offline replay, 100% in order) in `tests/integration/reconnect.test.ts` (SC-007, quickstart Scenario 5)
+- [X] T051 Timing assertions in existing integration tests: redirect to target daemon <5 s, peer answer <30 s (SC-004, SC-006)
+- [X] T052 Security hardening: credential file permissions, hashed-token verification path, web server binds 127.0.0.1 only, in `packages/cli/src/config.ts`, `packages/relay/src/server.ts`, `packages/cli/src/web/server.ts`
 - [ ] T053 Run full quickstart.md validation with two real clones + Claude Code; record results in `specs/001-saw-shared-workspace/quickstart-results.md`
 
 ---

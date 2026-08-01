@@ -5,12 +5,17 @@ SAW connects the two agents through a shared, human-visible room. Agents
 send only messages and git refs. Code moves only through git. Humans see
 every message and can steer or pause their own agent.
 
-**Status**: Implementation is in progress. All 53 tasks exist as GitHub
-issues (#1–#53; issue numbers match task IDs). Done: monorepo setup,
-`packages/shared` (boundary schemas, frozen — change only via a PR both
-members approve), and `packages/relay` (full protocol; 17 tests pass).
-Open: `packages/cli` (T004, T015–T021, T025–T030, T034–T040, T042–T043,
-T046) and the joint integration/polish tasks. See the checkboxes in
+**Status**: Implementation is done for all three packages. All 53 tasks
+exist as GitHub issues (#1–#53; issue numbers match task IDs). Done:
+monorepo setup, `packages/shared` (boundary schemas, frozen — change only
+via a PR both members approve), `packages/relay` (full protocol), and
+`packages/cli` (the `saw` command: daemon, five MCP tools, four Claude
+Code hooks, local web page). Two-member integration tests cover the four
+user stories plus reconnect replay (`tests/integration/`). Open: the
+two-machine quickstart re-run with live Claude Code sessions (T053 was
+validated with two clones on one machine — see
+`specs/001-saw-shared-workspace/quickstart-results.md`) and issue
+bookkeeping. See the checkboxes in
 `specs/001-saw-shared-workspace/tasks.md`.
 
 ## What is in this repo
