@@ -100,9 +100,13 @@ beforeAll(async () => {
     ok: boolean;
     token: string;
     members: string[];
+    repo_remote: string;
   };
   expect(joined.ok).toBe(true);
   expect(joined.members).toEqual(["alice", "bob"]);
+  // The joiner cannot check that they are in the right repository without
+  // this (contracts/cli.md "saw join" preconditions).
+  expect(joined.repo_remote).toBe("git@github.com:acme/app.git");
   bobToken = joined.token;
 });
 
@@ -224,5 +228,27 @@ describe("relay protocol", () => {
         ws.on("error", reject);
       })
     ).rejects.toThrow("auth_failed");
+  });
+
+  it("survives a connection that dies without a close handshake", async () => {
+    const alice = await connect(workspaceId, aliceToken);
+    const bob = await connect(workspaceId, bobToken);
+
+    // Reset the TCP connection instead of closing it. The server socket
+    // raises 'error'; unhandled, that would end the relay process and take
+    // the other member down with it.
+    bob.ws.terminate();
+    await new Promise((r) => setTimeout(r, 100));
+
+    const health = await fetch(`${base}/health`);
+    expect(health.status).toBe(200);
+
+    // Alice is unaffected and a new connection still authenticates.
+    const bobAgain = await connect(workspaceId, bobToken);
+    alice.send({ kind: "post", post: { type: "status", body: "still here" } });
+    await bobAgain.waitFor(is("message", (f) => f.message.body === "still here"));
+
+    alice.close();
+    bobAgain.close();
   });
 });

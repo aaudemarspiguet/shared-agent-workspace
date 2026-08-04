@@ -102,6 +102,12 @@ export class ConnectionRegistry {
     }
   }
 
+  /** Drop every live socket. Used on shutdown, before the store closes. */
+  closeAll(): void {
+    for (const conn of this.byMember.values()) conn.ws.terminate();
+    this.byMember.clear();
+  }
+
   markAlive(ws: WebSocket): void {
     for (const conn of this.byMember.values()) {
       if (conn.ws === ws) {

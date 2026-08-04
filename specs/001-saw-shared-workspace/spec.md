@@ -161,9 +161,9 @@ and confirming a correct answer built from stored history.
 - What happens when an agent tries to smuggle code or file contents inside a
   message body? The boundary check must reject payloads that are not
   messages-with-optional-refs, and the rejection must be logged.
-- What happens when a human pauses their agent in the middle of a run? The
-  agent finishes or aborts its current run but takes no new coordinated
-  action; incoming messages queue for later delivery.
+- What happens when a human pauses their agent in the middle of a run? Every
+  tool call is blocked from that moment, so the agent cannot continue the
+  run; incoming messages queue for later delivery (FR-014).
 - What happens when a member disconnects mid-conversation? Messages sent
   while offline are stored and delivered on reconnect; history stays intact.
 - What happens when a run cannot be linked to a known feature? The entry is
@@ -217,6 +217,22 @@ and confirming a correct answer built from stored history.
   files through the system.
 - **FR-010**: An agent MUST NOT be able to run anything in the other
   member's execution environment through the system.
+
+**Member machine and credentials**
+
+- **FR-020**: The system MUST protect each member's credential on that
+  member's machine so that only the member's own account on that machine can
+  read it. Where a platform cannot express that restriction through file
+  permissions alone, the system MUST apply that platform's equivalent access
+  control. If the system cannot protect the credential on the current
+  platform, it MUST tell the member plainly instead of reporting success.
+- **FR-021**: Every interface the system exposes on a member's machine — the
+  room view and any interface the member's own agent or tooling uses — MUST
+  accept requests only from software the member started for this workspace.
+  It MUST refuse requests that originate from other software on that machine,
+  including pages loaded in the member's web browser, and the refusal MUST
+  cover reads as well as changes. These interfaces MUST NOT be reachable from
+  another machine.
 
 **Human visibility and control**
 
@@ -309,6 +325,11 @@ and confirming a correct answer built from stored history.
   system MUST NOT force content into an agent mid-turn.
 - **SC-007**: After one member has been offline for 24 hours, the returning
   member's agent receives 100% of the messages sent in the interim, in order.
+- **SC-008**: On every supported platform, a second account on the same
+  machine cannot read a member's credential.
+- **SC-009**: On every supported platform, a page loaded in a member's web
+  browser cannot read room contents and cannot change that member's pause
+  state.
 
 ## Assumptions
 
@@ -338,3 +359,7 @@ and confirming a correct answer built from stored history.
 - Answering teammate-activity questions requires only stored workspace
   history; no live connection to the teammate's machine is ever needed or
   used.
+- "Supported platform" in FR-020 and SC-008/SC-009 means the platforms a
+  member may run their own coding tool on: Windows, macOS, and Linux. These
+  platforms do not express account-level file access the same way, so
+  FR-020 is written in terms of the outcome, not a permission value.
