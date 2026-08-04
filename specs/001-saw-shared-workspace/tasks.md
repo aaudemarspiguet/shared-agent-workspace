@@ -27,7 +27,7 @@ T058 and T059 have no issue: they landed in the pull request that added them.
 |-------|-------|-------|
 | @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045, T049, T052, T054, T058–T059, T070–T073 | Repo setup, `packages/shared`, `packages/relay` |
 | @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046, T055–T057, T061–T067 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
-| joint (pair or split at the time) | T031, T038, T044, T047, T048, T050, T051, T053 | Integration tests + polish that genuinely spans both packages |
+| joint (pair or split at the time) | T031, T038, T044, T047, T048, T050, T051, T053, T060 | Integration tests + polish that genuinely spans both packages |
 
 **Rule for `/speckit-implement` runs**: execute only the invoking member's
 tasks. Do not create or modify files in the other member's package.
@@ -213,6 +213,10 @@ findings referenced on each line.
 local-surface scope that T052 listed without acceptance criteria. T056 and
 T057 are the tracking tasks for both. T052 keeps only the relay hashed-token
 verification path.
+
+### Added after the second `/speckit-analyze` pass
+
+- [ ] T060 Tell a real "why" from a stand-in in the work log (FR-016a, SC-010 — analyze U2, issue #65). The Stop hook writes `"run with no recorded trigger"` when it captured no prompt, and the relay now writes `[removed at the boundary]` when it took one out. Both read as if they were the reason. Record which case applies alongside the text — `packages/shared/src/log.ts` (the stored entry), `packages/cli/src/daemon/run-context.ts` and `packages/cli/src/hooks/stop.ts` (the capture side), `packages/cli/src/web/` (show it). Joint: the field is in the frozen `packages/shared`, so it needs a PR both members approve
 
 ### Added after the review of PR #54
 

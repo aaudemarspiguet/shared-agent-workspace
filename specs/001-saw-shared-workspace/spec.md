@@ -4,7 +4,9 @@
 
 **Created**: 2026-07-31
 
-**Status**: Draft
+**Status**: Implemented, under revision. The four user stories are built and
+merged. Sections amended after implementation carry the date in the
+Clarifications block. Follow-up work is tracked in tasks.md, not here.
 
 **Input**: User description: "Build SAW. SAW is a shared workspace for two developers. Each developer has a coding agent. SAW connects the agents. A workspace maps to one repo. A workspace includes the repo members and their agents. Agents send messages in a shared room. A message has a type. Message types are intent, question, decision, handoff, and status. Agents use the room to negotiate work. Agents use the room to claim work. Agents use the room to hand off work. Both humans can read every message. Either human can send a message to redirect an agent. Either human can pause their own agent. The system must log every agent run. A log entry must include what the agent did. A log entry must include when the agent did it. A log entry must include why the agent did it. A log entry must link to a feature. A human can ask their own agent about a teammate agent. Example question. What did my teammate's agent do yesterday. The system must answer this question even if the teammate is offline. Agents must not access each other's files. Agents must not access each other's execution environment. Agents may only send messages and git references. A git reference is a branch name or a commit SHA."
 
@@ -17,6 +19,15 @@
 - Q: When both agents claim the same work item at nearly the same time, how is the conflict resolved? → A: First claim recorded wins; the later claim is automatically rejected with a notice to that agent, visible to both humans.
 - Q: Where do the humans read the room and steer the agents? → A: Both surfaces: a minimal dedicated room view for reading, redirecting, and pausing, plus each human's own agent for questions about history and teammate activity.
 - Q: Since log capture is automatic, where does the "why the agent did it" in a log entry come from? → A: Both the instruction that triggered the run (human prompt or room message) and the claimed work item / feature the run was serving; neither depends on the agent self-reporting.
+
+### Session 2026-08-01 — amendments after implementation
+
+Found by reviewing the built system against this specification, and by
+`/speckit-analyze`. Each names the gap that made the amendment necessary.
+
+- Q: What does a pause do to a run already in progress? → A: It blocks every tool call from that moment, so the agent cannot continue. The edge case said the agent "finishes or aborts its current run", which contradicted FR-014. Constitution amended to 1.1.0 to define pause and stop as one control.
+- Q: What protects a member's credential, and what protects the interfaces on their machine? → A: FR-020 and FR-021, new. The specification had no security requirements at all across 22 FRs, so two real defects in the built system traced to no requirement and could not fail a gate.
+- Q: When the system captures no triggering instruction, what may the "why" say? → A: FR-016a and SC-010, new. SC-003 counted only that the field was present, so a stand-in reading "run with no recorded trigger" satisfied it. The reader can now tell a real reason from a stand-in.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -265,6 +276,11 @@ and confirming a correct answer built from stored history.
   run (a human prompt or a room message) and the claimed work item or
   feature the run was serving. If no feature is known, the entry MUST still
   be captured and marked unassigned.
+- **FR-016a**: A reader MUST be able to tell whether an entry's "why" is the
+  real triggering instruction or a stand-in. When the system captures no
+  triggering instruction, or removes one at the boundary, the entry MUST
+  still be kept and MUST record which of those happened. The system MUST NOT
+  present a stand-in as if it were the reason for the run.
 - **FR-017**: The log MUST be stored durably in the workspace so it remains
   readable when either member is offline.
 
@@ -311,7 +327,8 @@ and confirming a correct answer built from stored history.
   zero hidden or partially visible messages across a full work session.
 - **SC-003**: 100% of agent runs in a session appear in the work log with
   all four fields (what, when, why, feature link or unassigned), with zero
-  manual logging steps performed by agents or humans.
+  manual logging steps performed by agents or humans. This criterion counts
+  presence only. SC-010 covers whether the "why" says anything.
 - **SC-004**: A human asking about the teammate agent's activity for a past
   day receives a correct answer within 30 seconds while the teammate is
   offline.
@@ -330,6 +347,10 @@ and confirming a correct answer built from stored history.
 - **SC-009**: On every supported platform, a page loaded in a member's web
   browser cannot read room contents and cannot change that member's pause
   state.
+- **SC-010**: In a session where a human prompt or a room message starts
+  every run, 100% of log entries carry that instruction as the "why". A
+  reader can tell every remaining entry apart from those, and can tell why
+  it carries no instruction.
 
 ## Assumptions
 
