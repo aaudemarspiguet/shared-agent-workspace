@@ -1,6 +1,12 @@
 // Work log endpoints: append and query.
 // Queries read SQLite only. They work when the peer is offline (FR-019).
-import type { LogQuery, RunLogEntryInput, StoredLogEntry, StoredMessage } from "@saw/shared";
+import type {
+  LogQuery,
+  LogRedaction,
+  RunLogEntryInput,
+  StoredLogEntry,
+  StoredMessage
+} from "@saw/shared";
 import type { ConnectionRegistry } from "./presence.js";
 import type { MemberRow, RelayStore } from "./store.js";
 
@@ -8,10 +14,25 @@ export function handleLogAppend(
   store: RelayStore,
   registry: ConnectionRegistry,
   member: MemberRow,
-  entry: RunLogEntryInput
+  entry: RunLogEntryInput,
+  redactions: LogRedaction[] = []
 ): void {
+  // Each removal is a boundary rejection and must appear in the log, even
+  // though the run itself is still stored (SC-005).
+  for (const r of redactions) {
+    store.appendRejectionLog(
+      member.workspace_id,
+      member.id,
+      r.reason,
+      `${r.field}: ${r.summary}`
+    );
+  }
   const id = store.appendLog(member.workspace_id, member.id, entry, "hook_stop");
-  registry.sendTo(member.id, { kind: "log_ok", id });
+  registry.sendTo(member.id, {
+    kind: "log_ok",
+    id,
+    ...(redactions.length > 0 ? { redacted: redactions } : {})
+  });
 }
 
 export function handleLogQuery(

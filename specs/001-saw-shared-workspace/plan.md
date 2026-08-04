@@ -73,7 +73,7 @@ lifetime.
 | # | Principle | Gate result | Evidence in this plan |
 |---|-----------|-------------|-----------------------|
 | I | Coordination layer, not a coding agent | PASS | All five MCP tools coordinate (read/post/query); none generate, edit, or execute code. Connection to agents is via MCP only. |
-| II | Messages and refs only | PASS (design) / **FAIL (as built)** | Design: relay schema admits only typed JSON messages with optional refs. As built: `parseClientFrame` runs `validatePost` for `kind:"post"` only, so `log_append.why_trigger` — the verbatim human prompt — crosses between members unchecked (FR-008, SC-005). Fix tracked as T054. |
+| II | Messages and refs only | PASS | Relay schema admits only typed JSON messages with optional refs. `parseClientFrame` content-checks `post` and `log_append` alike: a `why_trigger` carrying smuggled content is replaced, an invalid `branch` or `head` is dropped, and each removal writes its own BoundaryRejection (FR-008, SC-005). Was FAIL as built until T054 landed 2026-08-01. |
 | III | Human visibility and steering | PASS (design) / **PARTIAL (as built)** | Design: full room history, redirects, own-agent pause. As built: correct between members, but the local room view and API accept requests from any software on the member's machine, so a web page can read the room and change pause state (FR-021, SC-009). Fix tracked as T057. |
 | IV | Automatic, explained, traceable logging | PASS (design) / **FAIL (as built)** | Design: Stop hook posts run summaries mechanically. As built: a run that ends while the relay is unreachable is dropped — no spool, no retry — so "every run" does not hold (FR-015, SC-003). Fix tracked as T055. |
 | V | Standards, not forks | PASS | Claude Code is integrated only through its documented hooks and MCP registration. No fork, wrapper, or custom runtime. Git is used as-is. |
@@ -96,6 +96,10 @@ self-hostable.
 The three failures share one cause: the gate ran before there was code, and
 nothing re-ran it afterwards. Each now has a task (T054, T055, T057). Move a
 row back to PASS only when its task lands, and re-run this check then.
+
+**Update (2026-08-01, later the same day)**: T054 landed, so row II is back
+to PASS on the same terms it claimed at design time. Rows III and IV still
+do not hold; they clear when T057 and T055 land.
 
 Two of the three were invisible at design time for a second reason: the spec
 carried no security requirements at all, so nothing described the member's
