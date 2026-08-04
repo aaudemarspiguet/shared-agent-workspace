@@ -2,7 +2,12 @@
 // Every frame is JSON. The relay rejects every frame that does not match.
 import { z } from "zod";
 import type { RejectionReason, StoredMessage } from "./messages.js";
-import { LogQuerySchema, RunLogEntryInputSchema, type StoredLogEntry } from "./log.js";
+import {
+  LogQuerySchema,
+  RunLogEntryInputSchema,
+  type LogRedaction,
+  type StoredLogEntry
+} from "./log.js";
 
 // ---- Client to relay ----
 
@@ -87,6 +92,8 @@ export interface ClaimResultFrame {
 export interface LogOkFrame {
   kind: "log_ok";
   id: string;
+  /** Present when the boundary removed something before storing the entry. */
+  redacted?: LogRedaction[];
 }
 export interface LogResultFrame {
   kind: "log_result";

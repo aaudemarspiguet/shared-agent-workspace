@@ -33,6 +33,11 @@ export interface GitRef {
 
 const COMMIT_RE = /^[0-9a-f]{7,40}$/;
 
+/** Check a commit SHA. Short SHAs down to 7 chars are accepted, as git does. */
+export function isValidCommitSha(value: string): boolean {
+  return COMMIT_RE.test(value);
+}
+
 /** Check a branch name against the core git check-ref-format rules. */
 export function isValidBranchName(name: string): boolean {
   if (name.length === 0 || name.length > 250) return false;

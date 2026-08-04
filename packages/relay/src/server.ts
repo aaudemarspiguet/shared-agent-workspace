@@ -106,7 +106,7 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           handleSync(store, registry, member, frame.since_seq);
           break;
         case "log_append":
-          handleLogAppend(store, registry, member, frame.entry);
+          handleLogAppend(store, registry, member, frame.entry, parsed.redactions);
           break;
         case "log_query":
           handleLogQuery(store, registry, member, frame.query, frame.peer_activity);
