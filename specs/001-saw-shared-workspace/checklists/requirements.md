@@ -67,3 +67,29 @@ Why this pass was needed: `/speckit-analyze` found that the specification
 carried no security requirements at all, so the credential and the member's
 local surface had no acceptance criteria. That gap, not a coding error, is
 why both shipped unprotected.
+
+## Third validation pass — 2026-08-01
+
+Re-validated after FR-016a and SC-010 were added, and after the spec Status
+changed from Draft.
+
+All items still pass. Specific checks:
+
+- **Requirements are testable**: FR-016a is testable by reading any entry
+  and asking whether the reader can tell a captured instruction from a
+  stand-in. It names no field name and no storage format.
+- **Success criteria are measurable**: SC-010 fixes the session ("a session
+  where a human prompt or a room message starts every run") so the
+  denominator is knowable. Without that bound it would not be countable.
+- **Success criteria are technology-agnostic**: SC-010 describes what a
+  reader of the log can tell. It names no schema, field, or interface.
+- **No duplication with SC-003**: the two now say different things.
+  SC-003 counts presence of the four fields; SC-010 judges whether the
+  "why" carries a real instruction. SC-003 gained a sentence saying so.
+
+Why this pass was needed: `/speckit-analyze` finding U2. FR-016 required a
+"why" but never said what qualifies as one, and SC-003 measured only that
+the field was present. The built system writes `run with no recorded
+trigger` when it captures nothing, and that satisfied SC-003 — the
+criterion could not fail. Recording the boundary redaction (T054) adds a
+second stand-in, which made the gap worth closing now rather than later.
