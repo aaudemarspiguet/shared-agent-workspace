@@ -51,7 +51,17 @@ export function mintWorkspaceInvite(
 }
 
 export type JoinResult =
-  | { ok: true; workspace_id: string; member: string; token: string; members: string[] }
+  | {
+      ok: true;
+      workspace_id: string;
+      member: string;
+      token: string;
+      members: string[];
+      /** The remote the workspace was registered against. The joiner has no
+       * other way to learn it, and needs it to check that the repository they
+       * are in is the one the workspace refers to (Principle VI). */
+      repo_remote: string;
+    }
   | { ok: false; error: string };
 
 /** Redeem an invite token. Issues the new member their own credential. */
@@ -92,6 +102,7 @@ export function joinWorkspace(
     workspace_id: workspaceId,
     member: redeemed.member.github_username,
     token: redeemed.token,
-    members: store.members(workspaceId).map((m) => m.github_username)
+    members: store.members(workspaceId).map((m) => m.github_username),
+    repo_remote: ws.repo_remote
   };
 }

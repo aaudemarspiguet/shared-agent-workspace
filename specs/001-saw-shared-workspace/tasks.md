@@ -13,21 +13,36 @@ independently testable increment.
 
 ## Ownership
 
-Work is split by package. Assignments live on the GitHub issues; this table
-mirrors them for `/speckit-implement`. Issue numbers match task IDs for
-T001–T053. They do not match for the tasks added after the first
-`/speckit-analyze` pass: **T054 is issue #56** and **T055 is issue #57**.
+Work is split by package. **This table is the authority on ownership.** The
+GitHub issues carry the same assignment where one is set, but most issues
+predate that practice and have no assignee, so do not read an unassigned
+issue as unowned.
+
+Issue numbers match task IDs for T001–T053 only. After that they diverge:
+**T054 is #56**, **T055 is #57**, **T056 is #60**, **T057 is #61**.
 
 | Owner | Tasks | Scope |
 |-------|-------|-------|
-| @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045, T054 | Repo setup, `packages/shared`, `packages/relay` |
+| @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045, T049, T052, T054, T058–T059 | Repo setup, `packages/shared`, `packages/relay` |
 | @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046, T055–T057 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
-| joint (pair or split at the time) | T031, T038, T044, T047, T048–T053 | Integration tests + polish |
+| joint (pair or split at the time) | T031, T038, T044, T047, T048, T050, T051, T053 | Integration tests + polish that genuinely spans both packages |
 
 **Rule for `/speckit-implement` runs**: execute only the invoking member's
 tasks. Do not create or modify files in the other member's package.
 `packages/shared` is frozen after T010 lands on `main`; change it only via
-a PR both members approve.
+a PR both members approve. CODEOWNERS alone does not enforce that — it
+requires approval from **any one** listed owner. The "both approve" rule
+needs branch protection with a required-approvals count.
+
+**On the joint bucket**: a task belongs there only if it cannot be done
+inside one package. Two were misfiled, which put them in direct conflict
+with the rule above — the owner of `packages/cli` could not execute either
+without breaking it (`/speckit-analyze` finding I1). Both move to
+@aaudemarspiguet:
+
+- **T049** was always scoped to `packages/relay` alone.
+- **T052** spanned both packages until T056 and T057 took the
+  `packages/cli` half. What remains is the relay hashed-token path.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -179,7 +194,7 @@ recorded activity".
 - [ ] T049 [P] Relay self-hosting: `packages/relay/Dockerfile` + run instructions in `packages/relay/README.md` (Principle VII)
 - [ ] T050 Reconnect-ordering integration test (24 h-offline replay, 100% in order) in `tests/integration/reconnect.test.ts` (SC-007, quickstart Scenario 5)
 - [ ] T051 Timing assertions in existing integration tests: redirect to target daemon <5 s, peer answer <30 s (SC-004, SC-006)
-- [ ] T052 Security hardening: credential file permissions, hashed-token verification path, web server binds 127.0.0.1 only, in `packages/cli/src/config.ts`, `packages/relay/src/server.ts`, `packages/cli/src/web/server.ts`
+- [ ] T052 Hashed-token verification path in `packages/relay/src/server.ts` and `packages/relay/src/store.ts`: store a hash of each member credential, not the credential itself. (Scope reduced — see the note below. The credential-at-rest and local-surface halves are now T056 and T057.)
 - [ ] T053 Run full quickstart.md validation with two real clones + Claude Code; record results in `specs/001-saw-shared-workspace/quickstart-results.md`
 
 ### Added after the first `/speckit-analyze` pass
@@ -196,6 +211,15 @@ findings referenced on each line.
 local-surface scope that T052 listed without acceptance criteria. T056 and
 T057 are the tracking tasks for both. T052 keeps only the relay hashed-token
 verification path.
+
+### Added after the review of PR #54
+
+Raised by @shreyk2 in the PR description. Both are `packages/relay`, so they
+are @aaudemarspiguet's to do. Neither has its own issue: they landed in the
+same pull request that added these lines.
+
+- [X] T058 Handle `error` on relay sockets and on the WebSocket server in `packages/relay/src/server.ts`. An unhandled `error` event ends the relay process, so one member's broken connection stops the other member from working. Includes the shutdown ordering that surfaced with it: drop live sockets before the store closes, so a closing socket cannot query a closed database (FR-013)
+- [X] T059 Return the workspace `repo_remote` from `POST /join` in `packages/relay/src/join.ts`. `contracts/cli.md` makes a matching remote a precondition of `saw join`, but the joiner had no way to learn what to match against (Principle VI)
 
 ---
 
@@ -214,6 +238,7 @@ verification path.
 - **T055**: needs T039/T040 (the Stop-hook path it makes durable)
 - **T056**: needs T015 (`.saw/` credential write path it hardens)
 - **T057**: needs T020/T030 (the local API and web server it authenticates)
+- **T058, T059**: need T013 (the relay server and join path they correct) — both done
 
 ### Within Phase 2
 
@@ -282,7 +307,7 @@ quickstart scenarios.
 
 ## Notes
 
-- Total: 57 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 10)
+- Total: 59 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 12)
 - The constitution's boundary gate is enforced twice: schema tests (T010) and relay enforcement (T013), both before any story ships. T054 closes the gap both left: they check `post` frames only, so `log_append` crosses the boundary unchecked
 - The Constitution Check in plan.md now records the honest post-implementation state: rows II and IV FAIL, row III PARTIAL. Re-run it after T054–T057 land and move them back to PASS
 - Commit after each task or logical group; keep relay changes verifiable against a self-hosted run (Principle VII)
