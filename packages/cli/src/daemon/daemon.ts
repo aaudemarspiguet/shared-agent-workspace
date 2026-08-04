@@ -40,6 +40,10 @@ export interface InjectResult {
   work_items: WorkItemView[];
   me: string;
   latest_seq: number;
+  /** Pass back to `ackInjection` after delivery. The cursor stops here. */
+  ack_seq: number;
+  /** Number of notices delivered. Pass back to `ackInjection`. */
+  ack_notices: number;
 }
 
 export interface WorkspaceStatus {
@@ -110,6 +114,10 @@ export class Daemon {
           }
         },
         onClaimResult: (frame) => {
+          // The relay is the authority on who holds a work item. Apply the
+          // verdict before the notice, so a lost claim corrects the mirror
+          // instead of leaving this member believing it still holds the item.
+          this.state.applyClaimResult(frame);
           this.state.addClaimNotice(frame);
           this.pendingNotices.push({
             work_item: frame.work_item,
@@ -222,8 +230,13 @@ export class Daemon {
   }
 
   /**
-   * Deliver unread messages for injection and advance the cursor (T028/T029).
+   * Deliver unread messages for injection (T028/T029).
    * Also records the run trigger (T040).
+   *
+   * This does NOT advance the read cursor. The caller must acknowledge with
+   * `ackInjection` after it has delivered the messages. A hook that dies
+   * before it writes its output therefore sees the same messages again,
+   * instead of losing them. Delivery is at least once, never at most once.
    */
   inject(source: "session-start" | "prompt-submit", prompt?: string): InjectResult {
     const raw = this.state.messages(this.cursor.value, 500);
@@ -231,18 +244,31 @@ export class Daemon {
     const unread = raw.filter(
       (m) => !(m.sender === this.config.github_username && m.sender_kind === "agent")
     );
-    const notices = this.pendingNotices.splice(0);
+    const notices = [...this.pendingNotices];
     this.runContext.recordInjection(source, { prompt, injected: unread });
     const last = raw[raw.length - 1];
-    if (last) this.cursor.advance(last.seq);
     return {
       messages: unread,
       notices,
       paused: this.pauseMirror.ownPaused,
       work_items: this.state.workItems(),
       me: this.config.github_username,
-      latest_seq: this.state.latestSeq()
+      latest_seq: this.state.latestSeq(),
+      ack_seq: last ? last.seq : this.cursor.value,
+      ack_notices: notices.length
     };
+  }
+
+  /**
+   * Mark an injection as delivered.
+   *
+   * The cursor moves only here, after the caller has the messages in hand.
+   * `notices` is the count the caller received; those are dropped from the
+   * pending list. Both values come from the matching `inject` result.
+   */
+  ackInjection(seq: number, notices = 0): void {
+    this.cursor.advance(seq);
+    if (notices > 0) this.pendingNotices.splice(0, notices);
   }
 
   status(): WorkspaceStatus {

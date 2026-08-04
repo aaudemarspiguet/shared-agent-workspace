@@ -70,7 +70,13 @@ describe("reconnect ordering (Scenario 5)", () => {
       expect(seqs[i + 1]).toBeGreaterThan(seqs[i]);
     }
 
-    // The cursor advanced and persisted. A second inject has nothing new.
+    // Delivery is two-phase. Until the hook acknowledges, the same messages
+    // come back, so a hook that dies cannot lose them.
+    const repeat = bob2.inject("prompt-submit");
+    expect(repeat.messages.map((m) => m.seq)).toEqual(seqs);
+
+    // After the acknowledgement the cursor moves and persists.
+    bob2.ackInjection(first.ack_seq, first.ack_notices);
     const second = bob2.inject("prompt-submit");
     expect(second.messages.length).toBe(0);
   });

@@ -12,6 +12,8 @@ interface InjectResponse {
   paused: boolean;
   work_items: WorkItemView[];
   me: string;
+  ack_seq: number;
+  ack_notices: number;
 }
 
 function renderMessage(m: StoredMessage): string {
@@ -76,14 +78,23 @@ export async function runInjectHook(event: "session-start" | "prompt-submit"): P
 
   const isSessionStart = event === "session-start";
   const hasNews = data.messages.length > 0 || data.notices.length > 0 || data.paused;
-  if (!isSessionStart && !hasNews) return;
+  const context = isSessionStart || hasNews ? renderContext(event, data) : "";
 
-  const context = renderContext(event, data);
-  if (!context) return;
-  emit({
-    hookSpecificOutput: {
-      hookEventName: isSessionStart ? "SessionStart" : "UserPromptSubmit",
-      additionalContext: context
-    }
+  if (context) {
+    emit({
+      hookSpecificOutput: {
+        hookEventName: isSessionStart ? "SessionStart" : "UserPromptSubmit",
+        additionalContext: context
+      }
+    });
+  }
+
+  // Acknowledge only after the output is written. If this process dies before
+  // this point, the daemon keeps the cursor where it was and the same
+  // messages arrive again on the next turn. Nothing is marked read that the
+  // agent never saw.
+  await daemonRequest("/api/inject/ack", {
+    method: "POST",
+    body: { seq: data.ack_seq, notices: data.ack_notices }
   });
 }

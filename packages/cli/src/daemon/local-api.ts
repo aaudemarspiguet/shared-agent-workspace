@@ -116,6 +116,19 @@ export async function handleApiRequest(
       return true;
     }
 
+    // The second half of the two-phase injection. The cursor moves only when
+    // the hook reports that it delivered the messages.
+    if (req.method === "POST" && path === "/api/inject/ack") {
+      const body = (await readJsonBody(req)) as { seq?: number; notices?: number };
+      if (typeof body.seq !== "number" || !Number.isFinite(body.seq)) {
+        respond(res, 400, errorBody("invalid_input", "seq must be a number"));
+        return true;
+      }
+      daemon.ackInjection(body.seq, body.notices ?? 0);
+      respond(res, 200, { ok: true, cursor: daemon.cursor.value });
+      return true;
+    }
+
     if (req.method === "GET" && path === "/api/pause") {
       respond(res, 200, { paused: daemon.pauseMirror.ownPaused });
       return true;

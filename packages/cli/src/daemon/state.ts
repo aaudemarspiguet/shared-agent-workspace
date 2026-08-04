@@ -137,6 +137,28 @@ export class RoomState {
 
   // ---- Claim notices ----
 
+  /**
+   * Apply the relay's claim verdict to the mirror.
+   *
+   * The relay decides who holds a work item. This mirror guesses from the
+   * message stream, and the guess is wrong when a claim loses a race: the
+   * local `intent` already set `claimed_by` to this member. A later `intent`
+   * from the winner cannot correct it, because the item is no longer `open`.
+   * The verdict therefore wins, whether it granted the claim or refused it.
+   */
+  applyClaimResult(frame: ClaimResultFrame): void {
+    const item = this.items.get(frame.work_item) ?? {
+      feature_tag: frame.work_item,
+      state: "open" as const
+    };
+    // Only the owner can be wrong here. The frame carries no state, and the
+    // message stream already moved the item to handed_off or done where that
+    // applies, so those states must stand.
+    item.claimed_by = frame.claimed_by;
+    if (item.state === "open") item.state = "claimed";
+    this.items.set(frame.work_item, item);
+  }
+
   addClaimNotice(frame: ClaimResultFrame): void {
     this.notices.push({
       work_item: frame.work_item,
