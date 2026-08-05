@@ -20,13 +20,13 @@ issue as unowned.
 
 Issue numbers match task IDs for T001–T053 only. After that they diverge:
 **T054 is #56**, **T055 is #57**, **T056 is #60**, **T057 is #61**,
-**T060 is #65**. T058 and T059 have no issue: they landed in the same pull
-request that added them.
+**T060 is #65**, **T061–T067 are #67–#73**, and **T070–T073 are #74–#77**.
+T058 and T059 have no issue: they landed in the pull request that added them.
 
 | Owner | Tasks | Scope |
 |-------|-------|-------|
-| @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045, T049, T052, T054, T058–T059 | Repo setup, `packages/shared`, `packages/relay` |
-| @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046, T055–T057 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
+| @aaudemarspiguet | T001–T003, T005–T014, T022–T024, T032–T033, T041, T045, T049, T052, T054, T058–T059, T070–T073 | Repo setup, `packages/shared`, `packages/relay` |
+| @shreyk2 | T004, T015–T021, T025–T030, T034–T040, T042–T043, T046, T055–T057, T061–T067 | `packages/cli` (daemon, MCP, hooks, web). T004 moved here: it creates the `packages/cli` scaffold, which only the cli owner may write. Reassign issue #4. |
 | joint (pair or split at the time) | T031, T038, T044, T047, T048, T050, T051, T053, T060 | Integration tests + polish that genuinely spans both packages |
 
 **Rule for `/speckit-implement` runs**: execute only the invoking member's
@@ -65,7 +65,7 @@ Monorepo per plan.md: `packages/shared/`, `packages/relay/`,
 - [X] T001 Create monorepo root: `package.json` (npm workspaces), `tsconfig.base.json`, `vitest.workspace.ts`, `.gitignore` (include `.saw/credential`)
 - [X] T002 [P] Initialize `packages/shared/` package: `package.json`, `tsconfig.json`, empty `src/index.ts`
 - [X] T003 [P] Initialize `packages/relay/` package: `package.json` (deps: `ws`, `better-sqlite3`), `tsconfig.json`, `src/index.ts`
-- [ ] T004 [P] Initialize `packages/cli/` package: `package.json` (bin `saw`, deps: `commander`, `ws`, `@modelcontextprotocol/sdk`), `tsconfig.json`, `src/index.ts`
+- [X] T004 [P] Initialize `packages/cli/` package: `package.json` (bin `saw`, deps: `commander`, `ws`, `@modelcontextprotocol/sdk`), `tsconfig.json`, `src/index.ts`
 - [X] T005 [P] Configure ESLint + Prettier at root: `eslint.config.js`, `.prettierrc`
 
 ---
@@ -86,13 +86,13 @@ skeleton. No user story works without these.
 - [X] T012 WebSocket server + `hello` auth (token hash check; sender identity bound to connection, never client-claimed) in `packages/relay/src/server.ts`
 - [X] T013 Relay boundary enforcement (validate every frame with shared schemas; write BoundaryRejection without echoing payload; send `post_rejected`/`error`) in `packages/relay/src/boundary.ts`
 - [X] T014 Workspace registration, invite mint, and join redemption (single-use nonce, expiry, 2-member cap, bearer token issue + hash storage) in `packages/relay/src/join.ts`
-- [ ] T015 [P] `.saw/` config + credential read/write in `packages/cli/src/config.ts`
-- [ ] T016 [P] STE-written `AGENT.md` template (five tools, five message types, claim/handoff conventions, own-branch rule, messages-and-refs-only rule, missing-ref handling: when a received ref is not on the remote, post a `status` message that reports "ref not found" instead of failing silently) in `packages/cli/src/templates/agent-md.ts`
-- [ ] T017 `saw init` + `saw invite` commands in `packages/cli/src/commands/init.ts` (git repo precondition, writes `.saw/config.json`, `.saw/credential`, `.saw/AGENT.md`, appends `.gitignore`) per contracts/cli.md
-- [ ] T018 `saw join` command in `packages/cli/src/commands/join.ts` (remote-URL match check, invite redemption, same three files written, STE failure messages)
-- [ ] T019 Daemon relay client with reconnect/backoff + `sync` replay handling in `packages/cli/src/daemon/client.ts`
-- [ ] T020 Daemon localhost HTTP API for hooks + in-memory state cache (pause, cursor, presence) in `packages/cli/src/daemon/local-api.ts`
-- [ ] T021 `saw up` command skeleton in `packages/cli/src/commands/up.ts`: start daemon, connect relay, register MCP server (`claude mcp add saw -- saw mcp`), install hook entries in `.claude/settings.json`, print status
+- [X] T015 [P] `.saw/` config + credential read/write in `packages/cli/src/config.ts`
+- [X] T016 [P] STE-written `AGENT.md` template (five tools, five message types, claim/handoff conventions, own-branch rule, messages-and-refs-only rule, missing-ref handling: when a received ref is not on the remote, post a `status` message that reports "ref not found" instead of failing silently) in `packages/cli/src/templates/agent-md.ts`
+- [X] T017 `saw init` + `saw invite` commands in `packages/cli/src/commands/init.ts` (git repo precondition, writes `.saw/config.json`, `.saw/credential`, `.saw/AGENT.md`, appends `.gitignore`) per contracts/cli.md
+- [X] T018 `saw join` command in `packages/cli/src/commands/join.ts` (remote-URL match check, invite redemption, same three files written, STE failure messages)
+- [X] T019 Daemon relay client with reconnect/backoff + `sync` replay handling in `packages/cli/src/daemon/client.ts`
+- [X] T020 Daemon localhost HTTP API for hooks + in-memory state cache (pause, cursor, presence) in `packages/cli/src/daemon/local-api.ts`
+- [X] T021 `saw up` command skeleton in `packages/cli/src/commands/up.ts`: start daemon, connect relay, register MCP server (`claude mcp add saw -- saw mcp`), install hook entries in `.claude/settings.json`, print status
 
 **Checkpoint**: Two members can init/join a workspace and both daemons hold
 authenticated relay connections. User story phases can start.
@@ -113,13 +113,13 @@ duplicate claim rejected visibly.
 - [X] T022 [US1] Relay message flow: accept `post`, assign seq, persist, broadcast `message` frames in order in `packages/relay/src/messages.ts`
 - [X] T023 [US1] Claim resolution in seq order (first wins; `claim_result` broadcast to both members; WorkItem state transitions from data-model.md) in `packages/relay/src/claims.ts`
 - [X] T024 [US1] `sync` request handling: replay missed messages ≥ since_seq in order in `packages/relay/src/sync.ts`
-- [ ] T025 [P] [US1] MCP stdio server scaffold (`saw mcp` entry) in `packages/cli/src/mcp/server.ts`
-- [ ] T026 [US1] `room_read` + `room_post` tools (schemas + error shape from contracts/mcp-tools.md) in `packages/cli/src/mcp/tools/room.ts`
-- [ ] T027 [US1] `workspace_status` tool in `packages/cli/src/mcp/tools/status.ts`
-- [ ] T028 [US1] ReadCursor tracking (last_injected_seq, unread computation) in `packages/cli/src/daemon/cursor.ts`
-- [ ] T029 [US1] `SessionStart` + `UserPromptSubmit` hook entries: inject unread messages + claim/pause state as additionalContext, advance cursor, no-op cleanly when daemon is down in `packages/cli/src/hooks/inject.ts`
-- [ ] T030 [US1] Read-only web room view: daemon web server in `packages/cli/src/web/server.ts` + `packages/cli/src/web/static/index.html`, `app.js`, `style.css` (live message list over daemon WebSocket)
-- [ ] T031 [US1] Integration test in `tests/integration/room.test.ts`: two simulated members — intent/claim/handoff with ref; duplicate claim rejected with visible notice; smuggling body rejected and logged (SC-002, SC-005)
+- [X] T025 [P] [US1] MCP stdio server scaffold (`saw mcp` entry) in `packages/cli/src/mcp/server.ts`
+- [X] T026 [US1] `room_read` + `room_post` tools (schemas + error shape from contracts/mcp-tools.md) in `packages/cli/src/mcp/tools/room.ts`
+- [X] T027 [US1] `workspace_status` tool in `packages/cli/src/mcp/tools/status.ts`
+- [X] T028 [US1] ReadCursor tracking (last_injected_seq, unread computation) in `packages/cli/src/daemon/cursor.ts`
+- [X] T029 [US1] `SessionStart` + `UserPromptSubmit` hook entries: inject unread messages + claim/pause state as additionalContext, advance cursor, no-op cleanly when daemon is down in `packages/cli/src/hooks/inject.ts`
+- [X] T030 [US1] Read-only web room view: daemon web server in `packages/cli/src/web/server.ts` + `packages/cli/src/web/static/index.html`, `app.js`, `style.css` (live message list over daemon WebSocket)
+- [X] T031 [US1] Integration test in `tests/integration/room.test.ts`: two simulated members — intent/claim/handoff with ref; duplicate claim rejected with visible notice; smuggling body rejected and logged (SC-002, SC-005)
 
 **Checkpoint**: MVP — two agents coordinate through the room; humans can
 read everything.
@@ -139,11 +139,11 @@ order on resume; forged pause for the peer is rejected.
 
 - [X] T032 [US2] Relay pause handling: `pause_set` (own member only), PauseState persistence, hold undelivered messages for paused members in `packages/relay/src/pause.ts`
 - [X] T033 [P] [US2] Relay presence tracking (ping/pong liveness, `presence` broadcasts) in `packages/relay/src/presence.ts`
-- [ ] T034 [US2] Daemon pause mirror + ordered queued delivery on resume in `packages/cli/src/daemon/pause.ts`
-- [ ] T035 [US2] `PreToolUse` hook: deny with STE reason while paused, silent pass otherwise, matcher `*` in `packages/cli/src/hooks/pre-tool.ts`
-- [ ] T036 [US2] Web human message box: post as `sender_kind:"human"` with optional target member (redirect) via daemon local API, in `packages/cli/src/web/static/app.js` + endpoint in `packages/cli/src/web/server.ts`
-- [ ] T037 [US2] Web pause control (own member only) + presence indicators for both members in `packages/cli/src/web/static/app.js`
-- [ ] T038 [US2] Integration test in `tests/integration/steering.test.ts`: redirect reaches the target daemon <5 s and injects at next turn boundary, pause blocks, resume replays queue in seq order, relay rejects `pause_set` naming the peer (FR-013/014, SC-006)
+- [X] T034 [US2] Daemon pause mirror + ordered queued delivery on resume in `packages/cli/src/daemon/pause.ts`
+- [X] T035 [US2] `PreToolUse` hook: deny with STE reason while paused, silent pass otherwise, matcher `*` in `packages/cli/src/hooks/pre-tool.ts`
+- [X] T036 [US2] Web human message box: post as `sender_kind:"human"` with optional target member (redirect) via daemon local API, in `packages/cli/src/web/static/app.js` + endpoint in `packages/cli/src/web/server.ts`
+- [X] T037 [US2] Web pause control (own member only) + presence indicators for both members in `packages/cli/src/web/static/app.js`
+- [X] T038 [US2] Integration test in `tests/integration/steering.test.ts`: redirect reaches the target daemon <5 s and injects at next turn boundary, pause blocks, resume replays queue in seq order, relay rejects `pause_set` naming the peer (FR-013/014, SC-006)
 
 **Checkpoint**: Room + human steering both work independently.
 
@@ -160,12 +160,12 @@ by feature tag.
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] `Stop` hook run-summary composer: tool counts from transcript, branch name + head SHA + changed-file count from git (counts and git refs only — no file paths), always exit 0, in `packages/cli/src/hooks/stop.ts`
-- [ ] T040 [US3] Daemon run context: record `why_trigger` at prompt-submit/injection, attach active claimed work item (or `unassigned`) in `packages/cli/src/daemon/run-context.ts`
+- [X] T039 [US3] `Stop` hook run-summary composer: tool counts from transcript, branch name + head SHA + changed-file count from git (counts and git refs only — no file paths), always exit 0, in `packages/cli/src/hooks/stop.ts`
+- [X] T040 [US3] Daemon run context: record `why_trigger` at prompt-submit/injection, attach active claimed work item (or `unassigned`) in `packages/cli/src/daemon/run-context.ts`
 - [X] T041 [US3] Relay `log_append` + `log_query` (filters: member, work_item, since, limit) in `packages/relay/src/log.ts`
-- [ ] T042 [US3] `work_log` MCP tool in `packages/cli/src/mcp/tools/work-log.ts`
-- [ ] T043 [US3] Web log browser with feature-tag filter in `packages/cli/src/web/static/app.js` + daemon endpoint in `packages/cli/src/web/server.ts`
-- [ ] T044 [US3] Integration test in `tests/integration/log.test.ts`: a simulated run produces a complete entry automatically; boundary rejections appear in the log; filter by feature works (SC-003)
+- [X] T042 [US3] `work_log` MCP tool in `packages/cli/src/mcp/tools/work-log.ts`
+- [X] T043 [US3] Web log browser with feature-tag filter in `packages/cli/src/web/static/app.js` + daemon endpoint in `packages/cli/src/web/server.ts`
+- [X] T044 [US3] Integration test in `tests/integration/log.test.ts`: a simulated run produces a complete entry automatically; boundary rejections appear in the log; filter by feature works (SC-003)
 
 **Checkpoint**: All activity is recorded with what/when/why/feature.
 
@@ -183,8 +183,8 @@ recorded activity".
 ### Implementation for User Story 4
 
 - [X] T045 [US4] Relay peer-activity query (runs + peer messages in window, `peer_online` flag, independent of peer connection) extending `packages/relay/src/log.ts`
-- [ ] T046 [US4] `peer_activity` MCP tool (requires `since`; returns empty arrays + honesty note when no activity) in `packages/cli/src/mcp/tools/peer-activity.ts`
-- [ ] T047 [US4] Integration test in `tests/integration/peer-activity.test.ts`: peer disconnected, query answered from store; empty-window case (SC-004, FR-019)
+- [X] T046 [US4] `peer_activity` MCP tool (requires `since`; returns empty arrays + honesty note when no activity) in `packages/cli/src/mcp/tools/peer-activity.ts`
+- [X] T047 [US4] Integration test in `tests/integration/peer-activity.test.ts`: peer disconnected, query answered from store; empty-window case (SC-004, FR-019)
 
 **Checkpoint**: All four user stories independently functional.
 
@@ -226,6 +226,25 @@ same pull request that added these lines.
 
 - [X] T058 Handle `error` on relay sockets and on the WebSocket server in `packages/relay/src/server.ts`. An unhandled `error` event ends the relay process, so one member's broken connection stops the other member from working. Includes the shutdown ordering that surfaced with it: drop live sockets before the store closes, so a closing socket cannot query a closed database (FR-013)
 - [X] T059 Return the workspace `repo_remote` from `POST /join` in `packages/relay/src/join.ts`. `contracts/cli.md` makes a matching remote a precondition of `saw join`, but the joiner had no way to learn what to match against (Principle VI)
+
+### Added after the review of PR #54 and PR #63
+
+Found by reviewing the built system, not by a gate. The first group is
+`packages/cli` (@shreyk2, issues #67–#73). The second group is the boundary
+and the artifacts that describe it (@aaudemarspiguet, issues #74–#77).
+
+- [ ] T061 Make the relay the only source of the post verdict in `packages/cli/src/daemon/local-api.ts`: the `/api/post` route calls `daemon.post()` even when the local `validatePost` fails, so a payload the relay accepts still reaches the peer, the local room cache, and the web page while the caller is told 422 rejected; answer from the local check alone and never send, and cover the split verdict with a test (FR-006, FR-006a, Principle II — review of PR #54)
+- [ ] T062 [US3] Key the run context by Claude Code session id: `packages/cli/src/daemon/run-context.ts` keeps one daemon-global `startedAt`/`whyTrigger` pair and `packages/cli/src/hooks/stop.ts` drops the session id that contracts/hooks-adapter.md §4 says it reads, so with two sessions in one repo the first Stop consumes the trigger and the second logs "run with no recorded trigger" with a wrong `started_at`; thread `session_id` through `packages/cli/src/hooks/inject.ts`, `/api/inject` and `/api/run/stop` in `packages/cli/src/daemon/local-api.ts`, and expire idle contexts (FR-015, FR-016, SC-003, Principle IV — review of PR #54)
+- [ ] T063 Stop the daemon reporting itself alive when it is not, in `packages/cli/src/daemon/client.ts` and `packages/cli/src/config.ts`: settle pending post/append/query promises on an `error` frame instead of stalling the caller for the full 10 s `REQUEST_TIMEOUT_MS`; make `auth_failed` loud — wire `onServerError` in `packages/cli/src/daemon/daemon.ts`, report it through `/api/health` and `saw up`, and stop `packages/cli/src/commands/up.ts` printing "retrying in the background" when nothing will retry; and check the recorded pid is alive in `readDaemonInfo` so a stale `.saw/daemon.json` cannot point hooks and MCP tools at whatever process now owns the port (FR-012, FR-013, SC-006, SC-007 — review of PR #54)
+- [ ] T064 Validate query parameters and report the true failure in `packages/cli/src/daemon/local-api.ts`: `Number()` on a non-numeric `limit` or `since_seq` yields NaN and returns an empty list instead of 400, and every `/api/log` and `/api/peer-activity` failure is reported as `not_connected`, which hides timeouts and relay errors from `work_log` and `peer_activity`; reject bad numbers with `invalid_input` and map the real error code through (contracts/mcp-tools.md error shape — review of PR #54)
+- [ ] T065 Write the hook entries into the git-ignored `.claude/settings.local.json` instead of the tracked `.claude/settings.json` in `packages/cli/src/hooks/install.ts`, so one member's `saw up` does not produce a diff that pushes hook config at the other; amend `specs/001-saw-shared-workspace/contracts/hooks-adapter.md` (the contract names `settings.json` in two places), keep the ignore lines in `packages/cli/src/config.ts` consistent, and update `packages/cli/tests/install.test.ts` (Principle II rationale, FR-009/FR-010 intent — review of PR #54)
+- [ ] T066 Filter the room by work item: a selector in `packages/cli/src/web/static/app.js` + `index.html` over the existing snapshot, an optional `work_item` query parameter on `/api/messages` in `packages/cli/src/daemon/local-api.ts`, and an optional `work_item` input on `room_read` in `packages/cli/src/mcp/tools/room.ts`; `work_item` is already carried on `MessagePostSchema` and `StoredMessage`, so frozen `packages/shared` does not change (FR-016 feature filtering, FR-011a — product direction: a work item you can watch and talk to)
+- [ ] T067 Teach the agent to raise a conflicting steer with its own human instead of complying silently or ignoring it: add a "when a message conflicts with your plan" section to `packages/cli/src/templates/agent-md.ts` and one framing line on the prompt-submit path in `packages/cli/src/hooks/inject.ts` (which today injects the message list with no preamble), and update `packages/cli/tests/agent-md.test.ts` (Principle III human accountability, FR-012 — product direction: stakeholders steer through the other member's agent)
+
+- [ ] T070 [P] Content-check every free-text field that still crosses the boundary unchecked: the keys of `what.tools_used` and `work_item` on a log entry in `validateLogEntry`, `work_item` and `target` on a post in `validatePost`, and set a `maxPayload` on the relay WebSocket server; write a BoundaryRejection for each removal and add adversarial cases to `packages/shared/tests/boundary.test.ts`. T054 closed `why_trigger` only, so the SC-005 "100%" claim and the plan.md Constitution Check row II do not hold until this lands or the claim is qualified (FR-008, SC-005, Principle II — review of PR #63)
+- [ ] T071 Sync the boundary artifacts to scrub-don't-refuse semantics: `spec.md` FR-008 (line 212) and SC-005 (line 318) still say "reject", and `data-model.md` §Boundary rules (line 169) still describes reject-only, `body`-only validation "applied identically at daemon (outbound) and relay (inbound)", which makes the "rules mirrored in data-model.md" line in `contracts/relay-protocol.md` (line 65) false after T054 (FR-008, SC-005, Principle II — review of PR #63)
+- [ ] T072 [P] Correct the `log_ok` row of the Relay → client frame table in `specs/001-saw-shared-workspace/contracts/relay-protocol.md` (line 46): the payload is `{ id, redacted? }`, and each `redacted` entry carries `field`, `reason`, and `summary`, not `{ id }` as the table says and not field-and-reason as the prose below says (review of PR #63)
+- [ ] T073 [US3] Keep the run when a `log_append` fails the schema: `validateLogEntry` runs only after `ClientFrameSchema` parse (`packages/relay/src/boundary.ts:32-52`), so an over-limit `why_trigger` (1000 chars) or `work_item` (100 chars) refuses the whole entry — `post_rejected` is sent and a BoundaryRejection is logged, but the run is never stored, against the FR-015 reasoning that T054 wrote into the code and the contract; salvage or truncate the entry, report `payload_too_large` instead of `not_json`, and cover it in `packages/relay/tests/relay.test.ts` and `packages/shared/tests/boundary.test.ts` (FR-015, SC-003, Principle IV — review of PR #63)
 
 ---
 
@@ -313,7 +332,7 @@ quickstart scenarios.
 
 ## Notes
 
-- Total: 60 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 13)
+- Total: 71 tasks (Setup 5, Foundational 16, US1 10, US2 7, US3 6, US4 3, Polish 24)
 - The constitution's boundary gate is enforced twice: schema tests (T010) and relay enforcement (T013), both before any story ships. T054 closes the gap both left: they check `post` frames only, so `log_append` crosses the boundary unchecked
-- The Constitution Check in plan.md records the honest post-implementation state. Row II is back to PASS now that T054 has landed. Row IV still FAILs and row III is still PARTIAL; they clear when T055 and T057 land
+- The Constitution Check in plan.md records the honest post-implementation state. Row II returned to PASS when T054 landed, but T070 shows free text still crosses unchecked, so re-check row II when T070 lands. Row IV stays FAIL until T055 and T073 land; row III stays PARTIAL until T057 lands
 - Commit after each task or logical group; keep relay changes verifiable against a self-hosted run (Principle VII)

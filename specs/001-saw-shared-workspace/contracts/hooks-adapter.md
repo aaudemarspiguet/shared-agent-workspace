@@ -22,7 +22,8 @@ Output (stdout JSON, `hookSpecificOutput.additionalContext`):
   compactly with sender, type, body, refs.
 - Current claim state and own pause state.
 
-Side effect: daemon advances the ReadCursor to the last injected seq.
+Side effect: the daemon advances the ReadCursor, but only after the hook
+acknowledges delivery (see Injection is two-phase, below).
 
 ## 2. UserPromptSubmit → `saw hook prompt-submit`
 
@@ -30,10 +31,28 @@ Purpose: inject messages that arrived since the last injection, at the
 next turn boundary. (Chosen over PostToolUse — research.md §3.)
 
 Output: `additionalContext` with unread messages only; empty output when
-nothing is unread. Side effect: advances ReadCursor.
+nothing is unread. Side effect: advances the ReadCursor after the
+acknowledgement (see Injection is two-phase, below).
 
 Also: the daemon records the submitted prompt as the candidate
 `why_trigger` for this run (data-model.md §RunLogEntry).
+
+## Injection is two-phase
+
+The two injection hooks fetch and then acknowledge. The daemon moves the
+ReadCursor only on the acknowledgement.
+
+1. The hook asks the daemon for unread messages. The daemon answers with the
+   messages and an `ack_seq`. The cursor does not move.
+2. The hook writes its `additionalContext` to stdout.
+3. The hook sends `ack_seq` back to the daemon. The daemon moves the cursor.
+
+A hook that stops between step 1 and step 3 loses nothing. The same messages
+arrive at the next turn boundary. Delivery is at least once.
+
+The first design moved the cursor in step 1. A hook that was killed, or whose
+stdout was dropped, marked those messages read and no agent ever saw them.
+Duplicate context is cheap. A lost message is not (FR-011, SC-007).
 
 ## 3. PreToolUse → `saw hook pre-tool`
 

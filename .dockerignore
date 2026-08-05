@@ -1,0 +1,6 @@
+# Keep these paths out of the Docker build context.
+node_modules
+.git
+*.db*
+coverage
+dist

@@ -1,0 +1,16 @@
+{
+  "name": "@saw/integration-tests",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Two-member end-to-end scenarios against a real relay.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@saw/cli": "*",
+    "@saw/relay": "*",
+    "@saw/shared": "*",
+    "ws": "^8.18.0"
+  }
+}

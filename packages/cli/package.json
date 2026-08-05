@@ -1,0 +1,30 @@
+{
+  "name": "@saw/cli",
+  "version": "0.1.0",
+  "description": "The saw command. It runs the daemon, the MCP server, the hooks adapter, and the web page.",
+  "type": "module",
+  "bin": {
+    "saw": "./bin/saw.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@saw/shared": "*",
+    "commander": "^15.0.0",
+    "tsx": "^4.0.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0"
+  }
+}

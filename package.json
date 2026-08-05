@@ -5,7 +5,8 @@
   "description": "SAW is a coordination layer for two developers who each use a coding agent.",
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "tests/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
