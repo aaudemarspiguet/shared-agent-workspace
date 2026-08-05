@@ -122,13 +122,14 @@ artifacts (the `work_log` MCP tool reads it).
 
 ## BoundaryRejection
 
-Logged whenever a payload fails validation (FR-008, SC-005). Stored as a
-RunLogEntry with `source = boundary_rejection` plus:
+Logged whenever the boundary refuses a payload **or removes a field from
+one** (FR-008, SC-005). One entry per removal, not one per frame. Stored as
+a RunLogEntry with `source = boundary_rejection` plus:
 
 | Field | Type | Rules |
 |-------|------|-------|
 | reason | enum | `unknown_type` \| `invalid_ref` \| `payload_too_large` \| `content_smuggling` \| `not_json` |
-| summary | string | Short description; MUST NOT echo the rejected payload body |
+| summary | string | Short description; MUST NOT echo the rejected payload body. For a removal it names the field and what went, by count or kind — never the removed text and never a member-supplied key |
 
 ## PauseState
 
@@ -168,16 +169,65 @@ delivery resumes in `seq` order on unpause (FR-014).
 
 ## Boundary rules (validation summary)
 
-Applied identically at daemon (outbound) and relay (inbound), from shared
-zod schemas:
+The rules live in shared zod schemas and validators, so both packages can
+apply them. The **relay** is the enforcement point: it applies every rule
+below to every inbound frame, and it is the only place that must be trusted
+to. The daemon applies the same message rules outbound as a fast local
+verdict, but it does **not** call `validateLogEntry`; a log entry is checked
+at the relay only. The relay never assumes the sender checked anything.
 
-1. Frame must be valid JSON matching a known frame schema.
-2. Message `type` must be one of the five values; anything else →
-   `unknown_type` rejection.
-3. `refs` must each pass GitRef validation; failures → `invalid_ref`.
-4. `body` ≤4000 chars; larger → `payload_too_large`.
-5. Heuristic smuggling check on `body`: reject fenced code blocks over 20
-   lines, unified-diff headers (`--- a/`, `+++ b/`, `@@`), and
-   base64 runs >512 chars → `content_smuggling`. (Refs are the intended
+Two outcomes, per FR-008:
+
+- **Refuse** — the whole frame is dropped and nothing is stored. Used when
+  the payload has nothing worth keeping.
+- **Scrub** — the offending field is removed or trimmed and the rest of the
+  record is stored. Used for a work log entry, which FR-015 requires to
+  exist for every run.
+
+**Frame level (refuse)**
+
+1. Frame ≤256 KiB. A larger frame is refused at the socket →
+   `payload_too_large`.
+2. Frame must be valid JSON matching a known frame kind → `not_json`.
+
+**Message `post` (refuse)**
+
+3. `type` must be one of the five values → `unknown_type`.
+4. `body` ≤4000 chars; `work_item` and `target` ≤100 chars each →
+   `payload_too_large`.
+5. `refs` must each pass GitRef validation, ≤10 refs → `invalid_ref`.
+6. Smuggling check on `body`, `work_item`, and `target`: fenced code blocks
+   over 20 lines, unified-diff headers (`--- a/`, `+++ b/`, `@@`), and
+   base64 runs over 512 chars → `content_smuggling`. (Refs are the intended
    channel for sharing code locations.)
-6. Every rejection creates a BoundaryRejection entry (SC-005).
+
+**Work log `log_append` (scrub)**
+
+Only `started_at` and `ended_at` are required: without them there is no run
+to keep, so a frame missing either is refused. Every other field is checked
+after the parse and repaired in place. Content is judged before length, so a
+long pasted diff is replaced rather than trimmed into a shorter diff.
+
+| Field | Rule | On failure |
+|-------|------|------------|
+| `why_trigger` | smuggling check | replaced with a fixed placeholder → `content_smuggling` |
+| `why_trigger` | ≤1000 chars | trimmed → `payload_too_large` |
+| `why_trigger` | non-empty | replaced with a fixed placeholder; nothing was removed, so no entry is logged |
+| `work_item` | smuggling check | dropped → `content_smuggling` |
+| `work_item` | ≤100 chars | trimmed → `payload_too_large` |
+| `what.branch` | valid branch name, ≤250 chars | dropped → `invalid_ref` |
+| `what.head` | valid commit SHA, ≤40 chars | dropped → `invalid_ref` |
+| `what.tools_used` keys | ≤100 chars, single line, smuggling check | dropped → `content_smuggling` |
+| `what.tools_used` keys | ≤100 entries | surplus dropped → `payload_too_large` |
+| `what.tools_used` values | non-negative integer | dropped → `not_json` |
+| `what` unknown keys | not carried | dropped → `not_json` |
+
+A `tools_used` key is not safe by construction: it is copied from the tool
+names on the sending member's own machine, and a member controls the names
+of their own MCP tools.
+
+**Both outcomes**
+
+7. Every refusal and every removal creates a BoundaryRejection entry
+   (SC-005). A scrubbed `log_append` also returns the removals to the
+   sender in the `log_ok` `redacted` list, so the member learns what went.

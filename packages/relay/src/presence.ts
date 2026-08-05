@@ -90,6 +90,29 @@ export class ConnectionRegistry {
     });
   }
 
+  /**
+   * Tell one member the current presence of everyone else in the workspace.
+   *
+   * A presence broadcast only reaches sockets that are already open, and
+   * nothing replayed it afterwards, so the member who connected *second*
+   * never learned the first was there and read them as offline for the whole
+   * session. Sent on `hello`, the same way `sync` replays missed messages
+   * (FR-011a, T037, T074).
+   */
+  sendPresenceSnapshot(store: RelayStore, workspaceId: string, memberId: string): void {
+    for (const member of store.members(workspaceId)) {
+      if (member.id === memberId) continue;
+      this.sendTo(memberId, {
+        kind: "presence",
+        member: member.github_username,
+        online: this.isOnline(member.id),
+        // A member who has never connected has no last-seen time of their
+        // own. Joining the workspace is the last thing known about them.
+        last_seen_at: this.lastSeen(member.id) ?? member.joined_at
+      });
+    }
+  }
+
   /** Ping every live socket. Sockets that missed the last pong are closed. */
   pingAll(): void {
     for (const conn of this.byMember.values()) {
