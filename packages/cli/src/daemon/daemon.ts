@@ -222,9 +222,15 @@ export class Daemon {
   }
 
   /** Read messages from the local cache. */
-  messages(sinceSeq = 0, limit = 200): { messages: StoredMessage[]; latest_seq: number } {
+  messages(
+    sinceSeq = 0,
+    limit = 200,
+    workItem?: string
+  ): { messages: StoredMessage[]; latest_seq: number } {
     return {
-      messages: this.state.messages(sinceSeq, limit),
+      messages: this.state.messages(sinceSeq, limit, workItem),
+      // Always the true latest seq of the room. A filter is a view: it must
+      // never change the caller's sense of position.
       latest_seq: this.state.latestSeq()
     };
   }

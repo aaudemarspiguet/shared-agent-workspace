@@ -47,9 +47,17 @@ export class RoomState {
     return true;
   }
 
-  messages(sinceSeq = 0, limit = 200): StoredMessage[] {
+  /**
+   * Messages after a seq, in seq order.
+   *
+   * `workItem` narrows to one work item. It applies before `limit`, so a
+   * bounded read returns that many messages OF THAT ITEM. Filtering after
+   * the limit would answer with only the matches that happened to fall in
+   * the first page, and a busy room would hide the item completely (T066).
+   */
+  messages(sinceSeq = 0, limit = 200, workItem?: string): StoredMessage[] {
     const all = [...this.messagesBySeq.values()]
-      .filter((m) => m.seq > sinceSeq)
+      .filter((m) => m.seq > sinceSeq && (workItem === undefined || m.work_item === workItem))
       .sort((a, b) => a.seq - b.seq);
     return all.slice(0, Math.max(1, limit));
   }

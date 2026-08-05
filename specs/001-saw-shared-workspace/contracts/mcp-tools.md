@@ -23,9 +23,14 @@ Input:
 ```json
 {
   "since_seq": 123,        // optional; default: last injected cursor
-  "limit": 50              // optional; 1–200, default 50
+  "limit": 50,             // optional; 1–200, default 50
+  "work_item": "login-form" // optional; only messages for this feature tag
 }
 ```
+
+`work_item` is a view. It narrows the messages of the page. `latest_seq`
+still reports the latest `seq` of the whole room, and the read cursor does
+not move.
 
 Output:
 

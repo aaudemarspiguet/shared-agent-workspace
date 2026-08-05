@@ -26,6 +26,12 @@
 
   <main>
     <section id="room" class="panel active">
+      <div class="room-controls">
+        <label for="room-filter">Show</label>
+        <select id="room-filter" title="filter the room by work item">
+          <option value="" data-mode="all">all work items</option>
+        </select>
+      </div>
       <div id="feed" class="feed" aria-live="polite"></div>
       <form id="composer">
         <div class="row">
