@@ -89,6 +89,9 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           paused: store.isPaused(member.id)
         });
         registry.broadcastPresence(store, member.workspace_id, member.github_username, true);
+        // The broadcast above only reaches members who are already here. This
+        // is the other direction: what the joiner missed by arriving late.
+        registry.sendPresenceSnapshot(store, member.workspace_id, member.id);
         return;
       }
 

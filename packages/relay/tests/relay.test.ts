@@ -73,6 +73,16 @@ const is =
   (f: ServerFrame): f is Extract<ServerFrame, { kind: K }> =>
     f.kind === kind && (!extra || extra(f as Extract<ServerFrame, { kind: K }>));
 
+/** Wait until no member holds a live socket, so presence starts from empty. */
+async function waitForQuietRelay(): Promise<void> {
+  for (let i = 0; i < 100; i += 1) {
+    const live = relay.store.members(workspaceId).filter((m) => relay.registry.isOnline(m.id));
+    if (live.length === 0) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error("relay still has live connections");
+}
+
 let workspaceId: string;
 let aliceToken: string;
 let bobToken: string;
@@ -202,6 +212,37 @@ describe("relay protocol", () => {
 
     bob.close();
   }, 15000);
+
+  // Found by running two live members against a real relay, not by a gate:
+  // whoever started their stack second read the other as offline for the
+  // whole session, and it never self-corrected. The existing coverage only
+  // asserted that a broadcast fires, which is why it passed (T074).
+  it("gives a member the current presence of the other on join", async () => {
+    await waitForQuietRelay();
+
+    // Alice is first. The snapshot tells her bob is not here.
+    const alice = await connect(workspaceId, aliceToken);
+    const bobOffline = await alice.waitFor(is("presence", (f) => f.member === "bob"));
+    expect(bobOffline.online).toBe(false);
+    expect(bobOffline.last_seen_at).toBeTruthy();
+
+    // Bob is second. Before T074 he never heard about alice at all, because
+    // her broadcast fired before he had a socket to receive it.
+    const bob = await connect(workspaceId, bobToken);
+    const aliceOnline = await bob.waitFor(is("presence", (f) => f.member === "alice"));
+    expect(aliceOnline.online).toBe(true);
+
+    // The direction that already worked still works.
+    const bobOnline = await alice.waitFor(is("presence", (f) => f.member === "bob" && f.online));
+    expect(bobOnline.online).toBe(true);
+
+    // The snapshot does not duplicate what the broadcast already delivers:
+    // bob hears about alice exactly once, from the snapshot.
+    expect(bob.frames.filter((f) => f.kind === "presence" && f.member === "alice")).toHaveLength(1);
+
+    alice.close();
+    bob.close();
+  });
 
   it("refuses a second use of an invite and a third member", async () => {
     const minted = (await http(
