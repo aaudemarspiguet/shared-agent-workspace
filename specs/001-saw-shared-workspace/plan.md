@@ -161,9 +161,13 @@ packages/
 │   │   └── web/             # Localhost UI server + static assets
 │   │       └── static/      # index.html, app.js, style.css (no build step)
 │   └── tests/
-└── tests/
-    └── integration/         # Two-member end-to-end scenarios vs real relay
+tests/
+└── integration/             # Two-member end-to-end scenarios vs real relay
 ```
+
+The integration tests sit at the repository root, not under `packages/`.
+They drive two member daemons against one real relay, so they belong to no
+single package. `tasks.md` §Path Conventions states the same path.
 
 **Structure Decision**: Monorepo with three packages. `shared` holds every
 schema so the relay and the CLI validate with identical rules — the
