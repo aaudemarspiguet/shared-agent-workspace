@@ -4,10 +4,19 @@ import { z } from "zod";
 import type { RejectionReason, StoredMessage } from "./messages.js";
 import {
   LogQuerySchema,
-  RunLogEntryInputSchema,
+  RunLogEntryWireSchema,
   type LogRedaction,
   type StoredLogEntry
 } from "./log.js";
+
+/**
+ * Cap on one WebSocket frame, in bytes.
+ *
+ * Comfortably above the largest legitimate frame — a 4000-char post body with
+ * ten refs, or a log entry with a hundred tool names — and far below the `ws`
+ * default of 100 MiB. A frame that size is not a message (Principle II).
+ */
+export const MAX_FRAME_BYTES = 256 * 1024;
 
 // ---- Client to relay ----
 
@@ -33,7 +42,10 @@ export const SyncFrameSchema = z.object({
 
 export const LogAppendFrameSchema = z.object({
   kind: z.literal("log_append"),
-  entry: RunLogEntryInputSchema
+  // The entry parses leniently here. validateLogEntry applies the field rules
+  // at the boundary, so an over-limit field is trimmed rather than costing
+  // the whole run (FR-015, T073).
+  entry: RunLogEntryWireSchema
 });
 
 export const LogQueryFrameSchema = z.object({

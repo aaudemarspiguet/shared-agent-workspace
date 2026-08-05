@@ -100,8 +100,12 @@ Behavior:
 
 - Not paused → exit 0, no output (tool call proceeds untouched).
 
-Matcher: `*` (all tools) — pause means the agent takes no further
-coordinated actions of any kind.
+Matcher: `*` (all tools) — pause means the agent makes no further tool call
+of any kind, not only no further SAW tool call, and the denial continues for
+the rest of a run already in progress (Constitution III, FR-014, SC-006).
+The hook cannot interrupt a tool call that is already executing; that would
+need lifecycle control of the coding tool, against Principles I and V. So
+one call in progress may complete, and every call after it is denied.
 
 ## 4. Stop → `saw hook stop`
 

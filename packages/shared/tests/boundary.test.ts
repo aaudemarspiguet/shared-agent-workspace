@@ -3,7 +3,10 @@
 import { describe, expect, it } from "vitest";
 import {
   ClientFrameSchema,
+  MAX_TOOLS_USED_KEYS,
+  MAX_WHY_TRIGGER_LENGTH,
   MESSAGE_TYPES,
+  MISSING_WHY_TRIGGER,
   REDACTED_WHY_TRIGGER,
   validateLogEntry,
   validatePost
@@ -99,6 +102,32 @@ describe("boundary: rejected payloads", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.summary).not.toContain("SECRETCODE");
+    }
+  });
+
+  // body is not the only free text on a post. work_item and target cross to
+  // the peer the same way and were unchecked until T070.
+  it("rejects diff markers in work_item and in target", () => {
+    for (const field of ["work_item", "target"] as const) {
+      const result = validatePost({
+        type: "status",
+        body: "on it",
+        [field]: "--- a/src/x.ts"
+      });
+      expect(result, `${field} must be checked`).toMatchObject({
+        ok: false,
+        reason: "content_smuggling"
+      });
+    }
+  });
+
+  it("reports an over-long work_item or target as too large, not as bad shape", () => {
+    for (const field of ["work_item", "target"] as const) {
+      const result = validatePost({ type: "status", body: "on it", [field]: "x".repeat(101) });
+      expect(result, `${field} must be too large`).toMatchObject({
+        ok: false,
+        reason: "payload_too_large"
+      });
     }
   });
 });
@@ -202,5 +231,174 @@ describe("boundary: log entries", () => {
     expect(result.entry.ended_at).toBe(base.ended_at);
     expect(result.entry.work_item).toBe("login-form");
     expect(result.entry.what.tools_used).toEqual({ Edit: 2 });
+  });
+});
+
+// The keys of what.tools_used are member-controlled free text: the CLI copies
+// them from the tool names on the sending machine, and a member controls the
+// names of their own MCP tools. So are work_item and the unknown keys of
+// what. None of them was checked until T070.
+describe("boundary: the rest of a log entry (T070)", () => {
+  const base = {
+    started_at: "2026-08-01T10:00:00.000Z",
+    ended_at: "2026-08-01T10:05:00.000Z",
+    why_trigger: "Build the login form"
+  };
+
+  it("drops a source file smuggled in as a tool name", () => {
+    const source = "export function secret() {\n  return 1;\n}\n".repeat(150);
+    const result = validateLogEntry({
+      ...base,
+      what: { tools_used: { Edit: 1, [source]: 1 } }
+    });
+    expect(Object.keys(result.entry.what.tools_used)).toEqual(["Edit"]);
+    expect(result.redactions).toMatchObject([
+      { field: "what.tools_used", reason: "content_smuggling" }
+    ]);
+    expect(result.redactions[0]?.summary).not.toContain("secret");
+  });
+
+  it("drops a diff smuggled in as a tool name", () => {
+    const result = validateLogEntry({
+      ...base,
+      what: { tools_used: { "--- a/src/x.ts": 1 } }
+    });
+    expect(result.entry.what.tools_used).toEqual({});
+    expect(result.redactions[0]?.reason).toBe("content_smuggling");
+  });
+
+  it("drops a multi-line tool name", () => {
+    const result = validateLogEntry({
+      ...base,
+      what: { tools_used: { "Edit\nconst secret = 1;": 1 } }
+    });
+    expect(result.entry.what.tools_used).toEqual({});
+  });
+
+  it("caps the number of tool names", () => {
+    const tools: Record<string, number> = {};
+    for (let i = 0; i < 5000; i += 1) tools[`Tool${i}`] = 1;
+    const result = validateLogEntry({ ...base, what: { tools_used: tools } });
+    expect(Object.keys(result.entry.what.tools_used)).toHaveLength(MAX_TOOLS_USED_KEYS);
+    expect(result.redactions).toMatchObject([
+      { field: "what.tools_used", reason: "payload_too_large" }
+    ]);
+  });
+
+  it("drops a tool count that is not a count", () => {
+    const result = validateLogEntry({
+      ...base,
+      what: { tools_used: { Edit: 1, Bash: "rm -rf /home/bob" } }
+    });
+    expect(result.entry.what.tools_used).toEqual({ Edit: 1 });
+    expect(result.redactions).toMatchObject([{ field: "what.tools_used", reason: "not_json" }]);
+  });
+
+  it("drops diff markers in work_item", () => {
+    const result = validateLogEntry({
+      ...base,
+      what: { tools_used: {} },
+      work_item: "--- a/src/x.ts"
+    });
+    expect(result.entry.work_item).toBeUndefined();
+    expect(result.redactions).toMatchObject([
+      { field: "work_item", reason: "content_smuggling" }
+    ]);
+  });
+
+  it("drops an unknown key inside what, and never names it", () => {
+    const result = validateLogEntry({
+      ...base,
+      what: { tools_used: {}, payload: "SECRETCODE" } as never
+    });
+    expect(result.entry.what).toEqual({ tools_used: {} });
+    expect(result.redactions).toMatchObject([{ field: "what", reason: "not_json" }]);
+    expect(result.redactions[0]?.summary).not.toContain("payload");
+    expect(result.redactions[0]?.summary).not.toContain("SECRETCODE");
+  });
+});
+
+// Before T073 each of these failed the frame schema, so the relay refused the
+// frame and the run was never stored — the opposite of the FR-015 reasoning
+// that T054 wrote into the code and the contract.
+describe("boundary: an over-limit field keeps its run (T073)", () => {
+  const base = {
+    started_at: "2026-08-01T10:00:00.000Z",
+    ended_at: "2026-08-01T10:05:00.000Z",
+    what: { tools_used: { Edit: 2 } }
+  };
+
+  it("trims a why_trigger over the cap instead of losing the run", () => {
+    const why = "why ".repeat(400); // 1600 chars, clean
+    const result = validateLogEntry({ ...base, why_trigger: why });
+    expect(result.entry.why_trigger).toHaveLength(MAX_WHY_TRIGGER_LENGTH);
+    expect(result.entry.started_at).toBe(base.started_at);
+    expect(result.redactions).toMatchObject([
+      { field: "why_trigger", reason: "payload_too_large" }
+    ]);
+  });
+
+  it("trims a work_item over the cap instead of losing the run", () => {
+    const result = validateLogEntry({ ...base, why_trigger: "ok", work_item: "w".repeat(150) });
+    expect(result.entry.work_item).toHaveLength(100);
+    expect(result.redactions).toMatchObject([
+      { field: "work_item", reason: "payload_too_large" }
+    ]);
+  });
+
+  it("drops an over-long branch and head instead of losing the run", () => {
+    const result = validateLogEntry({
+      ...base,
+      why_trigger: "ok",
+      what: { tools_used: {}, branch: "b".repeat(300), head: "a".repeat(64) }
+    });
+    expect(result.entry.what.branch).toBeUndefined();
+    expect(result.entry.what.head).toBeUndefined();
+    expect(result.redactions.map((r) => r.field)).toEqual(["what.branch", "what.head"]);
+  });
+
+  it("fills an empty why_trigger rather than refusing the entry", () => {
+    const result = validateLogEntry({ ...base, why_trigger: "" });
+    expect(result.entry.why_trigger).toBe(MISSING_WHY_TRIGGER);
+    // Nothing was removed, so nothing is reported as removed.
+    expect(result.redactions).toEqual([]);
+  });
+
+  it("checks content before length, so a long diff is replaced not trimmed", () => {
+    const result = validateLogEntry({
+      ...base,
+      why_trigger: "--- a/src/x.ts\n" + "+ leaked\n".repeat(300)
+    });
+    expect(result.entry.why_trigger).toBe(REDACTED_WHY_TRIGGER);
+    expect(result.entry.why_trigger).not.toContain("leaked");
+    expect(result.redactions[0]?.reason).toBe("content_smuggling");
+  });
+
+  it("still refuses a frame with no usable run in it", () => {
+    const noStart = ClientFrameSchema.safeParse({
+      kind: "log_append",
+      entry: { ended_at: base.ended_at, what: {}, why_trigger: "ok" }
+    });
+    expect(noStart.success).toBe(false);
+
+    const badTime = ClientFrameSchema.safeParse({
+      kind: "log_append",
+      entry: { started_at: "yesterday", ended_at: base.ended_at, what: {}, why_trigger: "ok" }
+    });
+    expect(badTime.success).toBe(false);
+  });
+
+  it("accepts the frame for every entry the boundary can repair", () => {
+    const parsed = ClientFrameSchema.safeParse({
+      kind: "log_append",
+      entry: {
+        started_at: base.started_at,
+        ended_at: base.ended_at,
+        what: { tools_used: {}, branch: "b".repeat(300), surprise: "x" },
+        why_trigger: "w".repeat(5000),
+        work_item: "i".repeat(500)
+      }
+    });
+    expect(parsed.success).toBe(true);
   });
 });

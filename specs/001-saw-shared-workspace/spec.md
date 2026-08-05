@@ -25,7 +25,7 @@ Clarifications block. Follow-up work is tracked in tasks.md, not here.
 Found by reviewing the built system against this specification, and by
 `/speckit-analyze`. Each names the gap that made the amendment necessary.
 
-- Q: What does a pause do to a run already in progress? → A: It blocks every tool call from that moment, so the agent cannot continue. The edge case said the agent "finishes or aborts its current run", which contradicted FR-014. Constitution amended to 1.1.0 to define pause and stop as one control.
+- Q: What does a pause do to a run already in progress? → A: It blocks every tool call from that moment, so the agent cannot continue. The edge case said the agent "finishes or aborts its current run", which contradicted FR-014. Constitution amended to 1.1.0 to define pause and stop as one control, then to 1.2.0: 1.1.0 said the block covers "work already in flight", which needs control of the coding tool's process lifecycle and so contradicted Principles I and V. 1.2.0 states what the hook surface delivers — every later tool call is denied, including the rest of the run.
 - Q: What protects a member's credential, and what protects the interfaces on their machine? → A: FR-020 and FR-021, new. The specification had no security requirements at all across 22 FRs, so two real defects in the built system traced to no requirement and could not fail a gate.
 - Q: When the system captures no triggering instruction, what may the "why" say? → A: FR-016a and SC-010, new. SC-003 counted only that the field was present, so a stand-in reading "run with no recorded trigger" satisfied it. The reader can now tell a real reason from a stand-in.
 
@@ -221,9 +221,19 @@ and confirming a correct answer built from stored history.
 **Isolation boundary**
 
 - **FR-008**: The system MUST NOT transmit anything between members other
-  than messages and git references. It MUST reject payloads containing file
-  contents, code, file access, or execution control, and MUST log each
-  rejection.
+  than messages and git references. It MUST stop file contents, code, file
+  access, and execution control at the boundary, by one of two outcomes:
+  - A payload that exists only to carry such content MUST be refused whole,
+    and MUST NOT be stored or echoed.
+  - Such content arriving inside a record the system is separately required
+    to keep — a work log entry, which FR-015 says must exist for **every**
+    run — MUST have the offending field removed, and the rest of the record
+    MUST be kept. Losing the run to protect the boundary trades one
+    requirement for another.
+
+  A field that only breaks a size or format rule is trimmed or dropped, not
+  a reason to lose the record. Either outcome MUST be logged, and the log
+  entry MUST NOT contain the removed content.
 - **FR-009**: An agent MUST NOT be able to read or write the other member's
   files through the system.
 - **FR-010**: An agent MUST NOT be able to run anything in the other
@@ -262,7 +272,10 @@ and confirming a correct answer built from stored history.
 - **FR-014**: While an agent is paused it MUST take no coordinated actions,
   and messages addressed to it MUST be stored and delivered on resume.
   "No coordinated actions" means the system blocks every tool call of the
-  paused member's connected coding tool, not only SAW tool calls.
+  paused member's connected coding tool, not only SAW tool calls, and
+  including the remaining tool calls of a run already in progress. One tool
+  call already executing when the pause arrives may complete; the pause MUST
+  NOT wait for the run to end.
 
 **Work log**
 
@@ -333,13 +346,18 @@ and confirming a correct answer built from stored history.
   day receives a correct answer within 30 seconds while the teammate is
   offline.
 - **SC-005**: In adversarial testing, 100% of attempts to pass file contents,
-  code, file access, or execution control between members are rejected at
-  the boundary and appear in the log.
-- **SC-006**: A pause takes effect before the paused agent's next coordinated
-  action. A human redirect message reaches the target member's local
-  delivery point in under 5 seconds under normal conditions, and is
-  presented to the target agent at the start of that agent's next turn. The
-  system MUST NOT force content into an agent mid-turn.
+  code, file access, or execution control between members are prevented at
+  the boundary — refused whole, or removed from the record that carried them
+  (FR-008) — and 100% appear in the log. Zero attempts reach the other
+  member, and zero cost a run its log entry.
+- **SC-006**: A pause takes effect before the paused agent's next tool call
+  of any kind, not only before its next coordinated action, and every later
+  tool call is denied too — including the rest of a run already in progress —
+  until the human resumes. A human redirect message reaches the target
+  member's local delivery point in under 5 seconds under normal
+  conditions, and is presented to the target agent at the start of that
+  agent's next turn. The system MUST NOT force content into an agent
+  mid-turn.
 - **SC-007**: After one member has been offline for 24 hours, the returning
   member's agent receives 100% of the messages sent in the interim, in order.
 - **SC-008**: On every supported platform, a second account on the same
