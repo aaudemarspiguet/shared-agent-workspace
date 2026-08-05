@@ -1,4 +1,30 @@
 <!--
+Sync Impact Report (1.2.0)
+- Version change: 1.1.0 → 1.2.0 (MINOR: guidance materially changed)
+- Modified principles: III. Human Visibility and Steering — the 1.1.0 pause
+  definition demanded an outcome the same paragraph then ruled out. "It
+  blocks every tool call ... including work already in flight" requires
+  control of the coding tool's process lifecycle, which Principle I and
+  Principle V forbid, and which the rationale of Principle III itself already
+  concedes is out of scope. The mandated control is restated as what a
+  hook-based integration can deliver and does deliver: every subsequent tool
+  call is denied, including the rest of a run already in progress. The
+  strength the 1.1.0 amendment was reaching for is kept — a pause that lets
+  the current run finish is still not a pause.
+- Added sections: none
+- Removed sections: none
+- Why MINOR: nothing is removed from the mandated control set, and no spec,
+  plan, or code that complied with 1.1.0 stops complying under 1.2.0, so this
+  is not backward-incompatible under the Versioning rule below. It is not
+  PATCH, because the meaning does change. A maintainer who reads narrowing a
+  MUST as redefining a principle should make this 2.0.0; nothing else in the
+  change would differ.
+- Downstream sync: spec.md SC-006 promised the weaker "before the next
+  coordinated action" and is corrected in the same change. FR-014 already
+  matched and gains one clause. The built PreToolUse hook already implements
+  the amended text; no code change follows from this.
+- Deferred TODOs: none
+
 Sync Impact Report (1.1.0)
 - Version change: 1.0.0 → 1.1.0 (MINOR: guidance materially expanded)
 - Modified principles: III. Human Visibility and Steering — "stop" was listed
@@ -69,15 +95,24 @@ Every agent-to-agent message MUST be visible to both humans. Either human
 MUST be able to steer the conversation at any time. No hidden channels, side
 channels, or agent-only exchanges are permitted. Steering controls (inject a
 message, pause/stop, redirect) MUST be available to each human at every
-point in a session. A pause MUST stop the agent: it blocks every tool call
-of that member's coding tool, including work already in flight.
+point in a session. A pause MUST stop the agent, not only its next
+coordinated action. From the moment a pause takes effect, SAW MUST deny
+every later tool call of that member's coding tool — SAW tool calls and all
+others alike — including the remaining tool calls of a run already in
+progress. A pause MUST NOT wait for the current run to end. One tool call
+that is already executing when the pause arrives may complete; the pause
+MUST take effect no later than that call.
 
 **Rationale**: Humans stay accountable for what their agents do. Visibility
 and interruptibility are the mechanisms that make that accountability real.
 Pause and stop are one control, not two. A pause that lets the current run
-finish is not a stop, so the block must cover work already in flight.
+finish is not a pause, so the block must cover the rest of that run.
 Lifecycle control of the coding tool itself stays out of scope: to terminate
-a member's tool, SAW would have to wrap it, against Principles I and V.
+a member's tool, or to interrupt a tool call already executing, SAW would
+have to wrap it, against Principles I and V. Denying every later tool call
+is the strongest control the documented hook surface offers, so it is what
+this principle demands. Demanding more would demand a violation of two other
+principles.
 
 ### IV. Automatic, Explained, Traceable Logging
 
@@ -179,4 +214,4 @@ wording fixes that do not change meaning.
 constitution. Complexity MUST be justified against the principles; when in
 doubt, choose the option that keeps SAW smaller.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-01
+**Version**: 1.2.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-04

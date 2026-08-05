@@ -53,8 +53,8 @@ one shared protocol package + static web UI.
 
 **Performance Goals**: Redirect message delivered to target agent in <5 s
 (SC-006); peer-activity answer in <30 s while peer offline (SC-004); 100%
-of boundary-violating payloads rejected and logged (SC-005); message
-history delivered in order after 24 h offline (SC-007).
+of boundary-violating payloads prevented — refused or scrubbed — and logged
+(SC-005); message history delivered in order after 24 h offline (SC-007).
 
 **Constraints**: Only JSON messages and git refs cross the relay — never
 code, file contents, file access, or execution control. Relay must stay
@@ -73,7 +73,7 @@ lifetime.
 | # | Principle | Gate result | Evidence in this plan |
 |---|-----------|-------------|-----------------------|
 | I | Coordination layer, not a coding agent | PASS | All five MCP tools coordinate (read/post/query); none generate, edit, or execute code. Connection to agents is via MCP only. |
-| II | Messages and refs only | PASS | Relay schema admits only typed JSON messages with optional refs. `parseClientFrame` content-checks `post` and `log_append` alike: a `why_trigger` carrying smuggled content is replaced, an invalid `branch` or `head` is dropped, and each removal writes its own BoundaryRejection (FR-008, SC-005). Was FAIL as built until T054 landed 2026-08-01. |
+| II | Messages and refs only | PASS | Relay schema admits only typed JSON messages with optional refs, and one frame is capped at 256 KiB. `parseClientFrame` content-checks `post` and `log_append` alike, on every free-text field either one carries: `body`, `work_item`, and `target` on a post; `why_trigger`, `work_item`, the keys and values of `what.tools_used`, `what.branch`, `what.head`, and unknown keys of `what` on a log entry. Each removal writes its own BoundaryRejection (FR-008, SC-005). Was FAIL as built until T054 landed 2026-08-01; T070 closed the fields T054 left. |
 | III | Human visibility and steering | PASS (design) / **PARTIAL (as built)** | Design: full room history, redirects, own-agent pause. As built: correct between members, but the local room view and API accept requests from any software on the member's machine, so a web page can read the room and change pause state (FR-021, SC-009). Fix tracked as T057. |
 | IV | Automatic, explained, traceable logging | PASS | Stop hook posts run summaries mechanically. A run the relay refuses goes to the local spool `.saw/log-spool.jsonl` and reaches the work log at the next reconnect, oldest first and with the timestamps of the run, so "every run" holds through an outage (FR-015, SC-003). Was FAIL as built until T055 landed 2026-08-04. |
 | V | Standards, not forks | PASS | Claude Code is integrated only through its documented hooks and MCP registration. No fork, wrapper, or custom runtime. Git is used as-is. |
@@ -100,6 +100,17 @@ row back to PASS only when its task lands, and re-run this check then.
 **Update (2026-08-01, later the same day)**: T054 landed, so row II is back
 to PASS on the same terms it claimed at design time. Rows III and IV still
 do not hold; they clear when T057 and T055 land.
+
+**Update (2026-08-04)**: read row II as "no unchecked content crosses",
+**not** as "everything is refused". T054 changed what the boundary does to a
+`log_append`: it removes the unsafe field and keeps the run, because
+dropping the entry would break FR-015. T070 extended that treatment to the
+free-text fields T054 did not reach, and T073 extended it to length rules,
+which until then failed the frame schema and cost the whole run. FR-008 and
+SC-005 now state both outcomes, and data-model.md §Boundary rules lists the
+rules per field rather than for `body` alone (T071, T072). Row II holds on
+the wider reading; it did not hold on the narrower one while any free-text
+field was unchecked.
 
 Two of the three were invisible at design time for a second reason: the spec
 carried no security requirements at all, so nothing described the member's
@@ -150,9 +161,13 @@ packages/
 │   │   └── web/             # Localhost UI server + static assets
 │   │       └── static/      # index.html, app.js, style.css (no build step)
 │   └── tests/
-└── tests/
-    └── integration/         # Two-member end-to-end scenarios vs real relay
+tests/
+└── integration/             # Two-member end-to-end scenarios vs real relay
 ```
+
+The integration tests sit at the repository root, not under `packages/`.
+They drive two member daemons against one real relay, so they belong to no
+single package. `tasks.md` §Path Conventions states the same path.
 
 **Structure Decision**: Monorepo with three packages. `shared` holds every
 schema so the relay and the CLI validate with identical rules — the

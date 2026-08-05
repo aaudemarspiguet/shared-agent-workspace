@@ -3,6 +3,7 @@
 // A connection must authenticate with `hello` before any other frame.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
+import { MAX_FRAME_BYTES } from "@saw/shared";
 import { parseClientFrame } from "./boundary.js";
 import { joinWorkspace, mintWorkspaceInvite, registerWorkspace } from "./join.js";
 import { handleLogAppend, handleLogQuery } from "./log.js";
@@ -52,7 +53,13 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
   // broadcasts read the store, so they must stop before the store does.
   let closing = false;
 
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  // Without maxPayload the `ws` default of 100 MiB applies to one frame.
+  // A frame that size is not a message and not a ref (Principle II, T070).
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: "/ws",
+    maxPayload: MAX_FRAME_BYTES
+  });
   wss.on("connection", (ws) => {
     let member: MemberRow | undefined;
 
@@ -89,6 +96,9 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           paused: store.isPaused(member.id)
         });
         registry.broadcastPresence(store, member.workspace_id, member.github_username, true);
+        // The broadcast above only reaches members who are already here. This
+        // is the other direction: what the joiner missed by arriving late.
+        registry.sendPresenceSnapshot(store, member.workspace_id, member.id);
         return;
       }
 
@@ -106,7 +116,10 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           handleSync(store, registry, member, frame.since_seq);
           break;
         case "log_append":
-          handleLogAppend(store, registry, member, frame.entry, parsed.redactions);
+          // parsed.entry, not frame.entry: the boundary scrubbed that one.
+          if (parsed.entry) {
+            handleLogAppend(store, registry, member, parsed.entry, parsed.redactions);
+          }
           break;
         case "log_query":
           handleLogQuery(store, registry, member, frame.query, frame.peer_activity);
@@ -130,7 +143,18 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
     // Without this, an 'error' event on a socket is unhandled and takes the
     // whole relay down with it. One member's broken connection must not stop
     // the other member from working.
-    ws.on("error", () => {
+    ws.on("error", (err: Error & { code?: string }) => {
+      // An over-cap frame arrives here rather than at parseClientFrame, since
+      // `ws` refuses it before we ever see the bytes. It is still a boundary
+      // rejection and still has to appear in the log (SC-005).
+      if (err.code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH" && member && !closing) {
+        store.appendRejectionLog(
+          member.workspace_id,
+          member.id,
+          "payload_too_large",
+          `frame over ${MAX_FRAME_BYTES} bytes`
+        );
+      }
       ws.terminate();
     });
   });
