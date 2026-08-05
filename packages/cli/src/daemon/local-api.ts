@@ -124,7 +124,30 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "seq must be a number"));
         return true;
       }
-      daemon.ackInjection(body.seq, body.notices ?? 0);
+      // Only a seq this daemon issued may move the cursor. An unchecked value
+      // writes past every message that will ever arrive. The cursor is
+      // persisted, so the member stays silent after a restart. When the cache
+      // holds no messages, the bound is the cursor itself, because inject()
+      // answers with the cursor value in that case.
+      const highest = Math.max(daemon.state.latestSeq(), daemon.cursor.value);
+      if (body.seq > highest) {
+        respond(
+          res,
+          400,
+          errorBody("invalid_input", `seq ${body.seq} is above the highest known seq ${highest}`)
+        );
+        return true;
+      }
+      const notices = body.notices ?? 0;
+      if (!Number.isInteger(notices) || notices < 0) {
+        respond(
+          res,
+          400,
+          errorBody("invalid_input", "notices must be a whole number, zero or more")
+        );
+        return true;
+      }
+      daemon.ackInjection(body.seq, notices);
       respond(res, 200, { ok: true, cursor: daemon.cursor.value });
       return true;
     }
