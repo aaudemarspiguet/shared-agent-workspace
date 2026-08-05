@@ -109,6 +109,23 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 }
 .panel.active { display: flex; }
 
+.room-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.room-controls select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 8px;
+  font: inherit;
+}
+
 .feed {
   flex: 1;
   overflow-y: auto;

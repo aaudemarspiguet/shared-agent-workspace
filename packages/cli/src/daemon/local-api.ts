@@ -62,7 +62,13 @@ export async function handleApiRequest(
       const sinceParam = url.searchParams.get("since_seq");
       const sinceSeq = sinceParam === null ? daemon.cursor.value : Number(sinceParam);
       const limit = Number(url.searchParams.get("limit") ?? 200);
-      respond(res, 200, daemon.messages(sinceSeq, limit));
+      // work_item narrows the read to one item. The filter runs before the
+      // limit, so the caller gets `limit` messages of that item rather than
+      // whatever matched inside the first page. latest_seq stays the room's
+      // true latest and the read cursor does not move: a filter is a view,
+      // so the caller keeps its position (T066).
+      const workItem = url.searchParams.get("work_item") ?? undefined;
+      respond(res, 200, daemon.messages(sinceSeq, limit, workItem));
       return true;
     }
 

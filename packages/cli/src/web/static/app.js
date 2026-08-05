@@ -5,7 +5,13 @@ const state = {
   me: null,
   status: null,
   seen: new Set(),
-  feedItems: []
+  // Every feed entry the page holds, in arrival order. The work item filter
+  // renders from this list, so it never refetches (T066).
+  feedItems: [],
+  // mode is "all", "untagged", or "item". tag applies to "item" only.
+  filter: { mode: "all", tag: "" },
+  // The work item tags the filter control shows now.
+  filterTags: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -59,10 +65,39 @@ function appendToFeed(node) {
   if (nearBottom) feed.scrollTop = feed.scrollHeight;
 }
 
+function renderItem(item) {
+  return item.kind === "message" ? renderMessage(item.data) : renderNotice(item.data);
+}
+
+/** Does one feed entry pass the work item filter the user chose? */
+function passesFilter(item) {
+  if (state.filter.mode === "all") return true;
+  const tag = item.data.work_item;
+  if (state.filter.mode === "untagged") return !tag;
+  return tag === state.filter.tag;
+}
+
+/** Hold one entry, and show it when the filter allows it. */
+function addItem(kind, data) {
+  const item = { kind, data };
+  state.feedItems.push(item);
+  if (passesFilter(item)) appendToFeed(renderItem(item));
+}
+
+/** Draw the feed again from the entries the page holds. No refetch. */
+function renderFeed() {
+  const feed = $("feed");
+  feed.textContent = "";
+  state.feedItems
+    .filter(passesFilter)
+    .forEach((item) => feed.appendChild(renderItem(item)));
+  feed.scrollTop = feed.scrollHeight;
+}
+
 function addMessage(m) {
   if (state.seen.has(m.seq)) return;
   state.seen.add(m.seq);
-  appendToFeed(renderMessage(m));
+  addItem("message", m);
 }
 
 function renderStatus(status) {
@@ -97,7 +132,52 @@ function renderStatus(status) {
     .filter((m) => m.github_username !== status.me)
     .forEach((m) => target.appendChild(new Option("to: " + m.github_username, m.github_username)));
   target.value = current;
+
+  renderFilterOptions(status.work_items);
 }
+
+// ---- Work item filter (T066) ----
+
+// The mode, not the value, decides how an option filters. A work item tag can
+// be any text, so the value alone cannot tell the default options from a tag.
+function filterOption(label, mode, tag) {
+  const option = new Option(label, tag);
+  option.dataset.mode = mode;
+  return option;
+}
+
+/** Fill the filter with the work items the page knows. Keep the choice. */
+function renderFilterOptions(workItems) {
+  const select = $("room-filter");
+  const tags = (workItems || []).map((w) => w.feature_tag).sort();
+  const key = tags.join("\n");
+  if (key === state.filterTags) return;
+  state.filterTags = key;
+  select.textContent = "";
+  select.appendChild(filterOption("all work items", "all", ""));
+  select.appendChild(filterOption("untagged", "untagged", "untagged"));
+  tags.forEach((tag) => select.appendChild(filterOption(tag, "item", tag)));
+
+  const options = Array.from(select.options);
+  const index = options.findIndex(
+    (o) =>
+      o.dataset.mode === state.filter.mode &&
+      (state.filter.mode !== "item" || o.value === state.filter.tag)
+  );
+  select.selectedIndex = index >= 0 ? index : 0;
+  if (index < 0) {
+    // The chosen work item is gone. Go back to the full room.
+    state.filter = { mode: "all", tag: "" };
+    renderFeed();
+  }
+}
+
+$("room-filter").addEventListener("change", (e) => {
+  const option = e.target.selectedOptions[0];
+  if (!option) return;
+  state.filter = { mode: option.dataset.mode || "all", tag: option.value };
+  renderFeed();
+});
 
 // ---- Live channel ----
 
@@ -113,8 +193,9 @@ function connect() {
     if (data.kind === "snapshot") {
       $("feed").textContent = "";
       state.seen.clear();
+      state.feedItems = [];
       (data.messages || []).forEach(addMessage);
-      (data.notices || []).forEach((n) => appendToFeed(renderNotice(n)));
+      (data.notices || []).forEach((n) => addItem("notice", n));
       renderStatus(data.status);
       return;
     }
@@ -122,7 +203,7 @@ function connect() {
       const event = data.event || {};
       if (event.kind === "message" && event.message) addMessage(event.message);
       if (event.kind === "claim_result" && event.claim) {
-        appendToFeed(renderNotice(event.claim));
+        addItem("notice", event.claim);
       }
       if (data.status) renderStatus(data.status);
     }

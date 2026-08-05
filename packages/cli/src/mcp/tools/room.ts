@@ -17,7 +17,9 @@ export function registerRoomTools(server: McpServer, root: string): void {
     "room_read",
     {
       description:
-        "Read room messages in order, newest last. Default start is your last injected cursor.",
+        "Read room messages in order, newest last. " +
+        "Default start is your last injected cursor. " +
+        "Give work_item to see one work item only.",
       inputSchema: {
         since_seq: z
           .number()
@@ -25,15 +27,22 @@ export function registerRoomTools(server: McpServer, root: string): void {
           .nonnegative()
           .optional()
           .describe("Return messages with seq greater than this. Default: last injected cursor."),
-        limit: z.number().int().min(1).max(200).optional().describe("Max messages. Default 50.")
+        limit: z.number().int().min(1).max(200).optional().describe("Max messages. Default 50."),
+        work_item: z
+          .string()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("Feature tag. Return only messages for this work item. Default: all.")
       }
     },
-    async (args: { since_seq?: number; limit?: number }) => {
+    async (args: { since_seq?: number; limit?: number; work_item?: string }) => {
       const gate = await agentGate(root);
       if (gate) return gate;
       const params = new URLSearchParams();
       if (args.since_seq !== undefined) params.set("since_seq", String(args.since_seq));
       params.set("limit", String(args.limit ?? 50));
+      if (args.work_item !== undefined) params.set("work_item", args.work_item);
       const res = await daemonCall(root, `/api/messages?${params.toString()}`);
       if (!res) return errorResult("not_connected", NOT_RUNNING);
       if (res.status !== 200) return mapDaemonError(res.status, res.json);
