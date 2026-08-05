@@ -43,7 +43,7 @@ may not name another member as its sender.
 | `message` | New or synced room message | Full Message (with `seq`) |
 | `post_ok` / `post_rejected` | Result of `post` | `{ seq }` / `{ reason, summary }` |
 | `claim_result` | Claim outcome on intent posts | `{ work_item, granted: bool, claimed_by }` — rejections broadcast to both members |
-| `log_ok` | Log append accepted | `{ id }` |
+| `log_ok` | Log append accepted | `{ id, redacted? }` — `redacted` is present only when the boundary removed something; see below |
 | `log_result` | Answer to `log_query` | `{ entries: [...] }` |
 | `presence` | Member online/offline change | `{ member, online, last_seen_at }` |
 | `pause_state` | Pause change (own or after reconnect) | `{ member, paused }` |
@@ -62,27 +62,56 @@ may not name another member as its sender.
 
 ## Boundary enforcement (relay side)
 
-Applied to `post` bodies and all frames (rules mirrored in
-data-model.md §Boundary rules):
+Applied to every inbound frame (rules mirrored in data-model.md §Boundary
+rules). The relay is the enforcement point and never assumes the sender
+checked anything.
 
-- Unknown frame kind, unknown message type, invalid ref format, body
-  >4000 chars, non-JSON frame, or smuggling heuristics (long fenced code,
-  diff markers, long base64) → reject frame, send `post_rejected`/`error`,
-  write BoundaryRejection log entry. The rejected body is never stored or
-  echoed.
-- Target for SC-005: 100% of such payloads rejected and logged.
+**Refused whole** — nothing is stored, `post_rejected`/`error` is sent, and
+a BoundaryRejection log entry is written. The rejected body is never stored
+or echoed:
 
-`log_append` entries get the same content check, because the peer reads
-them back through `peer_activity`. They are scrubbed rather than refused,
-since every run must still be logged (FR-015):
+- A frame over 256 KiB. It is refused at the socket, before parsing.
+- Unknown frame kind or non-JSON frame → `not_json`.
+- Unknown message type → `unknown_type`.
+- `body` over 4000 chars, `work_item` or `target` over 100 chars →
+  `payload_too_large`.
+- Invalid ref format → `invalid_ref`.
+- Smuggling heuristics — long fenced code, diff markers, long base64 — in
+  `body`, `work_item`, or `target` → `content_smuggling`.
+- A `log_append` with a missing or non-datetime `started_at`/`ended_at`.
+  There is no run in it to keep.
 
-- `why_trigger` carrying smuggled content is replaced with a fixed
-  placeholder. The removed text is never stored or echoed.
-- `what.branch` that is not a valid branch name, and `what.head` that is
-  not a commit SHA, are dropped.
-- Each removal writes its own BoundaryRejection log entry, so the
-  rejection still appears in the log for SC-005. The `log_ok` reply
-  carries a `redacted` list naming each field and reason.
+**Scrubbed** — a `log_append` is repaired and stored, because the peer reads
+it back through `peer_activity` and because every run must still be logged
+(FR-015). See the field table in data-model.md §Boundary rules for the full
+list. `field` in the `redacted` array is one of:
+
+`why_trigger`, `work_item`, `what.branch`, `what.head`,
+`what.tools_used`, `what`.
+
+Each removal writes its own BoundaryRejection log entry, so it still appears
+in the log for SC-005, and the `log_ok` reply carries the removals back to
+the sender. Each entry of `redacted` is:
+
+```
+{ field, reason, summary }
+```
+
+- `field` — one of the values above.
+- `reason` — the same enum as `post_rejected`: `unknown_type`,
+  `invalid_ref`, `payload_too_large`, `content_smuggling`, `not_json`.
+- `summary` — a short description of what was removed, for example
+  `"code fence with 42 lines"` or `"3 tool name(s) removed: over 100 chars
+  or not a name"`. It never echoes the removed text, and never repeats a
+  member-supplied key, under the same rule the BoundaryRejection `summary`
+  follows in data-model.md.
+
+A length or format failure inside a `log_append` is scrubbed, not refused,
+and reports the reason a `post` would report for the same failure —
+`payload_too_large` for an over-limit field, not `not_json`.
+
+**Target for SC-005**: 100% of such payloads prevented — refused or
+scrubbed — and 100% logged, with zero runs lost to the check.
 
 ## Availability behavior (deferred item from clarify)
 

@@ -47,7 +47,15 @@ presence dots live. (Covers cli.md contract; SC-001: this setup fits in
 **Boundary check (SC-005)**: have an agent (or `wscat`) post a body
 containing a 30-line fenced code block or a unified diff. Expected:
 `post_rejected` with `content_smuggling`, a BoundaryRejection entry in the
-log browser, and the payload not stored.
+log browser, and the payload not stored. Repeat with the diff in `work_item`
+and in `target`; both are checked too.
+
+Then send the same diff in a `log_append` — in `why_trigger`, in
+`work_item`, and as a key of `what.tools_used`. A log entry is **scrubbed**,
+not refused (FR-008): expect `log_ok` carrying a `redacted` entry per field,
+a BoundaryRejection per removal, and the run itself present in the log
+browser with the content gone. A run must never be lost to the check
+(FR-015).
 
 **Claim conflict (FR-006a)**: have bob's agent post an intent claiming
 `login-form` while alice holds it. Expected: `claim_result
