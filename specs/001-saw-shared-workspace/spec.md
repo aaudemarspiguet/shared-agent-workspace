@@ -221,9 +221,19 @@ and confirming a correct answer built from stored history.
 **Isolation boundary**
 
 - **FR-008**: The system MUST NOT transmit anything between members other
-  than messages and git references. It MUST reject payloads containing file
-  contents, code, file access, or execution control, and MUST log each
-  rejection.
+  than messages and git references. It MUST stop file contents, code, file
+  access, and execution control at the boundary, by one of two outcomes:
+  - A payload that exists only to carry such content MUST be refused whole,
+    and MUST NOT be stored or echoed.
+  - Such content arriving inside a record the system is separately required
+    to keep — a work log entry, which FR-015 says must exist for **every**
+    run — MUST have the offending field removed, and the rest of the record
+    MUST be kept. Losing the run to protect the boundary trades one
+    requirement for another.
+
+  A field that only breaks a size or format rule is trimmed or dropped, not
+  a reason to lose the record. Either outcome MUST be logged, and the log
+  entry MUST NOT contain the removed content.
 - **FR-009**: An agent MUST NOT be able to read or write the other member's
   files through the system.
 - **FR-010**: An agent MUST NOT be able to run anything in the other
@@ -333,8 +343,10 @@ and confirming a correct answer built from stored history.
   day receives a correct answer within 30 seconds while the teammate is
   offline.
 - **SC-005**: In adversarial testing, 100% of attempts to pass file contents,
-  code, file access, or execution control between members are rejected at
-  the boundary and appear in the log.
+  code, file access, or execution control between members are prevented at
+  the boundary — refused whole, or removed from the record that carried them
+  (FR-008) — and 100% appear in the log. Zero attempts reach the other
+  member, and zero cost a run its log entry.
 - **SC-006**: A pause takes effect before the paused agent's next coordinated
   action. A human redirect message reaches the target member's local
   delivery point in under 5 seconds under normal conditions, and is
