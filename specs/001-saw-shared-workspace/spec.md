@@ -25,7 +25,7 @@ Clarifications block. Follow-up work is tracked in tasks.md, not here.
 Found by reviewing the built system against this specification, and by
 `/speckit-analyze`. Each names the gap that made the amendment necessary.
 
-- Q: What does a pause do to a run already in progress? → A: It blocks every tool call from that moment, so the agent cannot continue. The edge case said the agent "finishes or aborts its current run", which contradicted FR-014. Constitution amended to 1.1.0 to define pause and stop as one control.
+- Q: What does a pause do to a run already in progress? → A: It blocks every tool call from that moment, so the agent cannot continue. The edge case said the agent "finishes or aborts its current run", which contradicted FR-014. Constitution amended to 1.1.0 to define pause and stop as one control, then to 1.2.0: 1.1.0 said the block covers "work already in flight", which needs control of the coding tool's process lifecycle and so contradicted Principles I and V. 1.2.0 states what the hook surface delivers — every later tool call is denied, including the rest of the run.
 - Q: What protects a member's credential, and what protects the interfaces on their machine? → A: FR-020 and FR-021, new. The specification had no security requirements at all across 22 FRs, so two real defects in the built system traced to no requirement and could not fail a gate.
 - Q: When the system captures no triggering instruction, what may the "why" say? → A: FR-016a and SC-010, new. SC-003 counted only that the field was present, so a stand-in reading "run with no recorded trigger" satisfied it. The reader can now tell a real reason from a stand-in.
 
@@ -262,7 +262,10 @@ and confirming a correct answer built from stored history.
 - **FR-014**: While an agent is paused it MUST take no coordinated actions,
   and messages addressed to it MUST be stored and delivered on resume.
   "No coordinated actions" means the system blocks every tool call of the
-  paused member's connected coding tool, not only SAW tool calls.
+  paused member's connected coding tool, not only SAW tool calls, and
+  including the remaining tool calls of a run already in progress. One tool
+  call already executing when the pause arrives may complete; the pause MUST
+  NOT wait for the run to end.
 
 **Work log**
 
@@ -335,8 +338,11 @@ and confirming a correct answer built from stored history.
 - **SC-005**: In adversarial testing, 100% of attempts to pass file contents,
   code, file access, or execution control between members are rejected at
   the boundary and appear in the log.
-- **SC-006**: A pause takes effect before the paused agent's next coordinated
-  action. A human redirect message reaches the target member's local
+- **SC-006**: A pause takes effect before the paused agent's next tool call
+  of any kind, not only before its next coordinated action, and every later
+  tool call is denied too — including the rest of a run already in progress —
+  until the human resumes. A human redirect message reaches the target
+  member's local
   delivery point in under 5 seconds under normal conditions, and is
   presented to the target agent at the start of that agent's next turn. The
   system MUST NOT force content into an agent mid-turn.
