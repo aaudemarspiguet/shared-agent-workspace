@@ -47,7 +47,9 @@ export async function handleApiRequest(
         ok: true,
         member: daemon.config.github_username,
         relay_connected: daemon.connected,
-        paused: daemon.pauseMirror.ownPaused
+        paused: daemon.pauseMirror.ownPaused,
+        // Runs held for the next reconnect. Zero on a healthy daemon (T055).
+        log_spool_pending: daemon.logSpool.size
       });
       return true;
     }
@@ -180,7 +182,11 @@ export async function handleApiRequest(
     if (req.method === "POST" && path === "/api/run/stop") {
       const body = (await readJsonBody(req)) as { what?: unknown };
       const outcome = await daemon.runStop((body.what ?? { tools_used: {} }) as never);
-      respond(res, outcome.ok ? 200 : 503, outcome);
+      // 200: the relay holds the entry. 202: the local spool holds it and the
+      // next reconnect sends it, so the caller must not retry. 503: neither
+      // took it, which only happens when the spool itself cannot hold it.
+      const status = outcome.ok ? 200 : outcome.spooled ? 202 : 503;
+      respond(res, status, outcome);
       return true;
     }
 
