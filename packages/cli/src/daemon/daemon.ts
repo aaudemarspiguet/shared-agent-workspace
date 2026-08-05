@@ -14,13 +14,10 @@ import type {
 } from "@saw/shared";
 import { readConfig, readCredential, type SawConfig } from "../config.js";
 import { relayUrls } from "../relay-http.js";
-import {
-  RelayClient,
-  type LogAppendOutcome,
-  type PostOutcome
-} from "./client.js";
+import { RelayClient, type PostOutcome } from "./client.js";
 import { ReadCursor } from "./cursor.js";
 import { generateLocalToken } from "./local-auth.js";
+import { LogSpool } from "./log-spool.js";
 import { PauseMirror } from "./pause.js";
 import { RunContext } from "./run-context.js";
 import { RoomState, type ClaimNotice, type WorkItemView } from "./state.js";
@@ -66,9 +63,22 @@ export interface PeerActivity {
   note: string;
 }
 
+/**
+ * The result of one Stop hook run.
+ *
+ * `ok` reports what the relay did. `spooled` reports that the run is held
+ * locally and goes to the work log at the next reconnect. A caller that sees
+ * `ok: false, spooled: true` must not retry: a retry would log the run twice.
+ */
+export type RunStopOutcome =
+  | { ok: true; id: string; spooled: false }
+  | { ok: false; message: string; spooled: boolean };
+
 export interface DaemonOptions {
   root: string;
   clientName?: string;
+  /** Cap on unsent runs held in .saw/log-spool.jsonl. Tests set it small. */
+  logSpoolCapacity?: number;
 }
 
 export class Daemon {
@@ -84,6 +94,7 @@ export class Daemon {
    * web server hands it to the room page in the served HTML.
    */
   readonly localToken = generateLocalToken();
+  readonly logSpool: LogSpool;
   private client: RelayClient;
   private subscribers = new Set<(event: DaemonEvent) => void>();
   private pendingNotices: ClaimNotice[] = [];
@@ -100,6 +111,7 @@ export class Daemon {
     this.cursor = new ReadCursor(options.root);
     this.pauseMirror = new PauseMirror(config.github_username);
     this.runContext = new RunContext(config.github_username);
+    this.logSpool = new LogSpool(options.root, options.logSpoolCapacity);
 
     this.client = new RelayClient(
       {
@@ -143,6 +155,10 @@ export class Daemon {
           this.emit({ kind: "pause_state", pause: frame });
         },
         onConnectionChange: (connected) => {
+          // Every reconnect drains the log spool. A run that ended while the
+          // relay was away reaches the work log here, with its own
+          // timestamps (T055, FR-015).
+          if (connected) void this.drainLogSpool();
           this.emit({ kind: "connection", connected });
         }
       }
@@ -336,10 +352,39 @@ export class Daemon {
     });
   }
 
-  /** Compose and append the automatic run summary (T039/T040). */
-  runStop(what: RunWhat): Promise<LogAppendOutcome> {
+  /**
+   * Compose and append the automatic run summary (T039/T040).
+   *
+   * A relay that is down, slow, or angry must not cost the run its log entry
+   * (FR-015). The entry goes to the local spool instead, and the next
+   * reconnect sends it with the timestamps it has now (T055).
+   */
+  async runStop(what: RunWhat): Promise<RunStopOutcome> {
     const entry = this.runContext.compose(what, this.state.myActiveWorkItem());
-    return this.client.logAppend(entry);
+    const outcome = await this.client.logAppend(entry);
+    if (outcome.ok) return { ok: true, id: outcome.id, spooled: false };
+    let spooled = false;
+    try {
+      this.logSpool.add(entry);
+      spooled = true;
+    } catch {
+      // The spool is best effort and already swallows file errors. This
+      // guard only makes sure no path out of the Stop hook can throw.
+    }
+    return { ok: false, message: outcome.message, spooled };
+  }
+
+  /**
+   * Send every spooled run to the relay, oldest first.
+   * Never rejects: the caller is an event handler, not a request.
+   */
+  async drainLogSpool(): Promise<number> {
+    try {
+      const result = await this.logSpool.drain((entry) => this.client.logAppend(entry));
+      return result.sent;
+    } catch {
+      return 0;
+    }
   }
 
   /** Query the work log. */

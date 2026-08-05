@@ -9,6 +9,7 @@ export {
   WS_PROTOCOL,
   WS_TOKEN_PROTOCOL_PREFIX
 } from "./daemon/local-auth.js";
+export { LogSpool, SPOOL_CAPACITY, type SpooledRun } from "./daemon/log-spool.js";
 export { startWebServer } from "./web/server.js";
 export { installHooks, sawHookCommandBase } from "./hooks/install.js";
 export { composeRunWhat, countToolUses, gitWhat } from "./hooks/summary.js";
