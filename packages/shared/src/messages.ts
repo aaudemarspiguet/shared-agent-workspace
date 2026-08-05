@@ -14,6 +14,8 @@ export type MessageType = (typeof MESSAGE_TYPES)[number];
 
 export const MAX_BODY_LENGTH = 4000;
 export const MAX_REFS = 10;
+/** Cap on the short free-text labels: `work_item`, `target`. */
+export const MAX_LABEL_LENGTH = 100;
 
 /** Why the boundary rejected a payload. */
 export const REJECTION_REASONS = [
@@ -90,10 +92,13 @@ export const MessagePostSchema = z.object({
   type: z.enum(MESSAGE_TYPES),
   body: z.string().min(1).max(MAX_BODY_LENGTH),
   refs: z.array(GitRefSchema).max(MAX_REFS).default([]),
-  work_item: z.string().min(1).max(100).optional(),
-  target: z.string().min(1).max(100).optional()
+  work_item: z.string().min(1).max(MAX_LABEL_LENGTH).optional(),
+  target: z.string().min(1).max(MAX_LABEL_LENGTH).optional()
 });
 export type MessagePost = z.infer<typeof MessagePostSchema>;
+
+/** The free-text fields of a post. `body` is checked separately. */
+const LABEL_FIELDS = ["work_item", "target"] as const;
 
 export type PostValidation =
   | { ok: true; post: MessagePost }
@@ -118,6 +123,18 @@ export function validatePost(input: unknown): PostValidation {
       summary: `body over ${MAX_BODY_LENGTH} chars`
     };
   }
+  // Size is judged before the schema so an over-long label reports its true
+  // reason rather than the shape-is-not-valid one the schema would give.
+  for (const field of LABEL_FIELDS) {
+    const value = raw[field];
+    if (typeof value === "string" && value.length > MAX_LABEL_LENGTH) {
+      return {
+        ok: false,
+        reason: "payload_too_large",
+        summary: `${field} over ${MAX_LABEL_LENGTH} chars`
+      };
+    }
+  }
   const parsed = MessagePostSchema.safeParse(input);
   if (!parsed.success) {
     const refIssue = parsed.error.issues.find((i) => i.path[0] === "refs");
@@ -129,6 +146,16 @@ export function validatePost(input: unknown): PostValidation {
   const smuggled = findSmuggledContent(parsed.data.body);
   if (smuggled) {
     return { ok: false, reason: "content_smuggling", summary: smuggled };
+  }
+  // `body` is not the only free text on a post: `work_item` and `target`
+  // cross to the peer the same way and were unchecked until T070.
+  for (const field of LABEL_FIELDS) {
+    const value = parsed.data[field];
+    if (value === undefined) continue;
+    const found = findSmuggledContent(value);
+    if (found) {
+      return { ok: false, reason: "content_smuggling", summary: `${field}: ${found}` };
+    }
   }
   return { ok: true, post: parsed.data };
 }

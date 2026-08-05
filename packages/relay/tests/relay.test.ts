@@ -310,6 +310,77 @@ describe("relay protocol", () => {
     bob.close();
   });
 
+  it("keeps the run when a log_append field is over its cap (T073)", async () => {
+    const alice = await connect(workspaceId, aliceToken);
+    const bob = await connect(workspaceId, bobToken);
+
+    // Every one of these failed the frame schema before T073, so the relay
+    // sent post_rejected and the run was never stored at all.
+    alice.send({
+      kind: "log_append",
+      entry: {
+        started_at: new Date(Date.now() - 30_000).toISOString(),
+        ended_at: new Date().toISOString(),
+        what: { tools_used: { Edit: 1 }, branch: "b".repeat(300), extra_key: "x" },
+        why_trigger: "why ".repeat(400),
+        work_item: "over-limit-check" + "-x".repeat(60)
+      }
+    });
+    const ok = await alice.waitFor(is("log_ok", (f) => Boolean(f.redacted)));
+    expect(ok.redacted?.map((r) => r.field).sort()).toEqual([
+      "what",
+      "what.branch",
+      "why_trigger",
+      "work_item"
+    ]);
+
+    // The run is stored and the peer can read it (FR-015, SC-003).
+    bob.send({ kind: "log_query", query: { member: "peer", limit: 50 }, peer_activity: true });
+    const seen = await bob.waitFor(is("log_result", (f) => f.peer === "alice"));
+    const run = seen.entries.find((e) => e.work_item.startsWith("over-limit-check"));
+    expect(run).toBeDefined();
+    expect(run?.work_item).toHaveLength(100);
+    expect(run?.why_trigger).toHaveLength(1000);
+    expect(run?.what.branch).toBeUndefined();
+    expect(run?.what.tools_used).toEqual({ Edit: 1 });
+
+    // Each removal is still a rejection in the log (SC-005).
+    bob.send({ kind: "log_query", query: { member: "any", limit: 100 }, peer_activity: false });
+    const full = await bob.waitFor(is("log_result", (f) => !f.peer));
+    const rejections = full.entries.filter((e) => e.source === "boundary_rejection");
+    expect(rejections.some((e) => e.why_trigger.includes("payload_too_large"))).toBe(true);
+
+    alice.close();
+    bob.close();
+  });
+
+  it("refuses a frame over the payload cap and stays up (T070)", async () => {
+    const alice = await connect(workspaceId, aliceToken);
+    const bob = await connect(workspaceId, bobToken);
+
+    // With the `ws` default of 100 MiB, this frame was simply accepted.
+    alice.send({
+      kind: "post",
+      post: { type: "status", body: "x", filler: "SECRETCODE".repeat(60_000) }
+    });
+    await new Promise((r) => setTimeout(r, 150));
+
+    const health = await fetch(`${base}/health`);
+    expect(health.status).toBe(200);
+
+    // The rejection is in the log, without the payload (SC-005).
+    bob.send({ kind: "log_query", query: { member: "any", limit: 200 }, peer_activity: false });
+    const full = await bob.waitFor(is("log_result", (f) => !f.peer));
+    const oversize = full.entries.filter(
+      (e) => e.source === "boundary_rejection" && e.why_trigger.includes("bytes")
+    );
+    expect(oversize).toHaveLength(1);
+    expect(oversize[0]?.why_trigger).toContain("payload_too_large");
+    expect(oversize[0]?.why_trigger).not.toContain("SECRETCODE");
+
+    bob.close();
+  });
+
   it("survives a connection that dies without a close handshake", async () => {
     const alice = await connect(workspaceId, aliceToken);
     const bob = await connect(workspaceId, bobToken);
