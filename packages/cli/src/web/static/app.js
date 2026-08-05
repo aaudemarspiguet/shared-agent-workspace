@@ -1,6 +1,24 @@
 // SAW room page logic. Talks only to the local daemon.
 /* global WebSocket, document, fetch, location, setTimeout, URLSearchParams, Option */
 
+// The run token (T057). The daemon writes it into this document when it
+// serves the page. Every call to the daemon presents it.
+const tokenMeta = document.querySelector('meta[name="saw-token"]');
+const TOKEN = tokenMeta ? tokenMeta.content : "";
+
+/**
+ * Call the local API with the run token.
+ * The token rides in an Authorization header, which a cross-origin form
+ * cannot set. The daemon refuses a call without it.
+ */
+function api(path, init) {
+  const options = Object.assign({}, init || {});
+  options.headers = Object.assign({}, (init && init.headers) || {}, {
+    authorization: "Bearer " + TOKEN
+  });
+  return fetch(path, options);
+}
+
 const state = {
   me: null,
   status: null,
@@ -181,8 +199,34 @@ $("room-filter").addEventListener("change", (e) => {
 
 // ---- Live channel ----
 
+/**
+ * The socket did not open. Decide whether this page holds a dead token.
+ *
+ * Each run of saw up makes a new token, so a page left open across a restart
+ * can never connect again. Ask for the page again: when the daemon answers
+ * with a different token, load the page again to pick it up. When the daemon
+ * does not answer, it is down, and the ordinary retry is right.
+ */
+async function recoverAfterFailedConnect() {
+  try {
+    const res = await fetch("/", { cache: "no-store" });
+    if (!res.ok) return;
+    const html = await res.text();
+    if (html.indexOf('content="' + TOKEN + '"') === -1) location.reload();
+  } catch {
+    // The daemon is down. Keep the token and keep retrying.
+  }
+}
+
 function connect() {
-  const ws = new WebSocket(`ws://${location.host}/ws`);
+  // A browser cannot set a header on a WebSocket handshake. The token goes in
+  // a subprotocol instead of the address, so it stays out of logs and out of
+  // any address the member copies. The server selects the plain "saw" name.
+  const ws = new WebSocket(`ws://${location.host}/ws`, ["saw.token." + TOKEN, "saw"]);
+  let opened = false;
+  ws.onopen = () => {
+    opened = true;
+  };
   ws.onmessage = (raw) => {
     let data;
     try {
@@ -210,6 +254,7 @@ function connect() {
   };
   ws.onclose = () => {
     setTimeout(connect, 1500);
+    if (!opened) void recoverAfterFailedConnect();
   };
 }
 
@@ -231,7 +276,7 @@ $("composer").addEventListener("submit", async (e) => {
   const target = $("msg-target").value;
   if (target) payload.target = target;
 
-  const res = await fetch("/api/post", {
+  const res = await api("/api/post", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload)
@@ -250,7 +295,7 @@ $("composer").addEventListener("submit", async (e) => {
 
 $("pause-btn").addEventListener("click", async () => {
   if (!state.status) return;
-  await fetch("/api/pause", {
+  await api("/api/pause", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ paused: !state.status.paused })
@@ -301,7 +346,7 @@ async function loadLog() {
   const workItem = $("log-work-item").value.trim();
   if (workItem) params.set("work_item", workItem);
   params.set("limit", "100");
-  const res = await fetch("/api/log?" + params.toString());
+  const res = await api("/api/log?" + params.toString());
   if (!res.ok) {
     list.appendChild(el("div", "empty", "The log is not available. Is the relay connected?"));
     return;

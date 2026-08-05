@@ -14,6 +14,13 @@ Common error shape (all tools):
 While the member is paused, every tool except `workspace_status` returns
 `paused`.
 
+Every tool call presents the run token from `.saw/daemon.json`, because the
+local API accepts only software the member started for this workspace (T057,
+FR-021; see contracts/cli.md "Local surface authentication"). A refused call
+keeps the daemon's own message, which names the repair, and reports the code
+`not_connected`: the code set above is closed, and a daemon the tool may not
+call is a daemon it cannot reach.
+
 ## 1. room_read
 
 Read room messages, newest last, in relay `seq` order.

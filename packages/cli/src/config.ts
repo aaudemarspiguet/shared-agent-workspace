@@ -29,6 +29,13 @@ export interface DaemonInfo {
   port: number;
   pid: number;
   started_at: string;
+  /**
+   * The run token for the local surfaces (T057). A caller must present it on
+   * every local API request and on the /ws handshake. Each run of `saw up`
+   * makes a new one. The field is optional only so that a file written by an
+   * older version still parses; a request with no token is refused.
+   */
+  token?: string;
 }
 
 /** Local daemon state that must survive restarts. */
@@ -134,9 +141,16 @@ function readJson<T>(path: string): T | undefined {
   }
 }
 
-function writeJson(path: string, value: unknown): void {
+function writeJson(path: string, value: unknown, mode?: number): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(value, null, 2) + "\n", "utf8");
+  const text = JSON.stringify(value, null, 2) + "\n";
+  if (mode === undefined) {
+    writeFileSync(path, text, "utf8");
+    return;
+  }
+  writeFileSync(path, text, { encoding: "utf8", mode });
+  // chmod again: writeFileSync does not change the mode of an existing file.
+  chmodSync(path, mode);
 }
 
 // ---- config.json ----
@@ -187,8 +201,12 @@ export function readDaemonInfo(root: string): DaemonInfo | undefined {
   return readJson<DaemonInfo>(daemonInfoPath(root));
 }
 
+/**
+ * Write the daemon info file. Only the owner may read it (mode 0600).
+ * The file holds the run token for the local surfaces, so it is a secret.
+ */
 export function writeDaemonInfo(root: string, info: DaemonInfo): void {
-  writeJson(daemonInfoPath(root), info);
+  writeJson(daemonInfoPath(root), info, 0o600);
 }
 
 export function removeDaemonInfo(root: string): void {

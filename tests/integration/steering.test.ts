@@ -22,7 +22,9 @@ describe("human steering and pause (US2)", () => {
   // Web handles live at describe scope so afterAll can close leftovers.
   let bobWeb: WebHandle | undefined;
   let aliceWeb: WebHandle | undefined;
-  let aliceUrl = "";
+  // Every call to a local API must present that server's run token (T057),
+  // so the tests hold the handle, not the address alone.
+  let aliceApi: WebHandle;
 
   beforeAll(async () => {
     ws = await twoMemberWorkspace();
@@ -40,7 +42,7 @@ describe("human steering and pause (US2)", () => {
 
     // Bob's human sends a redirect to alice's agent from bob's web UI.
     const clockStart = performance.now();
-    const posted = await apiPost(web.url, "/api/post", {
+    const posted = await apiPost(web, "/api/post", {
       type: "status",
       body: REDIRECT_BODY,
       sender_kind: "human",
@@ -78,13 +80,13 @@ describe("human steering and pause (US2)", () => {
   it("pause blocks the paused member's agent but not their human", async () => {
     const web = await startWeb(ws.alice);
     aliceWeb = web;
-    aliceUrl = web.url;
+    aliceApi = web;
 
-    const paused = await apiPost(aliceUrl, "/api/pause", { paused: true });
+    const paused = await apiPost(aliceApi, "/api/pause", { paused: true });
     expect(paused.status).toBe(200);
 
     // The PreToolUse hook reads this state and denies tool calls on it.
-    const state = await apiGet(aliceUrl, "/api/pause");
+    const state = await apiGet(aliceApi, "/api/pause");
     expect(state.status).toBe(200);
     expect((state.json as { paused: boolean }).paused).toBe(true);
 
@@ -97,7 +99,7 @@ describe("human steering and pause (US2)", () => {
     if (!agentPost.ok) expect(agentPost.message).toBe("paused");
 
     // The same member's human still can post from her own web UI.
-    const humanPost = await apiPost(aliceUrl, "/api/post", {
+    const humanPost = await apiPost(aliceApi, "/api/post", {
       type: "status",
       body: "The human speaks while the agent is paused.",
       sender_kind: "human"
@@ -128,7 +130,7 @@ describe("human steering and pause (US2)", () => {
     expect(heldBodies).not.toContain("queued two");
 
     // Resume. The daemon syncs and the relay replays the held messages.
-    const resumed = await apiPost(aliceUrl, "/api/pause", { paused: false });
+    const resumed = await apiPost(aliceApi, "/api/pause", { paused: false });
     expect(resumed.status).toBe(200);
     await waitFor(() => {
       const bodies = ws.alice.daemon.messages(0).messages.map((m) => m.body);

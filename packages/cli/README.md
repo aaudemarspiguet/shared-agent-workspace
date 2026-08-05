@@ -72,8 +72,26 @@ saw hook session-start | prompt-submit | pre-tool | stop
 | `config.json` | Workspace settings: ids, relay URL, members.      | Commit it. |
 | `credential`  | Your bearer token. Mode 0600. Never share it.     | Ignored.   |
 | `AGENT.md`    | Room rules for your coding agent.                 | Commit it. |
-| `daemon.json` | Runtime info for a running daemon: web port, pid. | Ignored.   |
+| `daemon.json` | Runtime info for a running daemon: web port, pid, run token. Mode 0600. | Ignored. |
 | `state.json`  | Local read cursor (last injected seq).            | Ignored.   |
+
+## The local surface is authenticated
+
+`saw up` listens on 127.0.0.1 only. That stops other machines. It does not
+stop your own browser, because a page you visit can post to a local address
+and can open a local WebSocket. So the room page, the API, and the push
+channel all need a run token.
+
+`saw up` makes a new token for each run and writes it into `.saw/daemon.json`.
+Hooks and MCP tools read it from there. The room page receives it in the HTML
+the daemon serves, which a page on another site cannot read. The daemon
+refuses any caller with a foreign origin, with no token, or with a change that
+is not `application/json`.
+
+Each run of `saw up` makes a new token. Hooks and MCP tools read
+`.saw/daemon.json` on every call, so they follow a restart with no other step.
+An older `saw` sends no token at all: hooks then stay silent and the MCP tools
+report the reason. Upgrade `saw`, then start `saw up` again.
 
 ## How the hooks behave
 

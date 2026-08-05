@@ -35,7 +35,7 @@ describe("a steer addressed to one agent is framed for its human (T067)", () => 
     aliceWeb = await startWeb(ws.alice);
 
     // Alice's human steers bob's agent directly.
-    const steer = await apiPost(aliceWeb.url, "/api/post", {
+    const steer = await apiPost(aliceWeb, "/api/post", {
       type: "question",
       body: STEER_BODY,
       sender_kind: "human",

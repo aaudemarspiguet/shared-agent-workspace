@@ -1,9 +1,14 @@
 // Localhost HTTP API for hooks, MCP tools, and the web page (T020).
 // Every route is JSON. The server that mounts this handler binds 127.0.0.1
 // only. Nothing here talks to the peer's machine.
+//
+// Every route needs the run token, reads as well as changes (T057, FR-021).
+// The check runs before the body is read, so an unauthenticated request never
+// reaches the parser.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { validatePost, type LogQuery } from "@saw/shared";
 import type { Daemon } from "./daemon.js";
+import { checkApiRequest, type LocalAuth } from "./local-auth.js";
 
 const MAX_BODY_BYTES = 256_000;
 
@@ -20,7 +25,13 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 function respond(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { "content-type": "application/json" });
+  res.writeHead(status, {
+    "content-type": "application/json",
+    // No answer here may be stored or read as another type. There are no
+    // CORS headers on purpose: a foreign page must not read any of this.
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff"
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -35,11 +46,20 @@ function errorBody(code: string, message: string): object {
 export async function handleApiRequest(
   daemon: Daemon,
   req: IncomingMessage,
-  res: ServerResponse
+  res: ServerResponse,
+  auth: LocalAuth
 ): Promise<boolean> {
   const url = new URL(req.url ?? "/", "http://localhost");
   const path = url.pathname;
   if (!path.startsWith("/api/")) return false;
+
+  // Prove the caller first. A refused request is never parsed and never
+  // touches the daemon.
+  const failure = checkApiRequest(req, auth);
+  if (failure) {
+    respond(res, failure.status, errorBody(failure.code, failure.message));
+    return true;
+  }
 
   try {
     if (req.method === "GET" && path === "/api/health") {

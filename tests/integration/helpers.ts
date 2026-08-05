@@ -159,25 +159,38 @@ export async function twoMemberWorkspace(): Promise<TestWorkspace> {
   };
 }
 
+/** A running local web + API server, with the run token it demands (T057). */
+export interface TestWeb {
+  port: number;
+  url: string;
+  /** The run token. Every call to this server must present it. */
+  token: string;
+  close(): Promise<void>;
+}
+
 /** Start the member's web + API server on a free port. */
-export async function startWeb(member: TestMember) {
+export async function startWeb(member: TestMember): Promise<TestWeb> {
   const web = await startWebServer(member.daemon, 0);
   return {
     port: web.port,
     url: `http://127.0.0.1:${web.port}`,
+    token: web.token,
     close: web.close
   };
 }
 
 /** POST JSON to a member's local API. Returns status and parsed body. */
 export async function apiPost(
-  baseUrl: string,
+  web: TestWeb,
   path: string,
   body: unknown
 ): Promise<{ status: number; json: unknown }> {
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${web.url}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${web.token}`
+    },
     body: JSON.stringify(body)
   });
   return { status: res.status, json: (await res.json()) as unknown };
@@ -185,9 +198,11 @@ export async function apiPost(
 
 /** GET JSON from a member's local API. */
 export async function apiGet(
-  baseUrl: string,
+  web: TestWeb,
   path: string
 ): Promise<{ status: number; json: unknown }> {
-  const res = await fetch(`${baseUrl}${path}`);
+  const res = await fetch(`${web.url}${path}`, {
+    headers: { authorization: `Bearer ${web.token}` }
+  });
   return { status: res.status, json: (await res.json()) as unknown };
 }

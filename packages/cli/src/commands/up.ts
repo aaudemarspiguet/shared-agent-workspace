@@ -61,10 +61,13 @@ export async function runUp(options: UpOptions): Promise<void> {
     try {
       const web = await startWebServer(daemon, port);
       webUrl = `http://localhost:${web.port}`;
+      // The token goes in the file that hooks and MCP tools already read. The
+      // file is mode 0600, so no other user can take it (T057).
       writeDaemonInfo(root, {
         port: web.port,
         pid: process.pid,
-        started_at: new Date().toISOString()
+        started_at: new Date().toISOString(),
+        token: daemon.localToken
       });
       close = web.close;
     } catch (error) {
@@ -77,7 +80,8 @@ export async function runUp(options: UpOptions): Promise<void> {
     writeDaemonInfo(root, {
       port,
       pid: process.pid,
-      started_at: new Date().toISOString()
+      started_at: new Date().toISOString(),
+      token: daemon.localToken
     });
   }
 
