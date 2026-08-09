@@ -109,6 +109,45 @@ Behavior:
    daemon; the daemon forwards a `log_append` frame to the relay.
 4. Exit 0 always; a logging failure is reported to the daemon's own log,
    never surfaced as an agent error.
+5. Discards the daemon answer and never retries. Durability belongs to the
+   daemon (see A failed append is spooled, below).
+
+## A failed append is spooled
+
+FR-015 asks for a log entry for every run, and SC-003 asks for 100%. The
+relay is not always there: it restarts, the laptop sleeps, the member works
+offline. The hook cannot solve that, because it must stay silent and must
+exit at once.
+
+So the daemon holds the run instead:
+
+1. The relay refuses the append, or does not answer inside the request
+   timeout. The daemon writes the composed entry to a local spool,
+   `.saw/log-spool.jsonl`, next to `state.json`. Git ignores both.
+2. The daemon answers the hook `202` with `{ ok: false, spooled: true }`.
+   `200` means the relay holds the entry, `503` means nobody does.
+3. On the next reconnect the daemon sends every spooled run, oldest first,
+   and drops each one only after the relay confirms it.
+
+Rules a reader can rely on:
+
+- **Timestamps are the run's own.** A replayed entry carries the
+  `started_at` and `ended_at` of the run, never the flush time. A member
+  reading the log sees when work happened, not when the network returned.
+- **Order is the run order.** The drain walks the spool from the head and
+  stops at the first refusal. It never skips ahead.
+- **Delivery is at least once.** A run leaves the spool only after the relay
+  confirms it, so a daemon that dies between the append and the confirmation
+  sends that one run again. A duplicate can be read past; a lost run cannot
+  be recovered.
+- **The spool is bounded.** It holds 500 runs. At the cap the oldest run
+  goes, so a long outage cannot grow the file without limit and the newest
+  runs — the ones the peer asks about — always survive.
+- **No caller retries.** A caller that sees `spooled: true` must not send
+  the run again. The daemon owns the retry.
+
+The same path covers a relay-side error and the request timeout, not only a
+hard disconnect.
 
 ## Registration shape (written by `saw up`)
 

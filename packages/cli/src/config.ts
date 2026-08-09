@@ -213,16 +213,43 @@ export function writeState(root: string, state: LocalState): void {
   writeJson(statePath(root), state);
 }
 
+// ---- log-spool.jsonl ----
+
+/**
+ * The local spool of run log entries the relay has not accepted yet (T055).
+ *
+ * The name is fixed and plain. It carries no member name, no workspace id,
+ * and no token, so the name itself tells a reader nothing. The file holds
+ * run metadata only: tool counts, a branch name, a head SHA, a changed-file
+ * count, and the run trigger. It never holds file paths or file contents.
+ */
+export function logSpoolPath(root: string): string {
+  return join(sawDir(root), "log-spool.jsonl");
+}
+
+/** Where the spool writes before it renames over the real file. */
+export function logSpoolTempPath(root: string): string {
+  return logSpoolPath(root) + ".tmp";
+}
+
 // ---- .gitignore ----
 
 /** Lines that keep member-local .saw files out of git. */
 export const GITIGNORE_LINES = [
   ".saw/credential",
   ".saw/daemon.json",
-  ".saw/state.json"
+  ".saw/state.json",
+  ".saw/log-spool.jsonl",
+  ".saw/log-spool.jsonl.tmp"
 ];
 
-/** Append the .saw ignore lines to the repo .gitignore. Skip lines already there. */
+const GITIGNORE_HEADER = "# SAW member-local files";
+
+/**
+ * Append the .saw ignore lines to the repo .gitignore. Skip lines already
+ * there. The call is safe to repeat: a workspace made before a line existed
+ * gets that line the next time any code path asks.
+ */
 export function appendGitignore(root: string): void {
   const path = join(root, ".gitignore");
   let current = "";
@@ -236,5 +263,7 @@ export function appendGitignore(root: string): void {
   if (missing.length === 0) return;
   const next =
     current.length === 0 || current.endsWith("\n") ? current : current + "\n";
-  writeFileSync(path, next + "# SAW member-local files\n" + missing.join("\n") + "\n");
+  // Write the header once. An older clone already has it above its own lines.
+  const header = have.has(GITIGNORE_HEADER) ? "" : GITIGNORE_HEADER + "\n";
+  writeFileSync(path, next + header + missing.join("\n") + "\n");
 }

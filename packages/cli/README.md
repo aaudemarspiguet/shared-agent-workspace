@@ -74,6 +74,7 @@ saw hook session-start | prompt-submit | pre-tool | stop
 | `AGENT.md`    | Room rules for your coding agent.                 | Commit it. |
 | `daemon.json` | Runtime info for a running daemon: web port, pid. | Ignored.   |
 | `state.json`  | Local read cursor (last injected seq).            | Ignored.   |
+| `log-spool.jsonl` | Runs the relay has not accepted yet.          | Ignored.   |
 
 ## How the hooks behave
 
@@ -88,6 +89,12 @@ agent then works normally, without coordination.
 - `Stop` posts the mechanical run summary: tool-use counts, branch, head SHA,
   changed-file count. File paths and file contents never enter it. It exits 0
   even when logging fails.
+
+A run that ends while the relay is away is not lost. The daemon writes it to
+`.saw/log-spool.jsonl` and sends it at the next reconnect, oldest first. The
+entry keeps the times of the run, so the log shows when you worked and not
+when the network returned. The spool holds 500 runs; at that cap the oldest
+run goes.
 
 ## The five MCP tools
 
