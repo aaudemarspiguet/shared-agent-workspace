@@ -194,7 +194,7 @@ recorded activity".
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [ ] T048 [P] STE documentation pass: root `README.md`, `packages/*/README.md`, code comments — short sentences, active voice, simple words (constitution)
-- [ ] T049 [P] Relay self-hosting: `packages/relay/Dockerfile` + run instructions in `packages/relay/README.md` (Principle VII)
+- [X] T049 [P] Relay self-hosting: `packages/relay/Dockerfile` + run instructions in `packages/relay/README.md` (Principle VII)
 - [X] T050 Reconnect-ordering integration test (24 h-offline replay, 100% in order) in `tests/integration/reconnect.test.ts` (SC-007, quickstart Scenario 5)
 - [X] T051 Timing assertions in existing integration tests: redirect to target daemon <5 s, peer answer <30 s (SC-004, SC-006)
 - [ ] T052 Hashed-token verification path in `packages/relay/src/server.ts` and `packages/relay/src/store.ts`: store a hash of each member credential, not the credential itself. (Scope reduced — see the note below. The credential-at-rest and local-surface halves are now T056 and T057.)
