@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- The daemon writes the run token here when it serves this page (T057).
+       The page presents it on every call. A page on another origin cannot
+       read this document, so it cannot get the token. -->
+  <meta name="saw-token" content="__SAW_LOCAL_TOKEN__" />
   <title>SAW — shared room</title>
   <link rel="stylesheet" href="/style.css" />
 </head>

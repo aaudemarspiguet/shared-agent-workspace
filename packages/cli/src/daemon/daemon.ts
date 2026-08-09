@@ -16,6 +16,7 @@ import { readConfig, readCredential, type SawConfig } from "../config.js";
 import { relayUrls } from "../relay-http.js";
 import { RelayClient, type PostOutcome } from "./client.js";
 import { ReadCursor } from "./cursor.js";
+import { generateLocalToken } from "./local-auth.js";
 import { LogSpool } from "./log-spool.js";
 import { PauseMirror } from "./pause.js";
 import { RunContext } from "./run-context.js";
@@ -87,6 +88,12 @@ export class Daemon {
   readonly cursor: ReadCursor;
   readonly pauseMirror: PauseMirror;
   readonly runContext: RunContext;
+  /**
+   * The run token for the local surfaces (T057). It is new for each daemon.
+   * `saw up` writes it into .saw/daemon.json for hooks and MCP tools, and the
+   * web server hands it to the room page in the served HTML.
+   */
+  readonly localToken = generateLocalToken();
   readonly logSpool: LogSpool;
   private client: RelayClient;
   private subscribers = new Set<(event: DaemonEvent) => void>();

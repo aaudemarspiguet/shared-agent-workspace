@@ -11,6 +11,19 @@ works normally, uncoordinated; `workspace_status` is how agents notice SAW
 is down). Hook failures must never break the member's coding tool
 (Principle V: no wrapping, no interference).
 
+## Every hook call carries the run token (T057)
+
+The local API accepts only software the member started for this workspace
+(FR-021, see contracts/cli.md "Local surface authentication"). A hook reads
+the run token from `.saw/daemon.json` — the same file it already reads for the
+port — and sends it as `Authorization: Bearer <token>` on every call. The call
+also sets `content-type: application/json` on every body it sends.
+
+A hook that finds no token, or whose token the daemon refuses, behaves exactly
+as it does when the daemon is down: no output, exit 0. This happens when
+`.saw/daemon.json` comes from an older version of `saw`. The hook reads the
+file on every call, so a new run of `saw up` repairs it with no other step.
+
 ## 1. SessionStart → `saw hook session-start`
 
 Purpose: give the agent its coordination context at session open.

@@ -81,6 +81,67 @@ Effects:
 `saw up` never touches the peer's machine and never opens any non-localhost
 listener except the relay client connection.
 
+## Local surface authentication (T057, FR-021)
+
+A bind to 127.0.0.1 stops other machines. It does not stop the member's own
+browser. While `saw up` runs, any page the member visits can post to the local
+API and can open the push channel, because neither is subject to the
+same-origin policy. So both surfaces authenticate every caller, on reads as
+well as on changes.
+
+**The run token.** Each run of `saw up` makes a new token. It goes into
+`.saw/daemon.json`, mode 0600, beside the port and the pid. That file is
+git-ignored and is already the file hooks and MCP tools read.
+
+**Who presents it, and how.**
+
+| Caller | How it presents the token |
+| --- | --- |
+| MCP tools (`saw mcp`) | `Authorization: Bearer <token>` from `.saw/daemon.json` |
+| Hooks (`saw hook …`) | `Authorization: Bearer <token>` from `.saw/daemon.json` |
+| The room page, HTTP | `Authorization: Bearer <token>`, read from the served HTML |
+| The room page, `/ws` | subprotocol `saw.token.<token>`, then `saw` |
+
+The page gets the token once, in the HTML the daemon serves it. A page on
+another origin cannot read that HTML, so it cannot get the token. Browser
+JavaScript cannot set a header on a WebSocket handshake, so the socket carries
+the token as a subprotocol rather than a query parameter: a subprotocol stays
+out of the request line, so it does not reach an access log or an address the
+member copies.
+
+**What the daemon refuses.**
+
+- Any request with an `Origin` that is not the server's own address — 403.
+- Any request a browser marks as other than `same-origin` in `Sec-Fetch-Site`
+  — 403. A static file also allows `none`, which is a navigation the member
+  starts.
+- Any request with no token, or with a token from another run — 401.
+- Any change with a content type that is not `application/json` — 415. This
+  alone stops the `<form enctype="text/plain">` vector, because a request that
+  must be JSON is always preflighted and there is no answer to a preflight.
+- Any `/ws` handshake that fails the same origin and token checks.
+
+There are no CORS headers on any answer, and the room page is served
+`no-store`, `nosniff`, `X-Frame-Options: DENY`, and a content security policy
+with `frame-ancestors 'none'`.
+
+**Upgrade.** The policy is fail closed. A `.saw/daemon.json` written by an
+older version holds no token, and an older `saw` on the PATH presents none.
+Both are refused. An MCP tool answers with the reason and the repair; a hook
+stays silent and exits 0, exactly as it does when the daemon is down, because
+a hook must never break the member's coding tool.
+
+Hooks and MCP tools read `.saw/daemon.json` on every call, so a new run of
+`saw up` repairs a stale or absent token with no other step. Only an older
+`saw` binary needs the coding tool to start again, because the coding tool
+spawns `saw mcp` and `saw hook` itself.
+
+A room page left open across a restart holds the token of the run that is
+gone, so its socket can never open again. When a socket fails to open, the
+page asks for itself again: a different token in the answer means a new run,
+and the page loads again to pick the token up. No answer at all means the
+daemon is down, and the page keeps retrying with what it has.
+
 ## Git conventions (documented in AGENT.md, not enforced by CLI)
 
 - Each agent works only on branches with its member's prefix
