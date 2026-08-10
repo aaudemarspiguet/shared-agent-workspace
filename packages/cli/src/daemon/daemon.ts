@@ -4,6 +4,7 @@
 // to this daemon. The daemon never touches the peer's machine.
 import type {
   ClaimResultFrame,
+  ErrorFrame,
   LogQuery,
   MessagePost,
   PresenceFrame,
@@ -98,6 +99,10 @@ export class Daemon {
   private client: RelayClient;
   private subscribers = new Set<(event: DaemonEvent) => void>();
   private pendingNotices: ClaimNotice[] = [];
+  /** The last error frame from the relay. It names a refused connection. */
+  private lastRelayError: ErrorFrame | undefined;
+  /** Set by `start` while it waits. A refused credential ends the wait. */
+  private onRelayRefused: (() => void) | undefined;
 
   constructor(options: DaemonOptions) {
     this.root = options.root;
@@ -158,8 +163,17 @@ export class Daemon {
           // Every reconnect drains the log spool. A run that ended while the
           // relay was away reaches the work log here, with its own
           // timestamps (T055, FR-015).
-          if (connected) void this.drainLogSpool();
+          if (connected) {
+            this.lastRelayError = undefined;
+            void this.drainLogSpool();
+          }
           this.emit({ kind: "connection", connected });
+        },
+        onServerError: (frame) => {
+          this.lastRelayError = frame;
+          // The relay refuses a bad credential once and then stops. There is
+          // nothing to wait for, so end the wait now with the reason.
+          if (frame.code === "auth_failed") this.onRelayRefused?.();
         }
       }
     );
@@ -173,30 +187,54 @@ export class Daemon {
   start(waitMs = 4000): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
+      const done = (value: boolean): void => {
+        if (settled) return;
+        settled = true;
+        // Clear the timer here, not with unref. A live timer holds the event
+        // loop open for the whole wait, so a relay that refuses the socket at
+        // once cannot let node exit before the caller prints anything. The
+        // clear then leaves no handle behind after the wait.
+        clearTimeout(timer);
+        unsubscribe();
+        this.onRelayRefused = undefined;
+        resolve(value);
+      };
+      // Nothing below can call `done` in the same tick: a connection change
+      // and a relay frame both need the network first.
       const unsubscribe = this.subscribe((event) => {
-        if (event.kind === "connection" && event.connected && !settled) {
-          settled = true;
-          unsubscribe();
-          resolve(true);
-        }
+        if (event.kind === "connection" && event.connected) done(true);
       });
+      this.onRelayRefused = () => done(false);
       this.client.connect();
-      setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          unsubscribe();
-          resolve(this.client.connected);
-        }
-      }, waitMs).unref?.();
+      const timer = setTimeout(() => done(this.client.connected), waitMs);
     });
   }
 
   stop(): void {
+    this.onRelayRefused = undefined;
     this.client.close();
   }
 
   get connected(): boolean {
     return this.client.connected;
+  }
+
+  /**
+   * A plain reason the relay connection is down, or undefined.
+   *
+   * Only a relay that answers gets a reason. A relay that is off gives no
+   * frame at all, so the daemon keeps retrying and says nothing here.
+   */
+  get relayProblem(): string | undefined {
+    const error = this.lastRelayError;
+    if (!error || this.connected) return undefined;
+    if (error.code === "auth_failed") {
+      return (
+        `the relay refused the credential in .saw/credential (${error.message}). ` +
+        "Ask your teammate for a new invite link and run saw join again."
+      );
+    }
+    return `${error.code}: ${error.message}`;
   }
 
   subscribe(fn: (event: DaemonEvent) => void): () => void {
@@ -244,14 +282,21 @@ export class Daemon {
     return outcome;
   }
 
-  /** Read messages from the local cache. */
+  /**
+   * Read messages from the local cache.
+   *
+   * This is the bounded read that the web room, `/api/messages`, and
+   * `room_read` all use, so it answers with the NEWEST messages after
+   * `sinceSeq`. `inject()` reads the oldest unread instead, because only
+   * that window is safe to move the read cursor over (T078).
+   */
   messages(
     sinceSeq = 0,
     limit = 200,
     workItem?: string
   ): { messages: StoredMessage[]; latest_seq: number } {
     return {
-      messages: this.state.messages(sinceSeq, limit, workItem),
+      messages: this.state.recentMessages(sinceSeq, limit, workItem),
       // Always the true latest seq of the room. A filter is a view: it must
       // never change the caller's sense of position.
       latest_seq: this.state.latestSeq()

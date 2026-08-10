@@ -14,9 +14,28 @@ this package touches your teammate's machine.
 ## Install and run
 
 Run `npm install` at the repo root. There is no build step. The bin shim
-loads `tsx` and runs the TypeScript source directly. Call the command as
-`node_modules/.bin/saw`, or run `npm link` in `packages/cli` once to put
-`saw` on your PATH.
+loads `tsx` and runs the TypeScript source directly.
+
+The install puts the command at `node_modules/.bin/saw`. That path is
+**not** on your PATH. Put it there once:
+
+```sh
+npm install                    # at the repo root
+cd packages/cli && npm link     # puts `saw` on your PATH
+which saw                       # must print a path
+```
+
+The full path works too, if you prefer not to link. Use
+`node_modules/.bin/saw` in place of `saw` in every command.
+
+**How other programs call saw.** `saw up` writes your saw command into
+the Claude Code hook entries and into the MCP server registration. It
+resolves the command first: the plain name `saw` when that name is on
+your PATH, and the node binary plus the absolute path of the script when
+it is not. Both forms start, so an unlinked install keeps its hooks and
+its MCP tools. A registration of the bare `saw` on a machine that has no
+`saw` on the PATH would give the agent no tools at all, so the command is
+never written that way.
 
 ## Commands
 
@@ -51,7 +70,12 @@ saw up [--port <web-port>] [--no-web]
 
 `saw up` starts the daemon, serves the web page (default port 7420), and installs
 the four hooks in `.claude/settings.json`. When the `claude` CLI is present, it
-also registers the MCP server (`claude mcp add saw -- saw mcp`).
+also registers the MCP server, then reads `claude mcp list` to check that the
+server really starts. The `mcp:` line of the output reports that check. A
+registration that cannot start is removed and added again.
+
+Two members on one machine need two web ports. Pass `--port`. A second
+`saw up` on a port in use stops with `EADDRINUSE`.
 
 Run the stdio MCP server. Coding tools spawn this. Do not run it by hand:
 
@@ -69,12 +93,18 @@ saw hook session-start | prompt-submit | pre-tool | stop
 
 | File          | What it is                                        | In git?    |
 |---------------|---------------------------------------------------|------------|
-| `config.json` | Workspace settings: ids, relay URL, members.      | Commit it. |
+| `config.json` | Workspace settings both members share: ids, relay URL, members, web port. | Commit it. |
+| `member.json` | Who you are here: your GitHub username and your branch prefix. | Ignored.   |
 | `credential`  | Your bearer token. Mode 0600. Never share it.     | Ignored.   |
-| `AGENT.md`    | Room rules for your coding agent.                 | Commit it. |
+| `AGENT.md`    | Room rules for your coding agent. `init` and `join` write your own. | Ignored.   |
 | `daemon.json` | Runtime info for a running daemon: web port, pid, run token. Mode 0600. | Ignored. |
 | `state.json`  | Local read cursor (last injected seq).            | Ignored.   |
 | `log-spool.jsonl` | Runs the relay has not accepted yet.          | Ignored.   |
+
+`config.json` is the only shared file. Commit it after `saw init`, and
+push it before your teammate runs `saw join`. Their `join` reads the
+relay URL from it. Without it, `join` falls back to the default relay URL
+and reports "the relay is not reachable".
 
 ## The local surface is authenticated
 

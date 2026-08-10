@@ -22,6 +22,8 @@ function api(path, init) {
 const state = {
   me: null,
   status: null,
+  // Is the push socket to the daemon open now? The composer needs it.
+  socketOpen: false,
   seen: new Set(),
   // Every feed entry the page holds, in arrival order. The work item filter
   // renders from this list, so it never refetches (T066).
@@ -33,6 +35,55 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+// ---- Connection state ----
+
+/** What a failed call to the daemon means. The daemon is down or stopping. */
+const DAEMON_DOWN = "The daemon did not answer. Is saw up still running?";
+
+/**
+ * The line under the composer that says why sending is off now.
+ * The page makes it, because it belongs to the composer, not to one message.
+ * The box above it keeps its own job: the reason one post failed.
+ */
+const offlineNote = el("div", "error");
+offlineNote.id = "composer-offline";
+offlineNote.hidden = true;
+$("composer").appendChild(offlineNote);
+
+/** Show one line in the composer error box. Text only, never markup. */
+function showComposerError(text) {
+  const box = $("composer-error");
+  box.textContent = text;
+  box.hidden = false;
+}
+
+/**
+ * Say why the room cannot take a message now. Return "" when it can.
+ *
+ * A message leaves this machine through the relay. A composer that looks live
+ * while the relay is down loses what the member writes, and the red relay pill
+ * in the top bar is far from the box they type in.
+ */
+function offlineReason() {
+  if (!state.socketOpen) return "Not connected to saw up. Your message cannot be sent.";
+  if (state.status && !state.status.relay_connected) {
+    return "The relay is not connected. Your message cannot reach your peer yet.";
+  }
+  return "";
+}
+
+/** Turn the send control on or off, and say why beside the text box. */
+function renderComposerState() {
+  const why = offlineReason();
+  const send = $("send-btn");
+  send.disabled = why !== "";
+  send.style.opacity = why ? "0.5" : "";
+  send.style.cursor = why ? "not-allowed" : "";
+  send.title = why;
+  offlineNote.textContent = why;
+  offlineNote.hidden = why === "";
+}
 
 // ---- Rendering ----
 
@@ -136,6 +187,7 @@ function renderStatus(status) {
 
   const relay = $("relay-dot");
   relay.className = "relay " + (status.relay_connected ? "on" : "off");
+  renderComposerState();
 
   const pauseBtn = $("pause-btn");
   pauseBtn.hidden = false;
@@ -226,6 +278,8 @@ function connect() {
   let opened = false;
   ws.onopen = () => {
     opened = true;
+    state.socketOpen = true;
+    renderComposerState();
   };
   ws.onmessage = (raw) => {
     let data;
@@ -253,6 +307,8 @@ function connect() {
     }
   };
   ws.onclose = () => {
+    state.socketOpen = false;
+    renderComposerState();
     setTimeout(connect, 1500);
     if (!opened) void recoverAfterFailedConnect();
   };
@@ -263,9 +319,10 @@ function connect() {
 $("composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = $("msg-body").value.trim();
-  const errBox = $("composer-error");
-  errBox.hidden = true;
+  $("composer-error").hidden = true;
   if (!body) return;
+  // The send control is off, but a keyboard can still submit a form.
+  if (offlineReason()) return;
   const payload = {
     type: $("msg-type").value,
     body,
@@ -276,30 +333,45 @@ $("composer").addEventListener("submit", async (e) => {
   const target = $("msg-target").value;
   if (target) payload.target = target;
 
-  const res = await api("/api/post", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  // The daemon can go down between two keystrokes. A rejected fetch must not
+  // escape this handler: the message would vanish with no word to the member.
+  let res;
+  try {
+    res = await api("/api/post", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  } catch {
+    showComposerError(DAEMON_DOWN + " Your text is still here.");
+    return;
+  }
   if (res.ok) {
     $("msg-body").value = "";
     return;
   }
   const answer = await res.json().catch(() => ({}));
-  errBox.textContent =
-    (answer.error && `${answer.error.code}: ${answer.error.message}`) || "post failed";
-  errBox.hidden = false;
+  showComposerError(
+    (answer.error && `${answer.error.code}: ${answer.error.message}`) || "post failed"
+  );
 });
 
 // ---- Pause control (T037) ----
 
 $("pause-btn").addEventListener("click", async () => {
   if (!state.status) return;
-  await api("/api/pause", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ paused: !state.status.paused })
-  });
+  // The button text only changes when the daemon sends the new status back.
+  // Without this guard a dead daemon leaves the button silent and unchanged.
+  try {
+    const res = await api("/api/pause", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ paused: !state.status.paused })
+    });
+    if (!res.ok) showComposerError("The daemon refused the pause control.");
+  } catch {
+    showComposerError(DAEMON_DOWN);
+  }
 });
 
 // ---- Tabs and log browser (T043) ----
@@ -346,12 +418,20 @@ async function loadLog() {
   const workItem = $("log-work-item").value.trim();
   if (workItem) params.set("work_item", workItem);
   params.set("limit", "100");
-  const res = await api("/api/log?" + params.toString());
-  if (!res.ok) {
-    list.appendChild(el("div", "empty", "The log is not available. Is the relay connected?"));
+  // The tab opens this. A rejected fetch here left the list empty with no word.
+  let data;
+  try {
+    const res = await api("/api/log?" + params.toString());
+    if (!res.ok) {
+      const why = "The log is not available. Is the relay connected?";
+      list.appendChild(el("div", "empty", why));
+      return;
+    }
+    data = await res.json();
+  } catch {
+    list.appendChild(el("div", "empty", DAEMON_DOWN));
     return;
   }
-  const data = await res.json();
   const entries = data.entries || [];
   if (entries.length === 0) {
     list.appendChild(el("div", "empty", "No recorded activity for this filter."));
@@ -368,4 +448,6 @@ $("log-work-item").addEventListener("keydown", (e) => {
   }
 });
 
+// The composer stays off until the socket opens and the relay reports in.
+renderComposerState();
 connect();

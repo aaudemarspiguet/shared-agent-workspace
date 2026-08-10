@@ -22,6 +22,13 @@ import {
 
 const STATIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "static");
 
+/**
+ * How long close() waits for the connections to go down on their own.
+ * After this it drops them all and returns. Ctrl-C is one press, so the
+ * member must never wait for a socket that does not answer.
+ */
+const CLOSE_DEADLINE_MS = 1000;
+
 const STATIC_FILES: Record<string, { file: string; type: string; token?: boolean }> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8", token: true },
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
@@ -33,6 +40,7 @@ export interface WebServer {
   port: number;
   /** The run token the page and every other local caller must present. */
   token: string;
+  /** Stop the server and every connection it holds. This always resolves. */
   close(): Promise<void>;
 }
 
@@ -63,6 +71,48 @@ function staticHeaders(type: string, port: number): Record<string, string> {
       `connect-src 'self' ws://localhost:${port} ws://127.0.0.1:${port}; ` +
       "img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
   };
+}
+
+/**
+ * Stop the server and every connection it holds. Always resolve.
+ *
+ * `wss.close()` only stops new upgrades. It does not end a socket that is
+ * already open, and `server.close()` waits for every open connection. So one
+ * open room page held `saw up` forever: the terminal never came back, and the
+ * caller had already removed the daemon file. Every live socket therefore goes
+ * down first, and idle connections go with it.
+ *
+ * The deadline is the last guard. When a connection does not go down, the
+ * server drops all of them and this promise resolves anyway. A caller may call
+ * close() again; the second call resolves too.
+ */
+function closeWebServer(server: Server, wss: WebSocketServer): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      resolve();
+    };
+    const deadline = setTimeout(() => {
+      server.closeAllConnections();
+      finish();
+    }, CLOSE_DEADLINE_MS);
+    // The timer must not keep the process alive by itself.
+    deadline.unref();
+
+    // End the live room sockets. This also runs each `close` handler, which
+    // unsubscribes the socket from the daemon.
+    for (const client of wss.clients) client.terminate();
+    wss.close();
+    // `server.close()` reports an error when the server is already down. The
+    // callback still runs, so a second close() resolves as well.
+    server.close(() => finish());
+    // A browser keeps an idle connection for the next request. Drop it, or
+    // the close above waits for the keep-alive timeout.
+    server.closeIdleConnections();
+  });
 }
 
 /** Start the web + API server for one daemon. Localhost only. */
@@ -146,11 +196,7 @@ export function startWebServer(daemon: Daemon, port: number): Promise<WebServer>
         server,
         port: boundPort,
         token: auth.token,
-        close: () =>
-          new Promise<void>((done) => {
-            wss.close();
-            server.close(() => done());
-          })
+        close: () => closeWebServer(server, wss)
       });
     });
   });

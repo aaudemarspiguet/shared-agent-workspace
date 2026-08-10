@@ -6,29 +6,198 @@ This guide proves the feature works. It runs two members ("alice" and
 "bob") against one relay. Use two machines, or two clones in separate
 directories on one machine.
 
+Do the three setup steps in order. Each step has a check. Do not start a
+scenario until every check passes.
+
 ## Prerequisites
 
 - Node.js 20+ and git on both member machines.
 - One shared git repository with a remote both members can push to.
-- Claude Code installed for at least one member (hooks scenarios).
-- A relay: `npx saw-relay` locally, or any self-hosted instance
-  (contracts/relay-protocol.md).
+- Claude Code on both member machines. Scenario 1 needs a live agent on
+  each side. Scenarios 3 and 4 need one on alice's side.
+- A clone of this repository on the machine that runs the relay. The
+  relay is not published to npm. You run it from source or from Docker.
+  Step 1 shows how.
 
-## Setup
+## Step 1 — Start the relay
+
+There is no `saw-relay` package on npm. `npx saw-relay` fails with a 404.
+Do not run `npx saw` either: `saw` on npm is an unrelated file-watcher by
+another author, not this project.
+
+Start the relay from a clone of this repository:
+
+```bash
+# At the repository root:
+npm install
+npm run dev --workspace @saw/relay
+```
+
+The relay prints the port and the database path, then stays in the
+foreground. The default port is 8787. The default database is
+`saw-relay.db` in the current directory. Two environment variables change
+that:
+
+| Variable         | Default        | Meaning                     |
+| ---------------- | -------------- | --------------------------- |
+| `SAW_RELAY_PORT` | `8787`         | TCP port to listen on       |
+| `SAW_RELAY_DB`   | `saw-relay.db` | Path of the SQLite database |
+
+```bash
+# Example: a different port and a database outside the repository.
+mkdir -p ~/saw
+SAW_RELAY_PORT=8899 SAW_RELAY_DB=~/saw/relay.db \
+  npm run dev --workspace @saw/relay
+```
+
+Make the folder first. The relay does not create it. A missing folder
+stops the relay with `Cannot open database because the directory does not
+exist`.
+
+**Check**: `curl http://localhost:8787/health` answers `{"ok":true}`.
+Use your port when you changed it.
+
+Docker is the other way to run the relay. The image builds from the
+repository root, because the relay uses the workspace package
+`@saw/shared`:
+
+```bash
+docker build -f packages/relay/Dockerfile -t saw-relay .
+docker run -d --name saw-relay -p 8787:8787 -v saw-relay-data:/data saw-relay
+```
+
+[packages/relay/README.md](../../packages/relay/README.md) is the full
+reference for the relay: both run modes, the environment variables, and
+the security notes. Read it before you put a relay on a network.
+
+**One relay serves both members.** Start it once. `ws://localhost:8787`
+works only for the machine that runs the relay. On two machines, give the
+other member the host of the relay machine, like
+`ws://relay-host.local:8787`. Use `wss://` behind TLS.
+
+## Step 2 — Get the `saw` command on your PATH
+
+Each member does this in their own clone. The monorepo install puts the
+command at `node_modules/.bin/saw`, which is **not** on your PATH.
+
+```bash
+# At the repository root of your clone:
+npm install
+cd packages/cli && npm link
+```
+
+**Check**: `which saw` prints a path. `saw --help` lists the commands
+`init`, `invite`, `join`, `up`, `mcp`, and `hook`.
+
+The full path works too, if you prefer not to link. Use
+`./node_modules/.bin/saw` in place of `saw` in every command below.
+
+**Why this step matters.** Every step after this one is a `saw` command.
+Without one of the two routes above, your shell answers
+`command not found: saw`, and you cannot start.
+
+`saw up` also writes your `saw` command into two places: the Claude Code
+hook entries, and the MCP server registration. It resolves that command
+itself. It uses the plain name `saw` when the name is on your PATH, and
+the node binary plus the absolute script path when it is not. Both forms
+work, so the full-path route does not cost you the hooks or the MCP
+tools. Read the `mcp:` line of the `saw up` output in Step 3 and confirm
+it before you start a scenario.
+
+## Step 3 — Create the workspace and join it
 
 ```bash
 # Machine A (alice) — in the repo clone
 saw init --name demo --relay ws://localhost:8787 --github alice
 saw invite --github bob            # prints a signed invite link
-saw up                             # daemon + MCP + hooks + web UI
+```
 
-# Machine B (bob) — in a clone of the same repo
+**Now commit and push the shared SAW config.** `saw init` lists the files
+it wrote and tells you which of them to commit. Commit what it names, and
+push it before bob runs `saw join`:
+
+```bash
+# Machine A (alice), still in the repo clone
+git add .saw .gitignore
+git commit -m "chore: add SAW workspace config"
+git push
+```
+
+`git add .saw` is safe. Git ignores your credential and your other
+member-local files, so this command stages the shared config only. It
+cannot leak your token.
+
+```bash
+# Machine B (bob) — in a clone of the same repository
+git pull                           # gets the shared SAW config
 saw join "<invite-link>" --github bob
+```
+
+**Do not skip the commit and push.** `saw join` reads the relay URL from
+the shared config in bob's clone. Without that file, join has no URL. It
+falls back to `ws://localhost:8787`. When your relay runs on any other
+port or host, join then stops with:
+
+```
+saw: join failed: the relay is not reachable
+```
+
+That message is misleading. It does not mean your relay is down. It means
+join looked at the default address and found nothing there. Do not debug
+a healthy relay. Push the config, run `git pull` in bob's clone, and join
+again.
+
+The other way is to pass the URL by hand. Use this when the config is not
+committed yet, or when the two members use different relay hosts:
+
+```bash
+saw join "<invite-link>" --github bob --relay ws://relay-host.local:8787
+```
+
+Then start the stack on both machines:
+
+```bash
 saw up
 ```
 
-Expected: both `saw up` outputs show `relay: connected` and both members
-listed. Both web UIs at `http://localhost:7420` show alice and bob, with
+**Two clones on one machine**: give each member a different web port,
+because both stacks bind the same address. The second `saw up` on the
+same port stops with an `EADDRINUSE` error.
+
+```bash
+saw up --port 7420      # alice
+saw up --port 7421      # bob
+```
+
+Expected: each `saw up` prints a block like this, with `connected` on the
+relay line and both members listed once the second member is up.
+
+```
+Starting SAW for "demo" (bob)...
+SAW is up for "demo".
+  member:  bob
+  relay:   ws://localhost:8787 — connected
+  members: bob (online), alice
+  web:     http://localhost:7421
+  hooks:   installed SessionStart, UserPromptSubmit, PreToolUse, Stop (…)
+  mcp:     registered with Claude Code and connected
+```
+
+**Read the `mcp:` line.** It must end with `connected`. `saw up` adds the
+server, then asks Claude Code whether the server really starts, so this
+line reports the truth and not the intent. Two other answers are fine:
+`already registered with Claude Code and connected`, and
+`re-registered with Claude Code and connected …`.
+
+Anything else stops you here. `not registered: the claude CLI is not on
+PATH` means Claude Code is missing on this machine. `NOT working (…).
+Your agent has no SAW tools` means the server does not answer; the line
+prints the `claude mcp add` command to run by hand. Do not start
+Scenario 1 until this line says `connected`. Without it the agent has no
+SAW tools, and Scenarios 1, 3, and 4 fail in a way that looks like a bug
+in SAW.
+
+Open the web page of each member. Both pages show alice and bob, with
 presence dots live. (Covers cli.md contract; SC-001: this setup fits in
 15 minutes.)
 
@@ -110,3 +279,6 @@ browser with the content gone. A run must never be lost to the check
 All five scenarios behave as stated; every acceptance scenario in
 [spec.md](./spec.md) maps to one of them; no scenario requires SAW to move
 anything between members except JSON messages and git refs.
+
+Record the outcome in [quickstart-results.md](./quickstart-results.md).
+Say which surfaces you drove, and name every step you did not do.

@@ -1,18 +1,30 @@
 // Unit tests for the .saw file helpers in config.ts.
 // Each test gets a fresh temp dir. The cleanup removes it.
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendGitignore,
+  configPath,
   credentialPath,
   GITIGNORE_LINES,
+  memberConfigPath,
   readConfig,
   readCredential,
+  readMemberConfig,
+  readSharedConfig,
   remotesMatch,
   writeConfig,
   writeCredential,
+  writeSharedConfig,
   type SawConfig
 } from "../src/config.js";
 
@@ -54,6 +66,16 @@ describe("credential", () => {
   });
 });
 
+/** Write a raw JSON file, as an old version or as git would leave it. */
+function writeRaw(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(value, null, 2) + "\n", "utf8");
+}
+
+function readRaw(path: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+}
+
 describe("config", () => {
   it("returns undefined when config.json is missing", () => {
     expect(readConfig(root)).toBeUndefined();
@@ -62,6 +84,64 @@ describe("config", () => {
   it("round-trips a config through write and read", () => {
     writeConfig(root, CONFIG);
     expect(readConfig(root)).toEqual(CONFIG);
+  });
+
+  it("keeps the member fields out of the shared file", () => {
+    writeConfig(root, CONFIG);
+    const shared = readRaw(configPath(root));
+    expect(shared).not.toHaveProperty("github_username");
+    expect(shared).not.toHaveProperty("branch_prefix");
+    expect(shared.workspace_id).toBe("ws_123");
+    const member = readRaw(memberConfigPath(root));
+    expect(member).toEqual({ github_username: "alice", branch_prefix: "alice/" });
+  });
+
+  it("returns undefined when the clone has the shared file but no member", () => {
+    // A fresh clone: git brought config.json, but this member did not join.
+    writeSharedConfig(root, CONFIG);
+    expect(readSharedConfig(root)?.workspace_id).toBe("ws_123");
+    expect(readMemberConfig(root)).toBeUndefined();
+    // It must not give the teammate's identity to this clone.
+    expect(readConfig(root)).toBeUndefined();
+  });
+
+  it("loads a config written by the old single-file layout", () => {
+    writeRaw(configPath(root), CONFIG);
+    expect(readConfig(root)).toEqual(CONFIG);
+    expect(readMemberConfig(root)).toEqual({
+      github_username: "alice",
+      branch_prefix: "alice/"
+    });
+  });
+
+  it("fills a missing branch_prefix from the username in the old layout", () => {
+    const old: Record<string, unknown> = { ...CONFIG };
+    delete old.branch_prefix;
+    writeRaw(configPath(root), old);
+    expect(readConfig(root)?.branch_prefix).toBe("alice/");
+  });
+
+  it("moves the member fields out of an old config.json on the next write", () => {
+    writeRaw(configPath(root), CONFIG);
+    const loaded = readConfig(root);
+    expect(loaded).toBeDefined();
+    writeConfig(root, loaded as SawConfig);
+    expect(readRaw(configPath(root))).not.toHaveProperty("github_username");
+    expect(readRaw(memberConfigPath(root)).github_username).toBe("alice");
+  });
+
+  it("keeps each clone on its own identity when the shared file travels", () => {
+    const other = mkdtempSync(join(tmpdir(), "saw-unit-b-"));
+    try {
+      writeConfig(root, CONFIG);
+      writeConfig(other, { ...CONFIG, github_username: "bob", branch_prefix: "bob/" });
+      // bob commits .saw/config.json and alice pulls it.
+      writeRaw(configPath(root), readRaw(configPath(other)));
+      expect(readConfig(root)?.github_username).toBe("alice");
+      expect(readConfig(other)?.github_username).toBe("bob");
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
   });
 });
 
@@ -96,7 +176,15 @@ describe("remotesMatch", () => {
 });
 
 describe("appendGitignore", () => {
-  it("creates .gitignore with the three .saw lines", () => {
+  it("ignores the per-member files", () => {
+    // These two name one member. Git must never carry them to the peer.
+    expect(GITIGNORE_LINES).toContain(".saw/member.json");
+    expect(GITIGNORE_LINES).toContain(".saw/AGENT.md");
+    // The shared file stays committable.
+    expect(GITIGNORE_LINES).not.toContain(".saw/config.json");
+  });
+
+  it("creates .gitignore with the .saw lines", () => {
     appendGitignore(root);
     const content = readFileSync(join(root, ".gitignore"), "utf8");
     for (const line of GITIGNORE_LINES) {
