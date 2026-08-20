@@ -66,19 +66,124 @@ export const GitRefSchema = z
     }
   });
 
+/** A code fence may carry this many lines before it is a file, not a snippet. */
+const MAX_FENCE_LINES = 20;
+
+/**
+ * A flattened fence may carry this many characters before it is a file.
+ *
+ * The backstop for a payload whose language ends no line with punctuation, so
+ * `estimateFlatLines` cannot read the shape. It is a proxy for the line rule
+ * and cannot be as exact, so it is set low: the field it protects most,
+ * `why_trigger`, is capped at 600 characters, and a threshold near that cap
+ * would never fire.
+ */
+const MAX_FLAT_FENCE_CHARS = 400;
+
+/**
+ * Markers that identify a diff wherever they sit in the text.
+ *
+ * None of these is anchored to the start of a line. They were, and a caller
+ * that collapses whitespace before sending — the CLI does, to fit a prompt
+ * into `why_trigger` — left no line for them to anchor to, so every one of
+ * them missed and the pasted code crossed the boundary unredacted (T080).
+ *
+ * The hunk header is matched by its real shape, `@@ -l[,s] +l[,s] @@`, rather
+ * than by `@@ ... @@`. Unanchored, the loose form would match any two `@@` in
+ * one message, and a rejected post is a message the member does not get to
+ * send. The exact form is both anchor-free and harder to trip by accident.
+ */
+const DIFF_MARKERS: RegExp[] = [
+  /--- a\//,
+  /\+\+\+ b\//,
+  /@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/,
+  /(?:^|\s)diff --git /
+];
+
+/**
+ * Estimate how many lines a payload had before its whitespace was collapsed.
+ *
+ * Flattening destroys the newlines but leaves the punctuation that ended each
+ * line. Counting those recovers the shape well enough to apply the SAME rule
+ * as the unflattened case, rather than inventing a second one: thirty
+ * statements of `const x = 1;` read as thirty-one lines whether or not the
+ * newlines survived.
+ */
+function estimateFlatLines(flat: string): number {
+  return (flat.match(/[;{}]/g)?.length ?? 0) + 1;
+}
+
+/**
+ * Judge one code fence payload, or return null when it is a fair snippet.
+ * `inner` is the text between the fence markers, info string included.
+ */
+function measureFencePayload(inner: string): string | null {
+  const firstBreak = inner.indexOf("\n");
+  if (firstBreak !== -1) {
+    // The first line is the info string (the language tag), not payload.
+    const lines = inner.slice(firstBreak + 1).split("\n").length;
+    return lines > MAX_FENCE_LINES ? `code fence with ${lines} lines` : null;
+  }
+  // No newline left to count. Read the shape instead, and fall back to size.
+  const flat = inner.trim();
+  const estimated = estimateFlatLines(flat);
+  if (estimated > MAX_FENCE_LINES) {
+    return `flattened code fence, about ${estimated} lines`;
+  }
+  if (flat.length > MAX_FLAT_FENCE_CHARS) {
+    return `flattened code fence with ${flat.length} chars`;
+  }
+  return null;
+}
+
+/**
+ * Judge the tail after an opening fence marker that never closed.
+ *
+ * Length alone cannot decide this one. Prose mentions a fence marker too —
+ * "wrap it in ```" is a normal thing to write to a teammate — and everything
+ * after that marker is then the rest of an ordinary message. Measuring it by
+ * line count or by size rejected a plain end-of-day handoff that held no code
+ * at all, and a rejected post is a message the member never gets to send.
+ *
+ * So the tail must read as code before it is measured. `estimateFlatLines`
+ * counts the punctuation that ends a statement, which prose does not carry in
+ * that density. The size backstop does not apply here: it exists for a payload
+ * whose shape cannot be read, and an unreadable shape is exactly what an
+ * ordinary sentence looks like.
+ */
+function measureUnterminatedTail(tail: string): string | null {
+  const flat = tail.trim();
+  const estimated = estimateFlatLines(flat.replace(/\s+/g, " "));
+  if (estimated <= MAX_FENCE_LINES) return null;
+  return measureFencePayload(tail);
+}
+
 /**
  * Find smuggled code in a message body.
  * Returns a short summary of the match, or null when the body is clean.
  * The summary must not echo the body itself.
  */
 export function findSmuggledContent(body: string): string | null {
-  const fence = /```[^\n]*\n([\s\S]*?)```/g;
+  // The opening marker no longer requires a newline after it. Requiring one
+  // meant a flattened fence was not a fence at all and was never measured.
+  const fence = /```([\s\S]*?)```/g;
   let m: RegExpExecArray | null;
   while ((m = fence.exec(body)) !== null) {
-    const lines = (m[1] ?? "").split("\n").length;
-    if (lines > 20) return `code fence with ${lines} lines`;
+    const verdict = measureFencePayload(m[1] ?? "");
+    if (verdict) return verdict;
   }
-  if (/^--- a\//m.test(body) || /^\+\+\+ b\//m.test(body) || /^@@ [^\n]*@@/m.test(body)) {
+  // A fence with no closing marker. The pair above never sees one, and this
+  // is the common shape rather than the rare one: a caller that cuts a paste
+  // to fit a length cap drops the end of it, and `why_trigger` is capped at
+  // 600 characters, which a real paste passes easily. The markers pair from
+  // the left, so an odd count leaves the last one unmatched and everything
+  // after it is payload.
+  const markers = body.match(/```/g)?.length ?? 0;
+  if (markers % 2 === 1) {
+    const verdict = measureUnterminatedTail(body.slice(body.lastIndexOf("```") + 3));
+    if (verdict) return verdict;
+  }
+  if (DIFF_MARKERS.some((re) => re.test(body))) {
     return "unified diff markers";
   }
   if (/[A-Za-z0-9+/=]{512,}/.test(body)) {
