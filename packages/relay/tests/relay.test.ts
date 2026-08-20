@@ -354,6 +354,68 @@ describe("relay protocol", () => {
     bob.close();
   });
 
+  it("answers a bounded log query with the newest entries, oldest first (T079)", async () => {
+    const alice = await connect(workspaceId, aliceToken);
+
+    // Twelve runs, oldest first, each one second apart so the order is the
+    // append order and nothing depends on how fast the test machine is.
+    const total = 12;
+    const first = Date.now() - total * 1000;
+    const label = (n: number) => `t079-run-${String(n).padStart(2, "0")}`;
+    for (let n = 1; n <= total; n += 1) {
+      const ended = new Date(first + n * 1000).toISOString();
+      alice.send({
+        kind: "log_append",
+        entry: {
+          started_at: new Date(first + n * 1000 - 500).toISOString(),
+          ended_at: ended,
+          what: { tools_used: { Edit: 1 } },
+          why_trigger: label(n),
+          work_item: "t079-order"
+        }
+      });
+    }
+    // Every append is answered, so waiting for the last one means all twelve
+    // are stored before the query runs.
+    await alice.waitFor(is("log_ok"), 5000);
+    for (let i = 0; i < 100; i += 1) {
+      const stored = relay.store.queryLog(workspaceId, { workItem: "t079-order", limit: 200 });
+      if (stored.length === total) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    // The bug: this returned runs 01-05, so a workspace past the limit froze
+    // on its first runs and never showed another one.
+    const limit = 5;
+    alice.send({
+      kind: "log_query",
+      query: { member: "any", work_item: "t079-order", limit },
+      peer_activity: false
+    });
+    const page = await alice.waitFor(
+      is("log_result", (f) => f.entries.some((e) => e.work_item === "t079-order"))
+    );
+    const got = page.entries
+      .filter((e) => e.work_item === "t079-order")
+      .map((e) => e.why_trigger);
+    expect(got).toEqual([label(8), label(9), label(10), label(11), label(12)]);
+
+    // Ascending time order is part of the contract: `work_log` and the web
+    // log browser both render the answer as it arrives.
+    const times = page.entries.map((e) => Date.parse(e.ended_at));
+    expect([...times].sort((a, b) => a - b)).toEqual(times);
+
+    // The newest run must also be reachable through an unfiltered query, the
+    // one the web log browser makes.
+    alice.send({ kind: "log_query", query: { member: "any", limit: 3 }, peer_activity: false });
+    const recent = await alice.waitFor(
+      is("log_result", (f) => f.entries.length <= 3 && f.entries.length > 0)
+    );
+    expect(recent.entries.map((e) => e.why_trigger)).toContain(label(total));
+
+    alice.close();
+  });
+
   it("refuses a frame over the payload cap and stays up (T070)", async () => {
     const alice = await connect(workspaceId, aliceToken);
     const bob = await connect(workspaceId, bobToken);
