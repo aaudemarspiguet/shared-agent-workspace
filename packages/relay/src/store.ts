@@ -448,26 +448,46 @@ export class RelayStore {
     );
   }
 
+  /**
+   * The NEWEST log entries that match, oldest first.
+   *
+   * A bounded query must answer with the end of the log, not its front. The
+   * front is the first day of the workspace, which no reader asks for: the
+   * web log browser asks for 100 entries and `work_log` defaults to 50, so
+   * taking the front froze both on the first runs of the workspace and hid
+   * every later one permanently. Boundary rejections are stored here too, so
+   * the log passes those counts sooner than the run count suggests. The same
+   * path answers `peer_activity`, which made "what did my teammate do" report
+   * the oldest history rather than recent work (T079, FR-016, FR-019, SC-003).
+   *
+   * The inner query takes the newest window; the outer one puts it back into
+   * ascending time order, so no caller changes. `rowid` breaks a tie: two
+   * entries can share an `ended_at` to the millisecond, and it is the append
+   * order that decides which of those is newer.
+   */
   queryLog(
     workspaceId: string,
     filter: { memberId?: string; workItem?: string; since?: string; limit: number }
   ): StoredLogEntry[] {
-    let sql = "SELECT * FROM run_log WHERE workspace_id = ?";
+    // `rowid` is not a column of a subquery result, so name it in the inner
+    // select for the outer ORDER BY to reach. The extra field is ignored below.
+    let inner = "SELECT *, rowid AS row_order FROM run_log WHERE workspace_id = ?";
     const args: unknown[] = [workspaceId];
     if (filter.memberId) {
-      sql += " AND member_id = ?";
+      inner += " AND member_id = ?";
       args.push(filter.memberId);
     }
     if (filter.workItem) {
-      sql += " AND work_item = ?";
+      inner += " AND work_item = ?";
       args.push(filter.workItem);
     }
     if (filter.since) {
-      sql += " AND ended_at >= ?";
+      inner += " AND ended_at >= ?";
       args.push(filter.since);
     }
-    sql += " ORDER BY ended_at LIMIT ?";
+    inner += " ORDER BY ended_at DESC, rowid DESC LIMIT ?";
     args.push(filter.limit);
+    const sql = `SELECT * FROM (${inner}) ORDER BY ended_at ASC, row_order ASC`;
     const rows = this.db.prepare(sql).all(...args) as Array<{
       id: string;
       member_id: string;
