@@ -1,7 +1,12 @@
 # Contract: Claude Code Hooks Adapter
 
 The adapter is a set of `saw hook <event>` entry points registered in the
-workspace's `.claude/settings.json` by `saw up`. Each hook reads the
+workspace's `.claude/settings.local.json` by `saw up`. That file is personal,
+not shared: the hook command carries an absolute path to this member's node
+and this member's checkout, so a committed file would hand the other member a
+command that does not exist on their machine, and both members would collide
+on it at every `saw up` (T065). `saw init` and `saw join` add it to
+`.gitignore`. Each hook reads the
 Claude Code hook JSON on stdin, talks only to the local daemon over
 localhost HTTP, and answers with hook JSON on stdout. Hooks never talk to
 the relay directly and never read the peer's data.
@@ -162,7 +167,7 @@ Rules a reader can rely on:
 The same path covers a relay-side error and the request timeout, not only a
 hard disconnect.
 
-## Registration shape (written by `saw up`)
+## Registration shape (written by `saw up` into `.claude/settings.local.json`)
 
 ```json
 {

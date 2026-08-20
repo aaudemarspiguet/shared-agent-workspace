@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 function settingsPath(): string {
-  return join(root, ".claude", "settings.json");
+  return join(root, ".claude", "settings.local.json");
 }
 
 function readSettings(): Settings {
@@ -49,7 +49,7 @@ function readSettings(): Settings {
 }
 
 describe("installHooks", () => {
-  it("writes all four hook events into .claude/settings.json", () => {
+  it("writes all four hook events into .claude/settings.local.json", () => {
     const result = installHooks(root, "saw");
     expect(result.added).toEqual(EVENTS);
     expect(result.path).toBe(settingsPath());
