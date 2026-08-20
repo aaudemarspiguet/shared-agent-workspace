@@ -368,7 +368,10 @@ export const GITIGNORE_LINES = [
   ".saw/daemon.json",
   ".saw/state.json",
   ".saw/log-spool.jsonl",
-  ".saw/log-spool.jsonl.tmp"
+  ".saw/log-spool.jsonl.tmp",
+  // `saw up` writes this member's hook entries here. The command inside holds
+  // an absolute path to their own machine, so it is never shareable (T065).
+  ".claude/settings.local.json"
 ];
 
 const GITIGNORE_HEADER = "# SAW member-local files";

@@ -1,5 +1,9 @@
 // Hook registration (part of T021).
-// saw up writes the four hook entries into the repo's .claude/settings.json.
+// saw up writes the four hook entries into .claude/settings.local.json.
+// That file is personal, not shared. The hook command holds an absolute path
+// to this member's node and this member's checkout, so a shared file would
+// hand the other member a command that does not exist on their machine, and
+// both members editing it would collide on every `saw up` (T065).
 // The merge keeps every setting that is already there.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -96,7 +100,7 @@ export interface InstallResult {
 
 /** Install or verify the four hook entries. Idempotent. */
 export function installHooks(root: string, commandBase = sawHookCommandBase()): InstallResult {
-  const path = join(root, ".claude", "settings.json");
+  const path = join(root, ".claude", "settings.local.json");
   let settings: SettingsFile = {};
   try {
     settings = JSON.parse(readFileSync(path, "utf8")) as SettingsFile;

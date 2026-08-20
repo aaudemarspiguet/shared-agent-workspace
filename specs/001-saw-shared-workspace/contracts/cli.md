@@ -74,7 +74,7 @@ Effects:
    tool; `saw up` registers it if not present — for Claude Code via
    `claude mcp add saw -- saw mcp`).
 3. Installs/verifies the Claude Code hooks adapter entries in
-   `.claude/settings.json` (see contracts/hooks-adapter.md).
+   `.claude/settings.local.json` (see contracts/hooks-adapter.md).
 4. Serves the web interface at `http://localhost:<port>`.
 5. Prints: relay status, member presence, web URL.
 
