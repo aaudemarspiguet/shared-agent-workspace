@@ -4,6 +4,7 @@
 // to this daemon. The daemon never touches the peer's machine.
 import type {
   ClaimResultFrame,
+  ErrorFrame,
   LogQuery,
   MessagePost,
   PresenceFrame,
@@ -14,12 +15,10 @@ import type {
 } from "@saw/shared";
 import { readConfig, readCredential, type SawConfig } from "../config.js";
 import { relayUrls } from "../relay-http.js";
-import {
-  RelayClient,
-  type LogAppendOutcome,
-  type PostOutcome
-} from "./client.js";
+import { RelayClient, type PostOutcome } from "./client.js";
 import { ReadCursor } from "./cursor.js";
+import { generateLocalToken } from "./local-auth.js";
+import { LogSpool } from "./log-spool.js";
 import { PauseMirror } from "./pause.js";
 import { RunContext } from "./run-context.js";
 import { RoomState, type ClaimNotice, type WorkItemView } from "./state.js";
@@ -65,9 +64,22 @@ export interface PeerActivity {
   note: string;
 }
 
+/**
+ * The result of one Stop hook run.
+ *
+ * `ok` reports what the relay did. `spooled` reports that the run is held
+ * locally and goes to the work log at the next reconnect. A caller that sees
+ * `ok: false, spooled: true` must not retry: a retry would log the run twice.
+ */
+export type RunStopOutcome =
+  | { ok: true; id: string; spooled: false }
+  | { ok: false; message: string; spooled: boolean };
+
 export interface DaemonOptions {
   root: string;
   clientName?: string;
+  /** Cap on unsent runs held in .saw/log-spool.jsonl. Tests set it small. */
+  logSpoolCapacity?: number;
 }
 
 export class Daemon {
@@ -77,9 +89,20 @@ export class Daemon {
   readonly cursor: ReadCursor;
   readonly pauseMirror: PauseMirror;
   readonly runContext: RunContext;
+  /**
+   * The run token for the local surfaces (T057). It is new for each daemon.
+   * `saw up` writes it into .saw/daemon.json for hooks and MCP tools, and the
+   * web server hands it to the room page in the served HTML.
+   */
+  readonly localToken = generateLocalToken();
+  readonly logSpool: LogSpool;
   private client: RelayClient;
   private subscribers = new Set<(event: DaemonEvent) => void>();
   private pendingNotices: ClaimNotice[] = [];
+  /** The last error frame from the relay. It names a refused connection. */
+  private lastRelayError: ErrorFrame | undefined;
+  /** Set by `start` while it waits. A refused credential ends the wait. */
+  private onRelayRefused: (() => void) | undefined;
 
   constructor(options: DaemonOptions) {
     this.root = options.root;
@@ -93,6 +116,7 @@ export class Daemon {
     this.cursor = new ReadCursor(options.root);
     this.pauseMirror = new PauseMirror(config.github_username);
     this.runContext = new RunContext(config.github_username);
+    this.logSpool = new LogSpool(options.root, options.logSpoolCapacity);
 
     this.client = new RelayClient(
       {
@@ -136,7 +160,20 @@ export class Daemon {
           this.emit({ kind: "pause_state", pause: frame });
         },
         onConnectionChange: (connected) => {
+          // Every reconnect drains the log spool. A run that ended while the
+          // relay was away reaches the work log here, with its own
+          // timestamps (T055, FR-015).
+          if (connected) {
+            this.lastRelayError = undefined;
+            void this.drainLogSpool();
+          }
           this.emit({ kind: "connection", connected });
+        },
+        onServerError: (frame) => {
+          this.lastRelayError = frame;
+          // The relay refuses a bad credential once and then stops. There is
+          // nothing to wait for, so end the wait now with the reason.
+          if (frame.code === "auth_failed") this.onRelayRefused?.();
         }
       }
     );
@@ -150,30 +187,54 @@ export class Daemon {
   start(waitMs = 4000): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
+      const done = (value: boolean): void => {
+        if (settled) return;
+        settled = true;
+        // Clear the timer here, not with unref. A live timer holds the event
+        // loop open for the whole wait, so a relay that refuses the socket at
+        // once cannot let node exit before the caller prints anything. The
+        // clear then leaves no handle behind after the wait.
+        clearTimeout(timer);
+        unsubscribe();
+        this.onRelayRefused = undefined;
+        resolve(value);
+      };
+      // Nothing below can call `done` in the same tick: a connection change
+      // and a relay frame both need the network first.
       const unsubscribe = this.subscribe((event) => {
-        if (event.kind === "connection" && event.connected && !settled) {
-          settled = true;
-          unsubscribe();
-          resolve(true);
-        }
+        if (event.kind === "connection" && event.connected) done(true);
       });
+      this.onRelayRefused = () => done(false);
       this.client.connect();
-      setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          unsubscribe();
-          resolve(this.client.connected);
-        }
-      }, waitMs).unref?.();
+      const timer = setTimeout(() => done(this.client.connected), waitMs);
     });
   }
 
   stop(): void {
+    this.onRelayRefused = undefined;
     this.client.close();
   }
 
   get connected(): boolean {
     return this.client.connected;
+  }
+
+  /**
+   * A plain reason the relay connection is down, or undefined.
+   *
+   * Only a relay that answers gets a reason. A relay that is off gives no
+   * frame at all, so the daemon keeps retrying and says nothing here.
+   */
+  get relayProblem(): string | undefined {
+    const error = this.lastRelayError;
+    if (!error || this.connected) return undefined;
+    if (error.code === "auth_failed") {
+      return (
+        `the relay refused the credential in .saw/credential (${error.message}). ` +
+        "Ask your teammate for a new invite link and run saw join again."
+      );
+    }
+    return `${error.code}: ${error.message}`;
   }
 
   subscribe(fn: (event: DaemonEvent) => void): () => void {
@@ -221,14 +282,21 @@ export class Daemon {
     return outcome;
   }
 
-  /** Read messages from the local cache. */
+  /**
+   * Read messages from the local cache.
+   *
+   * This is the bounded read that the web room, `/api/messages`, and
+   * `room_read` all use, so it answers with the NEWEST messages after
+   * `sinceSeq`. `inject()` reads the oldest unread instead, because only
+   * that window is safe to move the read cursor over (T078).
+   */
   messages(
     sinceSeq = 0,
     limit = 200,
     workItem?: string
   ): { messages: StoredMessage[]; latest_seq: number } {
     return {
-      messages: this.state.messages(sinceSeq, limit, workItem),
+      messages: this.state.recentMessages(sinceSeq, limit, workItem),
       // Always the true latest seq of the room. A filter is a view: it must
       // never change the caller's sense of position.
       latest_seq: this.state.latestSeq()
@@ -329,10 +397,39 @@ export class Daemon {
     });
   }
 
-  /** Compose and append the automatic run summary (T039/T040). */
-  runStop(what: RunWhat): Promise<LogAppendOutcome> {
+  /**
+   * Compose and append the automatic run summary (T039/T040).
+   *
+   * A relay that is down, slow, or angry must not cost the run its log entry
+   * (FR-015). The entry goes to the local spool instead, and the next
+   * reconnect sends it with the timestamps it has now (T055).
+   */
+  async runStop(what: RunWhat): Promise<RunStopOutcome> {
     const entry = this.runContext.compose(what, this.state.myActiveWorkItem());
-    return this.client.logAppend(entry);
+    const outcome = await this.client.logAppend(entry);
+    if (outcome.ok) return { ok: true, id: outcome.id, spooled: false };
+    let spooled = false;
+    try {
+      this.logSpool.add(entry);
+      spooled = true;
+    } catch {
+      // The spool is best effort and already swallows file errors. This
+      // guard only makes sure no path out of the Stop hook can throw.
+    }
+    return { ok: false, message: outcome.message, spooled };
+  }
+
+  /**
+   * Send every spooled run to the relay, oldest first.
+   * Never rejects: the caller is an event handler, not a request.
+   */
+  async drainLogSpool(): Promise<number> {
+    try {
+      const result = await this.logSpool.drain((entry) => this.client.logAppend(entry));
+      return result.sent;
+    } catch {
+      return 0;
+    }
   }
 
   /** Query the work log. */

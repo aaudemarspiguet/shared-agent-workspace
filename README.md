@@ -11,10 +11,19 @@ monorepo setup, `packages/shared` (boundary schemas, frozen — change only
 via a PR both members approve), `packages/relay` (full protocol), and
 `packages/cli` (the `saw` command: daemon, five MCP tools, four Claude
 Code hooks, local web page). Two-member integration tests cover the four
-user stories plus reconnect replay (`tests/integration/`). Open: the
-two-machine quickstart re-run with live Claude Code sessions (T053 was
-validated with two clones on one machine — see
-`specs/001-saw-shared-workspace/quickstart-results.md`) and issue
+user stories plus reconnect replay (`tests/integration/`).
+
+**Open, and read this before you demo SAW**: a readiness pass in August
+2026 set the product up the way a new pair does — from the written
+steps, not from the test harness — and it hit blockers that the tests
+never saw. The tests drive the local HTTP API directly, so they step over
+the parts a human touches: how you get the relay, how the `saw` command
+reaches your PATH, and which files you must commit between `saw invite`
+and `saw join`. `specs/001-saw-shared-workspace/quickstart.md` now
+carries corrected, executed steps. Treat it as the source for setup.
+`specs/001-saw-shared-workspace/quickstart-results.md` records the older
+scripted run and states plainly what that run did not cover. Still open:
+a two-machine run with live Claude Code sessions on both sides, and issue
 bookkeeping. See the checkboxes in
 `specs/001-saw-shared-workspace/tasks.md`.
 
@@ -28,7 +37,9 @@ bookkeeping. See the checkboxes in
 | `specs/001-saw-shared-workspace/research.md` | Design decisions and why |
 | `specs/001-saw-shared-workspace/data-model.md` | Entities and validation rules |
 | `specs/001-saw-shared-workspace/contracts/` | MCP tools, relay protocol, CLI, hooks |
-| `specs/001-saw-shared-workspace/quickstart.md` | End-to-end validation scenarios |
+| `specs/001-saw-shared-workspace/quickstart.md` | Setup steps and end-to-end validation scenarios. Start here to run SAW. |
+| `packages/relay/README.md` | How to run the relay: Node or Docker, ports, database, security |
+| `packages/cli/README.md` | The `saw` command: install, commands, hooks, MCP tools, web page |
 | `specs/001-saw-shared-workspace/tasks.md` | 53 ordered tasks + the Ownership table. Implementation follows this list. |
 | `.github/CODEOWNERS` | Review gate per package (see Work split below) |
 | `.claude/skills/` | The `/speckit-*` commands for Claude Code |
@@ -44,6 +55,33 @@ Install these before you start:
    ship with this repo. No extra setup is needed.
 4. **Node.js 20+** — the implementation uses TypeScript on Node
    (see `plan.md`). You need this when you build and run SAW.
+
+## Run SAW
+
+Follow `specs/001-saw-shared-workspace/quickstart.md`. It has the three
+setup steps in order. In short:
+
+```bash
+npm install                          # at the repo root
+cd packages/cli && npm link          # puts `saw` on your PATH
+```
+
+The relay runs in the foreground. Give it its own terminal:
+
+```bash
+npm run dev --workspace @saw/relay   # answers on port 8787
+```
+
+Three points that cost people an hour each:
+
+- There is no `saw-relay` package on npm, and the `saw` package on npm is
+  a different project. Run the relay from this repository or from
+  `packages/relay/Dockerfile`.
+- The `saw` command is not on your PATH after `npm install`. It sits at
+  `node_modules/.bin/saw`. Link it, or call it by full path.
+- Between `saw invite` and your teammate's `saw join`, commit and push the
+  shared SAW config that `saw init` names. Without it, join cannot find
+  the relay and reports "the relay is not reachable", which is false.
 
 Optional:
 
@@ -105,8 +143,8 @@ track **what is done**. `/speckit-implement` and `/speckit-converge` read
 3. Create `.claude/settings.local.json` with the deny rules shown above.
    Restart Claude Code. Do not commit this file (it is git-ignored).
 4. Self-assign your issues (#4, #15–#21, #25–#30, #34–#40, #42–#43, #46).
-5. Run `npm install` at the repo root, then `npm test` — 17 tests must
-   pass before you start.
+5. Run `npm install` at the repo root, then `npm test` — the suite must
+   be green before you start.
 6. The shared schemas and the relay are already on `main`. Start the
    relay with `npm run dev --workspace @saw/relay` (port 8787) and build
    `packages/cli` against it. Import all protocol types and validation

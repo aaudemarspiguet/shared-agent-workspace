@@ -6,8 +6,9 @@ import { join } from "node:path";
 import {
   DEFAULT_WEB_PORT,
   appendGitignore,
-  readConfig,
   readCredential,
+  readMemberConfig,
+  readSharedConfig,
   resolveRepoRoot,
   resolveRepoRemote,
   sawDir,
@@ -46,6 +47,62 @@ export function resolveGithubUsername(flag: string | undefined, root: string): s
     "GitHub username is not known. Pass --github <username>, or set it once with: git config github.user <username>",
     EXIT_USER_ERROR
   );
+}
+
+/**
+ * Say why `saw init` must stop, or return undefined when it can continue.
+ *
+ * A second init makes a different workspace. It overwrites .saw/config.json
+ * and .saw/credential. Git ignores the credential, so no clone and no server
+ * keeps a copy: the old workspace is then closed for this member forever.
+ * Because of that, init refuses by default.
+ */
+export function initGuardMessage(root: string): string | undefined {
+  const shared = readSharedConfig(root);
+  if (!shared) return undefined;
+  const name = shared.workspace_name || shared.workspace_id;
+  const lines = [
+    `this repository is already in the SAW workspace "${name}" (id ${shared.workspace_id}).`,
+    "A second init makes a different workspace. It overwrites .saw/config.json and",
+    "your .saw/credential, and nobody can get the old credential back.",
+    ""
+  ];
+  if (readCredential(root)) {
+    lines.push("  To start the workspace:  saw up");
+    lines.push("  To add your teammate:    saw invite --github <their-username>");
+  } else {
+    lines.push("  git gave this clone the workspace file. You are not a member yet.");
+    lines.push("  To become a member:      saw join <invite-link>");
+  }
+  lines.push(
+    "  To make a new workspace and lose this one: delete .saw/config.json and",
+    "  .saw/credential first, then run saw init again."
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Say why `saw join` must stop, or return undefined when it can continue.
+ *
+ * A clone with only the committed .saw/config.json can join. That is the
+ * normal flow. A clone that already holds a credential is a member, and a
+ * second join overwrites that credential.
+ */
+export function joinGuardMessage(root: string): string | undefined {
+  const shared = readSharedConfig(root);
+  if (!shared || !readCredential(root)) return undefined;
+  const name = shared.workspace_name || shared.workspace_id;
+  const member = readMemberConfig(root);
+  const who = member ? ` as ${member.github_username}` : "";
+  return [
+    `this clone is already a member of the SAW workspace "${name}"${who}.`,
+    "A second join overwrites your .saw/credential, and nobody can get the old",
+    "credential back.",
+    "",
+    "  To start the workspace:  saw up",
+    "  To join with a new invite and lose the old credential: delete .saw/credential",
+    "  first, then run saw join again."
+  ].join("\n");
 }
 
 /** Write config, credential, and AGENT.md. Shared by init and join. */
@@ -87,12 +144,20 @@ export interface InitOptions {
   name: string;
   relay?: string;
   github?: string;
+  /** Make a new workspace even when this repository has one. It loses the old. */
+  force?: boolean;
 }
 
 export async function runInit(options: InitOptions): Promise<void> {
   const root = resolveRepoRoot();
   if (!root) {
     fail("this directory is not inside a git repository", EXIT_ENV_ERROR);
+  }
+  // Refuse before any file write and before the relay call. A repository
+  // keeps one workspace.
+  const blocked = options.force ? undefined : initGuardMessage(root);
+  if (blocked) {
+    fail(blocked, EXIT_USER_ERROR);
   }
   const remote = resolveRepoRemote(root);
   if (!remote) {
@@ -125,12 +190,14 @@ export async function runInit(options: InitOptions): Promise<void> {
   console.log(`Relay: ${relay}`);
   console.log("");
   console.log("Files written:");
-  console.log("  .saw/config.json    — workspace settings. Commit this file.");
+  console.log("  .saw/config.json    — shared workspace settings. Commit this file.");
+  console.log("  .saw/member.json    — your username and branch prefix. Git ignores it.");
   console.log("  .saw/credential     — your token. Git ignores this file. Never share it.");
-  console.log("  .saw/AGENT.md       — instructions for your coding agent.");
+  console.log("  .saw/AGENT.md       — instructions for your agent. Git ignores it.");
   console.log("");
   console.log("Next steps:");
-  console.log("  1. Commit .saw/config.json and .saw/AGENT.md so your teammate gets them.");
+  console.log("  1. Commit .saw/config.json only. Your teammate needs that file. The");
+  console.log("     other three files are yours alone. Their saw join writes their own.");
   console.log("  2. Invite your teammate: saw invite --github <their-username>");
   console.log("  3. Start SAW: saw up");
 }
@@ -155,7 +222,7 @@ export async function runInvite(options: InviteOptions): Promise<void> {
   if (!root) {
     fail("this directory is not inside a git repository", EXIT_ENV_ERROR);
   }
-  const config = readConfig(root);
+  const config = readSharedConfig(root);
   const token = readCredential(root);
   if (!config || !token) {
     fail("this repository has no SAW workspace. Run saw init first.", EXIT_ENV_ERROR);

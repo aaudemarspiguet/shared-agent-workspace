@@ -1,8 +1,15 @@
 // Unit tests for hook registration in hooks/install.ts.
 // Each test gets a fresh temp root. The cleanup removes it.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { installHooks } from "../src/hooks/install.js";
 
@@ -66,6 +73,27 @@ describe("installHooks", () => {
     for (const event of EVENTS) {
       expect(hooks[event], `${event} must keep one group`).toHaveLength(1);
     }
+  });
+
+  it("writes a command that resolves when saw is not on PATH", () => {
+    // The documented install keeps saw in node_modules/.bin, off PATH. A hook
+    // entry of "saw hook ..." then gives Claude Code ENOENT on every event.
+    const savedPath = process.env.PATH;
+    process.env.PATH = "/usr/bin:/bin";
+    try {
+      installHooks(root);
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH;
+      else process.env.PATH = savedPath;
+    }
+
+    const command = readSettings().hooks?.SessionStart?.[0]?.hooks[0]?.command ?? "";
+    const parts = (command.match(/"[^"]+"/g) ?? []).map((p) => p.slice(1, -1));
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toBe(process.execPath);
+    expect(existsSync(parts[0] ?? "")).toBe(true);
+    expect(isAbsolute(parts[1] ?? "")).toBe(true);
+    expect(command.endsWith(" hook session-start")).toBe(true);
   });
 
   it("keeps existing settings and appends to an existing Stop event", () => {

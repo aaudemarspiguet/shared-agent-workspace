@@ -35,6 +35,11 @@ export function parseHookInput(text: string): Record<string, unknown> {
 /**
  * Call the local daemon. Return undefined on any failure.
  * The timeout keeps hooks fast even when the daemon hangs.
+ *
+ * The call presents the run token from .saw/daemon.json (T057). The daemon
+ * refuses a call without it. A hook that cannot prove itself behaves exactly
+ * as it does when the daemon is down: it stays silent and exits 0, because a
+ * hook must never break the member's coding tool.
  */
 export async function daemonRequest(
   path: string,
@@ -45,13 +50,15 @@ export async function daemonRequest(
   const root = resolveRepoRoot(cwd ?? process.cwd());
   if (!root) return undefined;
   const info = readDaemonInfo(root);
-  if (!info) return undefined;
+  if (!info || !info.token) return undefined;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const headers: Record<string, string> = { authorization: `Bearer ${info.token}` };
+    if (init?.body !== undefined) headers["content-type"] = "application/json";
     const res = await fetch(`http://127.0.0.1:${info.port}${path}`, {
       method: init?.method ?? "GET",
-      headers: init?.body !== undefined ? { "content-type": "application/json" } : {},
+      headers,
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
       signal: controller.signal
     });

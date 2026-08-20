@@ -1,6 +1,6 @@
 // saw join: connect the second member with an invite link.
 import {
-  readConfig,
+  readSharedConfig,
   remotesMatch,
   resolveRepoRoot,
   resolveRepoRemote
@@ -11,6 +11,7 @@ import {
   EXIT_ENV_ERROR,
   EXIT_USER_ERROR,
   fail,
+  joinGuardMessage,
   resolveGithubUsername,
   writeMemberFiles
 } from "./init.js";
@@ -19,6 +20,8 @@ export interface JoinOptions {
   invite: string;
   github?: string;
   relay?: string;
+  /** Join again even when this clone is a member. It loses the old credential. */
+  force?: boolean;
 }
 
 /** Read the workspace id from the invite payload without trust. */
@@ -40,6 +43,12 @@ export async function runJoin(options: JoinOptions): Promise<void> {
   if (!root) {
     fail("this directory is not inside a git repository", EXIT_ENV_ERROR);
   }
+  // Refuse before the invite is redeemed. The invite is single use, and a
+  // second join would overwrite the credential of this clone.
+  const blocked = options.force ? undefined : joinGuardMessage(root);
+  if (blocked) {
+    fail(blocked, EXIT_USER_ERROR);
+  }
   const remote = resolveRepoRemote(root);
   if (!remote) {
     fail(
@@ -50,8 +59,9 @@ export async function runJoin(options: JoinOptions): Promise<void> {
   const github = resolveGithubUsername(options.github, root);
 
   // The creator commits .saw/config.json. A clone of the right repository
-  // already has it, and it names the relay and the workspace.
-  const committed = readConfig(root);
+  // already has it, and it names the relay and the workspace. It holds no
+  // member name, so read the shared part only.
+  const committed = readSharedConfig(root);
   const relay = options.relay ?? committed?.relay_url ?? DEFAULT_RELAY_URL;
   const urls = relayUrls(relay);
 
@@ -91,6 +101,10 @@ export async function runJoin(options: JoinOptions): Promise<void> {
   console.log(`You joined the workspace.`);
   console.log(`Members: ${joined.value.members.join(", ")}`);
   console.log("");
-  console.log("Files written: .saw/config.json, .saw/credential, .saw/AGENT.md");
+  console.log(
+    "Files written: .saw/config.json, .saw/member.json, .saw/credential, .saw/AGENT.md"
+  );
+  console.log("Only .saw/config.json is shared. Git ignores the other three. They are");
+  console.log("yours: they hold your name, your branch prefix, and your token.");
   console.log("Next step: saw up");
 }

@@ -30,7 +30,7 @@ describe("room filter by work item (T066)", () => {
 
   /** Read one page of messages from bob's local API. */
   async function read(query: string): Promise<MessagePage> {
-    const res = await apiGet(web.url, `/api/messages?${query}`);
+    const res = await apiGet(web, `/api/messages?${query}`);
     expect(res.status).toBe(200);
     return res.json as MessagePage;
   }

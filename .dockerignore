@@ -4,3 +4,6 @@ node_modules
 *.db*
 coverage
 dist
+.claude
+.specify
+specs

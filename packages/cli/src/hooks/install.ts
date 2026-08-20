@@ -25,19 +25,59 @@ interface SettingsFile {
 }
 
 /**
- * Find how the hook entries must call saw.
- * Use plain "saw" when it is on PATH. Fall back to the absolute script path.
+ * How another program must call saw.
+ *
+ * `file` and `args` go straight into a spawn call, one argument per entry.
+ * Use `sawCommandLine` when a settings file needs the command as one string.
  */
-export function sawHookCommandBase(): string {
+export interface SawCommand {
+  /** The program to run. */
+  file: string;
+  /** The arguments that come before the saw subcommand. */
+  args: string[];
+  /** True when the plain name "saw" resolves on PATH. */
+  onPath: boolean;
+}
+
+/** True when a name resolves on PATH. */
+function resolvesOnPath(name: string): boolean {
   try {
-    execFileSync(process.platform === "win32" ? "where" : "which", ["saw"], {
+    execFileSync(process.platform === "win32" ? "where" : "which", [name], {
       stdio: ["ignore", "ignore", "ignore"]
     });
-    return "saw";
+    return true;
   } catch {
-    const script = resolve(process.argv[1] ?? "saw");
-    return `"${process.execPath}" "${script}"`;
+    return false;
   }
+}
+
+/**
+ * Find how another program must call saw.
+ *
+ * Use the plain name "saw" when it is on PATH. In the documented install saw
+ * is NOT on PATH: it sits in node_modules/.bin of the repository. Fall back
+ * to the node binary plus the absolute path of this script, which always
+ * resolves. Every caller that writes a saw command into a file for another
+ * program to run must use this, or that program gets ENOENT.
+ */
+export function resolveSawCommand(): SawCommand {
+  if (resolvesOnPath("saw")) return { file: "saw", args: [], onPath: true };
+  return {
+    file: process.execPath,
+    args: [resolve(process.argv[1] ?? "saw")],
+    onPath: false
+  };
+}
+
+/** The command as one string. Quote the parts that can hold a space. */
+export function sawCommandLine(command: SawCommand = resolveSawCommand()): string {
+  if (command.onPath) return command.file;
+  return [command.file, ...command.args].map((part) => `"${part}"`).join(" ");
+}
+
+/** Find how the hook entries must call saw. */
+export function sawHookCommandBase(): string {
+  return sawCommandLine();
 }
 
 /** The four hook events and their saw subcommands (contracts/hooks-adapter.md). */

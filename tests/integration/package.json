@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@saw/cli": "*",
     "@saw/relay": "*",
     "@saw/shared": "*",

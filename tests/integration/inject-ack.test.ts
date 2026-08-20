@@ -20,7 +20,10 @@ describe("injection acknowledgement bounds (PR #54 review)", () => {
   async function ack(body: unknown) {
     const res = await fetch(`${web.url}/api/inject/ack`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${web.token}`
+      },
       body: JSON.stringify(body)
     });
     return { status: res.status, body: (await res.json()) as unknown };
@@ -73,7 +76,10 @@ describe("injection acknowledgement bounds (PR #54 review)", () => {
       try {
         const res = await fetch(`http://127.0.0.1:${web2.port}/api/inject/ack`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${web2.token}`
+          },
           body: JSON.stringify({ seq: empty.ack_seq })
         });
         expect(res.status).toBe(200);
