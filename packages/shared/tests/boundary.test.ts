@@ -402,3 +402,128 @@ describe("boundary: an over-limit field keeps its run (T073)", () => {
     expect(parsed.success).toBe(true);
   });
 });
+
+describe("boundary: a payload whose whitespace was collapsed (T080)", () => {
+  /** What `packages/cli/src/daemon/run-context.ts` does to a prompt. */
+  const flatten = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+  /** The full CLI path: flatten, then cut to the `why_trigger` excerpt cap. */
+  const WHY_LIMIT = 600;
+  const excerpt = (text: string): string => {
+    const flat = flatten(text);
+    return flat.length > WHY_LIMIT ? flat.slice(0, WHY_LIMIT - 1) + "…" : flat;
+  };
+
+  const times = {
+    started_at: "2026-08-20T10:00:00.000Z",
+    ended_at: "2026-08-20T10:05:00.000Z"
+  };
+
+  /** The entry the daemon sends after it works the human's prompt over. */
+  function runFrom(whyTrigger: string) {
+    return validateLogEntry({
+      ...times,
+      what: { tools_used: { Edit: 1 } },
+      why_trigger: whyTrigger
+    });
+  }
+
+  it("catches a diff whose newlines are gone", () => {
+    const diff = [
+      "apply this:",
+      "--- a/src/secret.ts",
+      "+++ b/src/secret.ts",
+      "@@ -1,3 +1,4 @@",
+      " const key = process.env.API_KEY;"
+    ].join("\n");
+
+    // Unflattened, this was already caught. Flattened, every line anchor is
+    // gone, so the whole thing crossed into the shared log unredacted.
+    expect(validatePost({ type: "status", body: diff }).ok).toBe(false);
+    expect(validatePost({ type: "status", body: flatten(diff) }).ok).toBe(false);
+
+    const run = runFrom(excerpt(diff));
+    expect(run.redactions.map((r) => r.field)).toContain("why_trigger");
+    expect(run.entry.why_trigger).not.toContain("--- a/");
+    expect(run.entry.why_trigger).not.toContain("secret.ts");
+    expect(run.entry.why_trigger).not.toContain("API_KEY");
+  });
+
+  it("catches a git diff header and a hunk header on their own", () => {
+    for (const marker of [
+      "diff --git a/src/app.ts b/src/app.ts",
+      "@@ -12,7 +12,9 @@ function main() {"
+    ]) {
+      const result = validatePost({ type: "status", body: `look: ${flatten(marker)}` });
+      expect(result, marker).toMatchObject({ ok: false, reason: "content_smuggling" });
+    }
+  });
+
+  it("catches a long code fence whose newlines are gone", () => {
+    const fence = "```ts\n" + "const x = 1;\n".repeat(30) + "```";
+
+    expect(validatePost({ type: "status", body: fence }).ok).toBe(false);
+    expect(validatePost({ type: "status", body: flatten(fence) }).ok).toBe(false);
+
+    const run = runFrom(flatten(fence));
+    expect(run.redactions.map((r) => r.field)).toContain("why_trigger");
+    expect(run.entry.why_trigger).not.toContain("const x = 1;");
+  });
+
+  it("catches a paste that lost its closing fence to the length cap", () => {
+    // The real path does both: it flattens the prompt AND cuts it to fit
+    // `why_trigger`, so the closing marker is gone and a paired-fence rule
+    // never sees a fence at all. This is the common shape, not the rare one:
+    // a paste worth worrying about is longer than the 600-character cap.
+    const paste = "here:\n```ts\n" + "const secret = 'hunter2';\n".repeat(60) + "```";
+    const why = excerpt(paste);
+    expect(why).toHaveLength(WHY_LIMIT);
+    // One marker survives: the opener. The closer was cut off.
+    expect(why.match(/```/g)).toHaveLength(1);
+
+    const run = runFrom(why);
+    expect(run.redactions.map((r) => r.field)).toContain("why_trigger");
+    expect(run.entry.why_trigger).not.toContain("hunter2");
+  });
+
+  it("catches a flattened fence with no punctuation, on size alone", () => {
+    const fence = "```\n" + "the quick brown fox jumps\n".repeat(24) + "```";
+    const result = validatePost({ type: "status", body: flatten(fence) });
+    expect(result).toMatchObject({ ok: false, reason: "content_smuggling" });
+  });
+
+  it("still accepts a short fence, flattened or not", () => {
+    const body = "Is this right?\n```\n" + "line\n".repeat(5) + "```";
+    expect(validatePost({ type: "question", body }).ok).toBe(true);
+    expect(validatePost({ type: "question", body: flatten(body) }).ok).toBe(true);
+  });
+
+  it("does not read two stray @@ in prose as a hunk header", () => {
+    // The loose `@@ ... @@` form would match this once the anchor is dropped.
+    // A rejected post is a message the member never gets to send, so the
+    // boundary looks for the exact hunk shape instead.
+    const result = validatePost({
+      type: "question",
+      body: "is the @@ marker or the @@ sigil the one you meant?"
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not read a stray fence marker in prose as a paste", () => {
+    const result = validatePost({
+      type: "question",
+      body: "wrap it in ``` when you paste it into the room"
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("never echoes the flattened payload in the summary", () => {
+    const secret = "```\n" + "const TOKEN = 'hunter2';\n".repeat(30) + "```";
+    const result = validatePost({ type: "status", body: flatten(secret) });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.summary).not.toContain("hunter2");
+      expect(result.summary).not.toContain("TOKEN");
+    }
+  });
+});
