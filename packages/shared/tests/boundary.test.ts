@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ClientFrameSchema,
+  findSmuggledContent,
   MAX_TOOLS_USED_KEYS,
   MAX_WHY_TRIGGER_LENGTH,
   MESSAGE_TYPES,
@@ -525,5 +526,37 @@ describe("boundary: a payload whose whitespace was collapsed (T080)", () => {
       expect(result.summary).not.toContain("hunter2");
       expect(result.summary).not.toContain("TOKEN");
     }
+  });
+});
+
+// An opening fence marker with no close is measured only when the tail reads
+// as code. Prose mentions a fence marker too, and measuring an ordinary
+// message by its length rejected a handoff that held no code at all — a post
+// the member then could not send (review of PR #100).
+describe("boundary: an unterminated fence marker in prose (T080)", () => {
+  const flatten = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+  it("accepts a long handoff that only mentions a fence marker", () => {
+    const body =
+      "End of day.\n" +
+      Array.from({ length: 26 }, (_, i) => `Point ${i + 1} about the work today.`).join(
+        "\n"
+      ) +
+      "\nWrap pastes in ``` next time.";
+    expect(findSmuggledContent(body)).toBeNull();
+    expect(findSmuggledContent(flatten(body))).toBeNull();
+  });
+
+  it("accepts a review message past the size backstop that mentions a fence", () => {
+    const body =
+      "Please wrap any paste in ``` before you send it. " +
+      "The branch naming is the thing to settle first, because otherwise we ".repeat(6);
+    expect(body.length).toBeGreaterThan(400);
+    expect(findSmuggledContent(body)).toBeNull();
+  });
+
+  it("still catches a real paste behind an unterminated fence", () => {
+    const body = "look:\n```ts\n" + "const y = 2;\n".repeat(30);
+    expect(findSmuggledContent(body)).toContain("code fence");
   });
 });

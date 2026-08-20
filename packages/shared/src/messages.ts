@@ -137,6 +137,28 @@ function measureFencePayload(inner: string): string | null {
 }
 
 /**
+ * Judge the tail after an opening fence marker that never closed.
+ *
+ * Length alone cannot decide this one. Prose mentions a fence marker too —
+ * "wrap it in ```" is a normal thing to write to a teammate — and everything
+ * after that marker is then the rest of an ordinary message. Measuring it by
+ * line count or by size rejected a plain end-of-day handoff that held no code
+ * at all, and a rejected post is a message the member never gets to send.
+ *
+ * So the tail must read as code before it is measured. `estimateFlatLines`
+ * counts the punctuation that ends a statement, which prose does not carry in
+ * that density. The size backstop does not apply here: it exists for a payload
+ * whose shape cannot be read, and an unreadable shape is exactly what an
+ * ordinary sentence looks like.
+ */
+function measureUnterminatedTail(tail: string): string | null {
+  const flat = tail.trim();
+  const estimated = estimateFlatLines(flat.replace(/\s+/g, " "));
+  if (estimated <= MAX_FENCE_LINES) return null;
+  return measureFencePayload(tail);
+}
+
+/**
  * Find smuggled code in a message body.
  * Returns a short summary of the match, or null when the body is clean.
  * The summary must not echo the body itself.
@@ -158,7 +180,7 @@ export function findSmuggledContent(body: string): string | null {
   // after it is payload.
   const markers = body.match(/```/g)?.length ?? 0;
   if (markers % 2 === 1) {
-    const verdict = measureFencePayload(body.slice(body.lastIndexOf("```") + 3));
+    const verdict = measureUnterminatedTail(body.slice(body.lastIndexOf("```") + 3));
     if (verdict) return verdict;
   }
   if (DIFF_MARKERS.some((re) => re.test(body))) {
