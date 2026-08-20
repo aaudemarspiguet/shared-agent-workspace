@@ -5,13 +5,15 @@ SAW connects the two agents through a shared, human-visible room. Agents
 send only messages and git refs. Code moves only through git. Humans see
 every message and can steer or pause their own agent.
 
-**Status**: Implementation is done for all three packages. All 53 tasks
-exist as GitHub issues (#1–#53; issue numbers match task IDs). Done:
-monorepo setup, `packages/shared` (boundary schemas, frozen — change only
-via a PR both members approve), `packages/relay` (full protocol), and
+**Status**: Implementation is done for all three packages: monorepo
+setup, `packages/shared` (boundary schemas, frozen — change only via a
+PR both members approve), `packages/relay` (full protocol), and
 `packages/cli` (the `saw` command: daemon, five MCP tools, four Claude
 Code hooks, local web page). Two-member integration tests cover the four
-user stories plus reconnect replay (`tests/integration/`).
+user stories plus reconnect replay (`tests/integration/`). Every task has
+a GitHub issue; the numbers match task IDs up to T053 and diverge after
+that, so read the mapping at the top of
+`specs/001-saw-shared-workspace/tasks.md` rather than guessing.
 
 **Open, and read this before you demo SAW**: a readiness pass in August
 2026 set the product up the way a new pair does — from the written
@@ -22,10 +24,27 @@ reaches your PATH, and which files you must commit between `saw invite`
 and `saw join`. `specs/001-saw-shared-workspace/quickstart.md` now
 carries corrected, executed steps. Treat it as the source for setup.
 `specs/001-saw-shared-workspace/quickstart-results.md` records the older
-scripted run and states plainly what that run did not cover. Still open:
-a two-machine run with live Claude Code sessions on both sides, and issue
-bookkeeping. See the checkboxes in
-`specs/001-saw-shared-workspace/tasks.md`.
+scripted run and states plainly what that run did not cover.
+
+Three things are open that you should know about before you rely on SAW:
+
+- **Pasted code can still reach the shared work log** (T080, issue #97).
+  The CLI collapses the whitespace of your prompt and cuts it to 600
+  characters before the relay checks it, which defeated every detector
+  that looked for a diff or a fence at the start of a line. The relay
+  half of the fix is in review; the CLI half, which checks the payload
+  before that transform and is the more accurate of the two, is not
+  written yet. Until it is, **SC-005 — "100% of attempts are rejected at the
+  boundary" — is not something this repo can claim.**
+- **The test suite is 205/214 on Windows** and 214/214 elsewhere (T081,
+  issue #98). All nine failures are POSIX-only assumptions in
+  `packages/cli` test harnesses, not product faults, but they make the
+  suite hard to read as a signal on that platform.
+- **A two-machine run with live Claude Code sessions on both sides** has
+  still not happened (T053, issue #53). Everything to date ran on one
+  machine.
+
+See the checkboxes in `specs/001-saw-shared-workspace/tasks.md`.
 
 ## What is in this repo
 
@@ -40,7 +59,7 @@ bookkeeping. See the checkboxes in
 | `specs/001-saw-shared-workspace/quickstart.md` | Setup steps and end-to-end validation scenarios. Start here to run SAW. |
 | `packages/relay/README.md` | How to run the relay: Node or Docker, ports, database, security |
 | `packages/cli/README.md` | The `saw` command: install, commands, hooks, MCP tools, web page |
-| `specs/001-saw-shared-workspace/tasks.md` | 53 ordered tasks + the Ownership table. Implementation follows this list. |
+| `specs/001-saw-shared-workspace/tasks.md` | The ordered task list + the Ownership table. Implementation follows this list. |
 | `.github/CODEOWNERS` | Review gate per package (see Work split below) |
 | `.claude/skills/` | The `/speckit-*` commands for Claude Code |
 | `.specify/` | Spec Kit templates and scripts |
