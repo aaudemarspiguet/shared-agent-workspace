@@ -1,7 +1,8 @@
-# Specification Quality Checklist: SAW v1 — Threads, Members, and Shared Context
+# Specification Quality Checklist: SAW v1 — Projects, Threads, and Shared Context
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-08-24
+**Updated**: 2026-08-24 — founder answered all clarifications; spec re-scoped
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -13,9 +14,10 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — **3 remain by design**
-      (FR-002 identity model, FR-013 async answering, FR-025 agent-less
-      stakeholders); founder answers pending, see vision §9
+- [x] No [NEEDS CLARIFICATION] markers remain — all three resolved in the
+      2026-08-24 clarification session (identity → local portable profile;
+      async answering → ask-the-thread, pull-only; agent-less stakeholders →
+      status projection only, paid/hosted candidate later)
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -33,15 +35,12 @@
 
 ## Notes
 
-- The three [NEEDS CLARIFICATION] markers are deliberate: each is a scope
-  decision only the founders can make, and each has a documented
-  recommendation in `.specify/memory/vision.md` §9 (Q1, Q3, Q4). Resolve
-  them (plus vision §9's other questions) before `/speckit-clarify` or
-  `/speckit-plan`.
-- Two constitution amendments gate approval of this spec: Principle II
-  (journal entries as a named payload kind) and Principle III ("visible to
-  both humans" → thread-scope wording). See vision §6.
-- One borderline implementation reference kept on purpose: FR-010 says
-  "hook-driven, like run logs today" to anchor the no-agent-cooperation
-  requirement in the mechanism v0 already proved. Remove if a reviewer
-  objects.
+- Re-scope of 2026-08-24 is folded in: projects span multiple repos with
+  project/group/one-on-one access scopes (US3, FR-004, FR-008, FR-017,
+  SC-005); portable profile identity (US1, FR-001..003, SC-002); all three
+  connectors (FR-027, SC-011); three first-class tools (FR-028, SC-010).
+- Remaining approval gate is external to this spec: the constitution
+  amendment PR (Principles II and III, one-codebase preamble). Per the
+  founder, `/speckit-plan` may proceed in parallel.
+- FR-028's least-proven area (Cursor/Codex journaling surfaces) is flagged
+  in Assumptions with an agreed degradation clause.

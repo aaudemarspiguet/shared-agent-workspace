@@ -1,6 +1,8 @@
 # SAW Product Vision
 
-**Status**: Draft for founder review. The open questions in §9 are not settled.
+**Status**: Decided. The founder answered every §9 question on 2026-08-24
+(§9 records the decisions) and re-scoped v1 to include cross-repo access
+levels.
 **Written**: 2026-08-24, from the founder's vision statement of the same date,
 after the two-machine dry run on a real project, synthesized with a
 seven-dimension research pass (§10).
@@ -144,6 +146,9 @@ need attention before spec 002 is approved:
 - **Principle III (Human Visibility).** "Visible to both humans" assumes two.
   With access levels it must become "visible to every human in the thread's
   scope". No hidden channels rule stays. Amendment required before 002.
+- **Preamble.** "work together on one codebase" becomes "one or more
+  codebases": v1 projects span multiple repos (founder re-scope,
+  2026-08-24).
 - **Principle VI (Git Is the Only Code Sync).** Survives as written. The
   thread-ref registry is Principle II payload; baton handoff keeps
   branch-per-agent. Only a literally shared branch both agents push to would
@@ -180,70 +185,71 @@ need attention before spec 002 is approved:
 
 ## 8. The ladder
 
-- **v1 (spec 002)** — *the team-shaped product*: N members (small teams),
-  threads as containers with participants and types (work item, brainstorm,
-  general), run journals with human-visible staging, dial-by-key
-  connectivity replacing Tailscale, thread-ref bindings with baton handoff,
-  one connector (GitHub Issues), one web app across workspaces, minimal
-  roles (owner/member), redaction tombstones, protocol versioning +
-  migration. Claude Code first-class; Cursor/Codex via MCP.
-- **v2** — *the org-shaped product*: access levels beyond one workspace
-  (team/project scoping across repos), agent-less stakeholder access
-  (browser read/comment via a hosted or always-on node), async answering
-  with draft-and-approve, Linear/Jira connectors with webhook automation,
-  VS Code extension as a full surface, knowledge base, live brainstorm docs
-  (CRDT), workspace-spanning threads.
+- **v1 (spec 002)** — *the team-shaped product*: portable local profiles
+  (name + keypair, no accounts, no per-machine re-registration) · projects
+  spanning multiple repos, with project/group/one-on-one access scopes
+  enforced at the relay · threads as containers with participants and types
+  (work item, brainstorm, general) · run journals with auto-share, staged
+  visibility, ghost mode, portion striking, and retroactive unshare
+  (tombstones) · ask-the-thread async Q&A (pull-only; no cross-triggering,
+  no unattended compute) · dial-by-key connectivity replacing Tailscale ·
+  thread-ref bindings with baton handoff · all three connectors (GitHub
+  Issues, Linear, Jira) behind one envelope · first-class integration for
+  Claude Code, Cursor, and Codex (two commands each) · one web app across
+  projects · read-only status projections · owner/member roles · protocol
+  versioning + v0 migration.
+- **v2** — *the org-shaped product*: teams spanning projects · agent
+  composes answers for its absent human (opt-in, draft-and-approve) ·
+  agent-less stakeholder membership — candidate paid/hosted feature: a
+  hosted agent answers on the stakeholder's behalf (open-core rule,
+  Principle VII, decides what stays free; the status projection stays open) ·
+  webhook-driven ticket automation · hook adapters beyond the big three ·
+  VS Code extension as a full surface · knowledge base (Devin-style
+  proposals) · live brainstorm docs (CRDT).
 - **v3** — *the platform*: hosted relay offering (open core intact),
-  E2E-encrypted scopes, cross-workspace/cross-org federation, adapters as a
-  standard (MCP extension for team threads), enterprise identity.
+  E2E-encrypted scopes, cross-org federation, adapters as a standard (MCP
+  extension for team threads), enterprise identity.
 
 Deliberately not the goal at any rung: building or wrapping a coding agent;
 moving code outside git; a Slack clone with an agent in it.
 
-## 9. Open questions (founder decisions)
+## 9. Decisions (founder answers, 2026-08-24)
 
-Each with the current recommendation. Answers fold into spec 002.
+The ten open questions were answered on 2026-08-24; verbatim record in
+`specs/002-saw-v1/spec.md` Clarifications. In force:
 
-1. **What is a member?** Today: a declared username plus a bearer token from
-   an invite. Iroh adds a keypair per node. Options: (a) trusted-invite
-   identity as today, (b) keypair-based identity with the invite binding a
-   key to a name, (c) verified GitHub identity (OAuth). *Recommendation:
-   (b) for v1 — no OAuth server dependency, and possession of the key makes
-   attribution real; (c) lands in v2 with hosted features.* Spec-blocking.
-2. **Journal consent default.** Auto-share each run's journal entry
-   (staged, visible, revocable), or require per-entry human approval?
-   *Recommendation: auto-share ON per thread with a visible staging window,
-   a per-thread toggle, and redaction tombstones — per-entry approval kills
-   the async value that is the point of the product.* Privacy-defining.
-3. **Async answering scope.** May my agent compose answers to a teammate's
-   question while I sleep? *Recommendation: v1 is pull-only — their agent
-   reads my journals; nothing runs on my machine unattended and nothing
-   speaks in my name. Draft-and-approve async answering is v2.*
-   Spec-blocking.
-4. **Agent-less stakeholders.** A PM with no clone, no daemon, no agent —
-   in v1? *Recommendation: defer full membership; ship the status
-   projection (read-only rendered thread status) as the v1 answer.*
-   Spec-blocking.
-5. **Relay availability.** Accept host-online-only semantics (spool covers
-   gaps) with a documented same-binary-on-a-VPS option, or build
-   replication? *Recommendation: accept host-online-only for v1; ship store
-   export/handoff; replication is v2+.*
-6. **v1 scale target.** *Recommendation: 2-10 members per workspace.* The
-   number gates schema and UI choices only mildly, but the spec needs one.
-7. **Tool parity.** Claude Code gets hooks (journals, injection, pause).
-   Cursor/Codex get MCP tools only — read/post/status but no automatic
-   journaling. Acceptable for v1? *Recommendation: yes; hook adapters for
-   other tools are v2.*
-8. **Connector choice.** *Recommendation: GitHub Issues (repo-scoped like
-   SAW, both members already authed, most mature MCP server, gh CLI
-   fallback); Linear second, Jira third. Envelope designed
-   provider-agnostic.*
-9. **Constitution amendments** (§6): Principle III rewording and Principle
-   II journal-entry clause. Both need Amogh's approval as maintainer.
-   Proceed?
-10. **Redaction and retention.** v1 ships tombstones (author or owner can
-    redact; propagates to caches and future injections). Retention policies
-    deferred. Agreed?
+1. **Identity**: a locally created profile — name + keypair in the member's
+   own store; the public key is the secure entry point. Portable: a new
+   computer means moving the profile or authorizing the device, never
+   re-registering. (Rejected: per-node keys that force re-registration;
+   OAuth deferred.)
+2. **Journals**: auto-share on. Per-thread toggle, strike portions at
+   staging, ghost mode (nothing from a ghosted stretch ever crosses),
+   retroactive unshare of anything already shared.
+3. **Async answering**: v1 is ask-the-thread. Questions push to the thread;
+   the absent member's agent picks them up with old context on its next
+   run; the asker's own agent may meanwhile read the thread's journals.
+   Nothing triggers another member's agent, nothing runs unattended, nobody
+   spends anyone else's budget. Live talk-to-my-agent-while-absent is an
+   enableable v2 feature.
+4. **Agent-less stakeholders**: out of v1; strong candidate paid/hosted
+   feature in v2 (hosted agent answers for them). v1 ships the free
+   read-only status projection.
+5. **Relay**: host-online-only accepted; spool covers gaps; same binary on
+   a small server as the always-on option; store export/handoff ships.
+6. **Scale**: no encoded member cap anywhere; 10 is the validated target.
+7. **Tool parity**: integrations are core product. Claude Code, Cursor, and
+   Codex are all first-class in v1 — at most two commands each, automatic
+   journaling on each, wicked easy.
+8. **Connectors**: all three in v1 — GitHub Issues, Linear, Jira — behind
+   one provider-agnostic envelope.
+9. **Constitution**: amend (Principles II, III, preamble), and keep
+   building in parallel to iterate fast; process debt is picked up later.
+10. **Redaction**: tombstones in v1; retention policies deferred.
+
+**Re-scope (same date)**: cross-repo access levels are a v1 must. Projects
+span multiple repos; project/group/one-on-one scopes are in; roughly double
+the schema work, accepted.
 
 ## 10. Research provenance
 
