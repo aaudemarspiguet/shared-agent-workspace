@@ -20,3 +20,10 @@ coverage/
 
 # Per-member Claude Code settings (each member keeps their own)
 .claude/settings.local.json
+# SAW member-local files
+.saw/member.json
+.saw/AGENT.md
+.saw/daemon.json
+.saw/state.json
+.saw/log-spool.jsonl
+.saw/log-spool.jsonl.tmp
