@@ -36,11 +36,20 @@
 ## Notes
 
 - Re-scope of 2026-08-24 is folded in: projects span multiple repos with
-  project/group/one-on-one access scopes (US3, FR-004, FR-008, FR-017,
-  SC-005); portable profile identity (US1, FR-001..003, SC-002); all three
-  connectors (FR-027, SC-011); three first-class tools (FR-028, SC-010).
+  project/team/group/one-on-one access scopes (US3, FR-008, SC-006);
+  portable multi-key profile identity (US1, FR-001..003, SC-002); all
+  three connectors (FR-030, SC-012); open integration contract with three
+  validated tools (FR-031, SC-011).
+- A four-lens adversarial review (fidelity to founder answers, internal
+  consistency, constitutional compliance, buildability vs the repo) ran on
+  2026-08-24; all 46 findings were resolved in this revision, including
+  the ghost-mode/logging reconciliation (FR-022), the seq-leak rule
+  (FR-008/FR-036), the owner-powers scope carve-outs (FR-005/FR-024/
+  SC-006), and the two-part migration (FR-009).
 - Remaining approval gate is external to this spec: the constitution
-  amendment PR (Principles II and III, one-codebase preamble). Per the
-  founder, `/speckit-plan` may proceed in parallel.
-- FR-028's least-proven area (Cursor/Codex journaling surfaces) is flagged
-  in Assumptions with an agreed degradation clause.
+  amendment PR (Principles II, III, IV, preamble). Per the founder,
+  building proceeds in parallel; the frozen shared-schema rewrite is its
+  own joint-PR gate before relay/CLI implementation.
+- Least-proven area: Cursor/Codex journaling surfaces (FR-031 validated
+  tier), flagged in Assumptions with the Principle V documented-finding
+  gate for any beyond-standard adapter.

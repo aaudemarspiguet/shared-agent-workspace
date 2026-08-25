@@ -136,16 +136,24 @@ Three pillars survive contact with research only after a correction:
 The constitution (v1.2.0) already says "two or more people". Three principles
 need attention before spec 002 is approved:
 
-- **Principle II (Messages and Refs Only).** Journal entries are messages —
-  distilled text plus refs — so the boundary's *letter* holds. But the
-  *spirit* changes: SAW will now carry summaries of what an agent did, not
-  only coordination pings. The principle should be amended to name journal
-  entries as a third payload kind with their properties: distilled by the
-  member's own tooling, human-visible before crossing, revocable. Raw
-  transcripts, code, file access, execution stay banned.
-- **Principle III (Human Visibility).** "Visible to both humans" assumes two.
-  With access levels it must become "visible to every human in the thread's
-  scope". No hidden channels rule stays. Amendment required before 002.
+- **Principle II (Messages and Refs Only).** Amended to name journal
+  entries as a third payload kind with their properties — distilled by the
+  member's own tooling, bounded, author-visible, author-controlled
+  (withhold, exclude source stretches, strike, revoke), scope-bound — and
+  to widen the ref definition to include ticket locators (the connectors
+  need them to cross). Raw transcripts, code, file contents, file access,
+  execution stay banned by name.
+- **Principle III (Human Visibility).** "Visible to both humans" assumes
+  two. Amended to "visible to every human in the message's scope" (project /
+  team / group / private thread), with the no-hidden-channels rule restated
+  scope-relative, pause pinned to one's own agent, and the relay-host trust
+  boundary named: cross-scope powers (store export) must be recorded and
+  visible.
+- **Principle IV (Logging).** Amended to reconcile author control with
+  record completeness: capture stays automatic on the member's own machine;
+  a withheld or revoked entry keeps a tombstone (author, timestamps, the
+  fact of withholding), so the record stays complete while content stays
+  under author control. Ghosted runs cross as content-free markers.
 - **Preamble.** "work together on one codebase" becomes "one or more
   codebases": v1 projects span multiple repos (founder re-scope,
   2026-08-24).
@@ -187,12 +195,13 @@ need attention before spec 002 is approved:
 
 - **v1 (spec 002)** — *the team-shaped product*: portable local profiles
   (name + keypair, no accounts, no per-machine re-registration) · projects
-  spanning multiple repos, with project/group/one-on-one access scopes
+  spanning multiple repos, with project/team/group/one-on-one access scopes
   enforced at the relay · threads as containers with participants and types
   (work item, brainstorm, general) · run journals with auto-share, staged
   visibility, ghost mode, portion striking, and retroactive unshare
-  (tombstones) · ask-the-thread async Q&A (pull-only; no cross-triggering,
-  no unattended compute) · dial-by-key connectivity replacing Tailscale ·
+  (tombstones) · ask-the-thread async Q&A (questions push to the
+  thread; the member's agent answers into the thread on its next run; no
+  cross-triggering, no unattended compute) · dial-by-key connectivity replacing Tailscale ·
   thread-ref bindings with baton handoff · all three connectors (GitHub
   Issues, Linear, Jira) behind one envelope · first-class integration for
   Claude Code, Cursor, and Codex (two commands each) · one web app across
@@ -223,24 +232,28 @@ The ten open questions were answered on 2026-08-24; verbatim record in
    computer means moving the profile or authorizing the device, never
    re-registering. (Rejected: per-node keys that force re-registration;
    OAuth deferred.)
-2. **Journals**: auto-share on. Per-thread toggle, strike portions at
-   staging, ghost mode (nothing from a ghosted stretch ever crosses),
-   retroactive unshare of anything already shared.
-3. **Async answering**: v1 is ask-the-thread. Questions push to the thread;
-   the absent member's agent picks them up with old context on its next
-   run; the asker's own agent may meanwhile read the thread's journals.
-   Nothing triggers another member's agent, nothing runs unattended, nobody
-   spends anyone else's budget. Live talk-to-my-agent-while-absent is an
-   enableable v2 feature.
+2. **Journals**: auto-share on. Per-thread toggle; exclusion of
+   conversation stretches at or before staging (entries distill only from
+   unexcluded stretches); ghost mode (nothing from a ghosted stretch ever
+   crosses); retroactive unshare of anything already shared.
+3. **Async answering**: yes — compose answers while async, mechanism
+   constrained to ask-the-thread. Questions push to the thread; the absent
+   member's agent picks them up with old context on its next run and
+   answers into the thread then; the asker's own agent may meanwhile read
+   the thread's journals. Nothing triggers another member's agent, nothing
+   runs unattended, nobody spends anyone else's budget. Live
+   talk-to-my-agent-while-absent is an enableable v2 feature.
 4. **Agent-less stakeholders**: out of v1; strong candidate paid/hosted
    feature in v2 (hosted agent answers for them). v1 ships the free
    read-only status projection.
 5. **Relay**: host-online-only accepted; spool covers gaps; same binary on
    a small server as the always-on option; store export/handoff ships.
 6. **Scale**: no encoded member cap anywhere; 10 is the validated target.
-7. **Tool parity**: integrations are core product. Claude Code, Cursor, and
-   Codex are all first-class in v1 — at most two commands each, automatic
-   journaling on each, wicked easy.
+7. **Tool parity**: integrations are core product. The integration surface
+   is an open, tool-agnostic contract on existing standards; Claude Code,
+   Cursor, and Codex are the v1 validated tier — at most two commands each,
+   automatic journaling on each, wicked easy — and any tool speaking the
+   standards connects the same way.
 8. **Connectors**: all three in v1 — GitHub Issues, Linear, Jira — behind
    one provider-agnostic envelope.
 9. **Constitution**: amend (Principles II, III, preamble), and keep
