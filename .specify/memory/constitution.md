@@ -13,14 +13,23 @@ Sync Impact Report (2.0.0)
     move into the definition: an entry is distilled by the member's own
     tooling, bounded, visible to its author, scope-bound, and revocable.
     Raw transcripts, code, file contents, file access, and execution
-    control stay banned by name.
+    control stay banned by name. The ref definition widens to include
+    ticket locators (spec 002 connectors replicate thread-ticket
+    bindings), and scope-crossing is permitted only through deliberate,
+    recorded, participant-enabled export mechanisms.
+  - IV. Automatic, Explained, Traceable Logging - one clause added
+    reconciling IV with II's author control: capture is automatic on the
+    member's machine; withheld/revoked entries keep tombstones, so the
+    record stays complete while content stays under author control.
   - III. Human Visibility and Steering - "visible to both humans" becomes
     "visible to every human in the message's scope". Why MAJOR: 1.x made
     workspace-wide visibility the definition of no-hidden-channels; 2.0
     permits group and private thread scopes, which 1.x would read as
     hidden channels. The invariant is restated scope-relative: within a
     scope, nothing is hidden from any human in it, and agents can never
-    see more than their humans.
+    see more than their humans. Scopes are project, team, group, and
+    private thread. Pause/stop is pinned to one's own agent, and the
+    relay host's read access plus recorded cross-scope powers are named.
 - Added sections: none
 - Removed sections: none
 - Downstream sync: specs/002-saw-v1/spec.md is written against this text
@@ -111,13 +120,17 @@ to their release cycles.
 ### II. Messages, Refs, and Journal Entries Only
 
 Only three kinds of data may cross between members: messages, refs, and
-journal entries. A ref is a branch name or a commit SHA. A journal entry is
+journal entries. A ref is a branch name, a commit SHA, or a ticket locator
+(provider, ticket id, URL). A journal entry is
 a distilled record of one agent run — what was done, what was decided, what
 is open, and refs. A journal entry MUST be produced by the member's own
 tooling on the member's own machine. It MUST be bounded in size. It MUST be
 visible to its author before or as it crosses, and the author MUST be able
-to withhold it, strike parts of it, and revoke it after it crossed. It MUST
-carry the scope of its thread and MUST NOT appear at a wider scope. SAW
+to withhold it, exclude source stretches of the conversation from its
+distillation, strike parts of it, and revoke it after it crossed. It MUST
+carry the scope of its thread and MUST NOT be served at a wider scope,
+except through a deliberate, recorded export mechanism that the thread's
+participants enabled. SAW
 MUST NEVER send raw transcripts between members. SAW MUST NEVER send code
 between members. SAW MUST NEVER send file contents between members. SAW
 MUST NEVER send file access between members. SAW MUST NEVER send execution
@@ -134,13 +147,16 @@ moves only through git (Principle VI), never through SAW.
 ### III. Human Visibility and Steering
 
 Every agent-to-agent message MUST be visible to every human in the
-message's scope. A scope is the project, a named group of members, or the
-participants of a private thread. Within a scope, no hidden channels, side
+message's scope. A scope is the project, a named team or group of members,
+or the participants of a private thread. Within a scope, no hidden
+channels, side
 channels, or agent-only exchanges are permitted: an agent MUST NOT be able
 to read anything its human cannot read. Any human in a scope MUST be able
 to steer the conversation there at any time. Steering controls (inject a
-message, pause/stop, redirect) MUST be available to each human at every
-point in a session. A pause MUST stop the agent, not only its next
+message, pause/stop their own agent, redirect) MUST be available to each
+human at every point in a session. The member who hosts the relay can read
+every scope it relays; any power that serves content across a scope
+boundary MUST be recorded and visible to that scope's participants. A pause MUST stop the agent, not only its next
 coordinated action. From the moment a pause takes effect, SAW MUST deny
 every later tool call of that member's coding tool — SAW tool calls and all
 others alike — including the remaining tool calls of a run already in
@@ -171,7 +187,11 @@ entry is a defect.
 
 **Rationale**: Multiplayer agent work is hard to reconstruct after the fact.
 Manual logging fails silently; only automatic capture at the system level
-produces a trustworthy record.
+produces a trustworthy record. Author control (Principle II) governs
+content, not existence: capture stays automatic on the member's own
+machine even when nothing crosses, and a withheld or revoked entry keeps a
+tombstone — author, timestamps, and the fact of withholding — so the
+record stays complete while content stays under the author's control.
 
 ### V. Standards, Not Forks
 
