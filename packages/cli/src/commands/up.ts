@@ -10,6 +10,7 @@ import {
   type SawConfig
 } from "../config.js";
 import { Daemon } from "../daemon/daemon.js";
+import { displayRelay, isTunnelAddress, resolveRelay } from "../tunnel.js";
 import { startWebServer } from "../web/server.js";
 import {
   installHooks,
@@ -185,11 +186,11 @@ async function startWeb(daemon: Daemon, port: number): Promise<WebServer> {
 
 /** The one line that says what the relay connection is doing. */
 function relayLine(config: SawConfig, daemon: Daemon): string {
-  if (daemon.connected) return `${config.relay_url} — connected`;
+  if (daemon.connected) return `${displayRelay(config.relay_url)} — connected`;
   const problem = daemon.relayProblem;
-  if (problem) return `${config.relay_url} — NOT connected. ${problem}`;
+  if (problem) return `${displayRelay(config.relay_url)} — NOT connected. ${problem}`;
   return (
-    `${config.relay_url} — NOT connected. saw keeps trying in the background. ` +
+    `${displayRelay(config.relay_url)} — NOT connected. saw keeps trying in the background. ` +
     "Check that the relay runs."
   );
 }
@@ -204,9 +205,23 @@ export async function runUp(options: UpOptions): Promise<void> {
     fail("this repository has no SAW workspace. Run saw init or saw join first.", EXIT_ENV_ERROR);
   }
 
+  // A tunnel address in the config needs the tunnel up before the daemon
+  // dials. For a direct URL this resolves to the URL itself at no cost.
+  let relayWsUrl: string | undefined;
+  let closeTunnel: (() => Promise<void>) | undefined;
+  if (isTunnelAddress(config.relay_url)) {
+    try {
+      const resolved = await resolveRelay(config.relay_url);
+      relayWsUrl = resolved.urls.ws;
+      closeTunnel = resolved.close;
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error), EXIT_ENV_ERROR);
+    }
+  }
+
   let daemon: Daemon;
   try {
-    daemon = new Daemon({ root });
+    daemon = new Daemon({ root, relayWsUrl });
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error), EXIT_ENV_ERROR);
   }
@@ -287,6 +302,7 @@ export async function runUp(options: UpOptions): Promise<void> {
     removeDaemonInfo(root);
     daemon.stop();
     if (close) await close();
+    if (closeTunnel) await closeTunnel();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown());

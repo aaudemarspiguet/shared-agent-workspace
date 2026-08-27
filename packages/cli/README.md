@@ -77,6 +77,13 @@ registration that cannot start is removed and added again.
 Two members on one machine need two web ports. Pass `--port`. A second
 `saw up` on a port in use stops with `EADDRINUSE`.
 
+Share this machine's relay so members reach it with no VPN (see the
+section below):
+
+```
+saw share-relay [--target <url>] [--key <path>] [--write-config]
+```
+
 Run the stdio MCP server. Coding tools spawn this. Do not run it by hand:
 
 ```
@@ -88,6 +95,33 @@ Hook entry points. `saw up` registers them. Do not run them by hand:
 ```
 saw hook session-start | prompt-submit | pre-tool | stop
 ```
+
+## Share the relay with no VPN
+
+The relay listens on one machine. Without help, the other members need a
+VPN or a port forward to reach it. `saw share-relay` removes that step.
+
+On the machine that runs the relay, in its own terminal:
+
+```bash
+saw share-relay
+```
+
+The command prints an `iroh:` address. Put that address in
+`.saw/config.json` as `relay_url` (or run with `--write-config`) and
+commit the file. Every other member now joins and connects with no
+network setup: `saw join` and `saw up` open the tunnel on their side by
+themselves.
+
+How it works: the address names the host machine's public key, not an
+IP. The connection dials the key, punches through NAT when it can (about
+9 of 10 networks), and falls back to a public transport relay when it
+cannot. Only bytes of the existing relay protocol cross. The host key
+lives in `~/.saw/relay-tunnel.key`, so the address stays stable across
+restarts. Keep `saw share-relay` running whenever the relay runs.
+
+A direct `ws://` relay URL still works everywhere. The tunnel is used
+only when `relay_url` starts with `iroh:`.
 
 ## The .saw/ files
 

@@ -76,6 +76,12 @@ export type RunStopOutcome =
   | { ok: false; message: string; spooled: boolean };
 
 export interface DaemonOptions {
+  /**
+   * Reach the relay at this WebSocket URL instead of the one in the config.
+   * `saw up` sets it when the config holds a tunnel address: the tunnel
+   * serves the relay on a local port, and the daemon dials that port.
+   */
+  relayWsUrl?: string;
   root: string;
   clientName?: string;
   /** Cap on unsent runs held in .saw/log-spool.jsonl. Tests set it small. */
@@ -120,7 +126,7 @@ export class Daemon {
 
     this.client = new RelayClient(
       {
-        wsUrl: relayUrls(config.relay_url).ws,
+        wsUrl: options.relayWsUrl ?? relayUrls(config.relay_url).ws,
         workspaceId: config.workspace_id,
         token,
         clientName: options.clientName ?? "saw-daemon/0.1",

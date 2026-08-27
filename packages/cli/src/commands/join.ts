@@ -5,7 +5,8 @@ import {
   resolveRepoRoot,
   resolveRepoRemote
 } from "../config.js";
-import { joinWorkspace, relayUrls } from "../relay-http.js";
+import { joinWorkspace } from "../relay-http.js";
+import { resolveRelay } from "../tunnel.js";
 import {
   DEFAULT_RELAY_URL,
   EXIT_ENV_ERROR,
@@ -63,7 +64,10 @@ export async function runJoin(options: JoinOptions): Promise<void> {
   // member name, so read the shared part only.
   const committed = readSharedConfig(root);
   const relay = options.relay ?? committed?.relay_url ?? DEFAULT_RELAY_URL;
-  const urls = relayUrls(relay);
+  const resolved = await resolveRelay(relay).catch((error: Error) => {
+    fail(error.message, EXIT_ENV_ERROR);
+  });
+  const urls = resolved.urls;
 
   // Check what we can check before we redeem the single-use invite.
   const claimedId = inviteWorkspaceId(options.invite);
@@ -84,6 +88,7 @@ export async function runJoin(options: JoinOptions): Promise<void> {
   }
 
   const joined = await joinWorkspace(urls.http, options.invite, github);
+  await resolved.close();
   if (!joined.ok) {
     fail(`join failed: ${joined.error}`, EXIT_USER_ERROR);
   }

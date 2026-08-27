@@ -50,6 +50,17 @@ program
   });
 
 program
+  .command("share-relay")
+  .description("Share this machine's relay: members reach it with no VPN and no port forwarding.")
+  .option("--target <url>", "the relay this machine runs (default ws://127.0.0.1:8787)")
+  .option("--key <path>", "host key file (default ~/.saw/relay-tunnel.key)")
+  .option("--write-config", "write the printed address into .saw/config.json")
+  .action(async (opts: { target?: string; key?: string; writeConfig?: boolean }) => {
+    const { runShareRelay } = await import("./commands/share-relay.js");
+    await runShareRelay(opts);
+  });
+
+program
   .command("mcp")
   .description("Run the stdio MCP server. Coding tools spawn this; do not run it by hand.")
   .action(async () => {

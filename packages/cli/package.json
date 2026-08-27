@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@number0/iroh": "^1.1.0",
     "@saw/shared": "*",
     "commander": "^15.0.0",
     "tsx": "^4.0.0",

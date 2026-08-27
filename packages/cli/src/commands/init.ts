@@ -15,7 +15,8 @@ import {
   writeConfig,
   writeCredential
 } from "../config.js";
-import { mintInvite, registerWorkspace, relayUrls } from "../relay-http.js";
+import { mintInvite, registerWorkspace } from "../relay-http.js";
+import { resolveRelay } from "../tunnel.js";
 import { renderAgentMd } from "../templates/agent-md.js";
 
 export const DEFAULT_RELAY_URL = "ws://localhost:8787";
@@ -168,9 +169,12 @@ export async function runInit(options: InitOptions): Promise<void> {
   }
   const github = resolveGithubUsername(options.github, root);
   const relay = options.relay ?? DEFAULT_RELAY_URL;
-  const urls = relayUrls(relay);
+  const resolved = await resolveRelay(relay).catch((error: Error) => {
+    fail(error.message, EXIT_ENV_ERROR);
+  });
 
-  const registered = await registerWorkspace(urls.http, options.name, remote, github);
+  const registered = await registerWorkspace(resolved.urls.http, options.name, remote, github);
+  await resolved.close();
   if (!registered.ok) {
     fail(`workspace registration failed: ${registered.error}`, EXIT_ENV_ERROR);
   }
@@ -228,14 +232,17 @@ export async function runInvite(options: InviteOptions): Promise<void> {
     fail("this repository has no SAW workspace. Run saw init first.", EXIT_ENV_ERROR);
   }
   const hours = parseExpiresHours(options.expires);
-  const urls = relayUrls(config.relay_url);
+  const resolved = await resolveRelay(config.relay_url).catch((error: Error) => {
+    fail(error.message, EXIT_ENV_ERROR);
+  });
   const minted = await mintInvite(
-    urls.http,
+    resolved.urls.http,
     config.workspace_id,
     token,
     options.github,
     hours
   );
+  await resolved.close();
   if (!minted.ok) {
     fail(`invite mint failed: ${minted.error}`, EXIT_USER_ERROR);
   }
