@@ -23,11 +23,17 @@ entities are in [data-model.md](./data-model.md).
 npm test
 ```
 
-Record the number. The current baseline is **205/214 on Windows** and 214/214
-elsewhere. The nine failures are POSIX assumptions in CLI test harnesses
-(T081 issue #98 accounts for seven, T056 issue #60 for two), not product
-faults. **Threads and modes must not move that number**; if it drops, the cause
-is the change under test.
+Record the number. Measured on branch `002-saw-v1` on 2026-08-27, the baseline
+is **218/227 on Windows**. The nine failures are POSIX assumptions in CLI test
+harnesses — seven in `up-resolve.test.ts` (T081, issue #98) and two in
+`config.test.ts` (T056, issue #60) — not product faults.
+
+`README.md` quotes 205/214, which is `main`'s figure. This branch carries extra
+tests from PR #103, so the total differs while the nine failures are the same
+nine. Use the branch number you measure, not the README's.
+
+**Threads and modes must not move that number.** If it drops, the cause is the
+change under test.
 
 ---
 

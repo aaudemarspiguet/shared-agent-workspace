@@ -47,7 +47,7 @@ and this spec's success criteria include adversarial ones (SC-016, SC-020).
 ## Phase 1: Setup
 
 - [ ] T084 Add a `npm test` job on `windows-latest` and `ubuntu-latest` to `.github/workflows/`, reporting but not gating, so the 205/214 Windows baseline stops being unverified (issue #108)
-- [ ] T085 [P] Record the pre-change test baseline in `specs/002-saw-v1/quickstart-results.md` — count, and the nine known failures split as seven T081 and two T056 (issue #109)
+- [ ] T085 [P] Record the pre-change test baseline in `specs/002-saw-v1/quickstart-results.md` — 218/227 on Windows as measured on this branch on 2026-08-27, with the nine known failures split as seven T081 and two T056 (issue #109)
 - [ ] T086 [P] Agree ownership of Phase 2 to Phase 5 in the room and record it as a `decision`, then write the agreed owner into each issue (issue #110)
 
 > **Note**: no task in Phase 1 may edit `packages/shared`. Every change to that

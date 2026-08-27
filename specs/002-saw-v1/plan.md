@@ -38,9 +38,15 @@ piece of implementation work rather than a later one.
 under `.saw/` on each member's machine
 
 **Testing**: Vitest 3, projects `packages/*` and `tests/*`
-(`vitest.config.ts:1-8`). Current baseline is 205/214 on Windows and 214/214
-elsewhere; the nine failures are POSIX assumptions in CLI test harnesses
-(T081 issue #98, T056 issue #60), not product faults.
+(`vitest.config.ts:1-8`). Measured on this branch on 2026-08-27:
+**218/227 on Windows**, with nine failures — seven in
+`packages/cli/tests/up-resolve.test.ts` (T081, issue #98, a POSIX-only harness)
+and two in `packages/cli/tests/config.test.ts` (T056, issue #60, chmod 0600 is
+a no-op on Windows). Neither is a product fault.
+
+Note the branch number differs from `README.md`'s 205/214, which is `main`'s.
+This branch carries extra tests from PR #103, so it has 227 tests rather than
+214. The nine failures are the same nine.
 
 **Target Platform**: Windows, macOS, Linux. Windows is a first-class target and
 the current source of every known test failure, so new harnesses must be
