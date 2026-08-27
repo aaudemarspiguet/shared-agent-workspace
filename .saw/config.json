@@ -1,0 +1,10 @@
+{
+  "workspace_id": "01M0VN32Z6TRX7EYN2FX20CV1V",
+  "workspace_name": "saw-dev",
+  "relay_url": "iroh:endpointac573llg4n2j76rq3bueenfxjwoxtlavn6z7ahltozue5meng36ncbyaenuhi5dqom5c6l3von3tcljrfzzgk3dbpexg4mbonfzg62bonruw42zof4aqaskgslz7zqycaeaesrus6oy74aybabsgu3a2wh7agaiaycuabinr7ybqcajgaedend4authazxpvfgzidm6lrcbqgaibeyaqmrupqcsm4dinw5mwhyay3keigay",
+  "repo_remote": "https://github.com/aaudemarspiguet/shared-agent-workspace.git",
+  "members": [
+    "shreyk2"
+  ],
+  "web_port": 7420
+}
