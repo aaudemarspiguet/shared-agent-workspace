@@ -1058,8 +1058,11 @@ git and that the relay carried only refs and messages.
 - **SC-014**: Reading one thread returns that thread's messages and no
   others, and a member who takes part in 1 of 10 threads receives delivery
   for that thread plus project broadcasts and for nothing else.
-- **SC-015**: In adversarial tests an agent performs zero actions above its
-  thread mode, and every denial names the mode and is recorded.
+- **SC-015**: Through the supported client, an agent performs zero actions above
+  its thread mode, and every denial names the mode and is recorded. The scope is
+  the member's own agent: a mode is self-granted, so it restrains the member's
+  own agent and is not a boundary against the peer. The cross-member boundary is
+  SC-016.
 - **SC-016**: In adversarial tests, zero attempts to set another member's
   agent mode succeed, through any surface, owners included.
 - **SC-017**: Two members in `edit` on one thread finish work with both
@@ -1112,6 +1115,13 @@ git and that the relay carried only refs and messages.
   one-codebase preamble) merge before this spec is marked approved;
   building proceeds in parallel per the founder.
 - The frozen `packages/shared` rewrite lands as one jointly-approved PR
-  before relay and CLI implementation start.
+  before relay and CLI implementation start. User Story 7 is a schema
+  change, so this is the first piece of implementation work.
+- A collaboration mode is trusted to the member's own machine. It is
+  self-granted, so the party it restrains and the party who could bypass
+  it are the same member, and bypassing it harms nobody else. The relay
+  therefore does not enforce a mode. The relay does enforce that no
+  member can write another member's mode (SC-016), because that is a
+  real boundary between members.
 - The VS Code extension is a thin companion of the web app and may slip
   out of v1 without breaking any requirement above.
