@@ -207,7 +207,30 @@ need attention before spec 002 is approved:
   Claude Code, Cursor, and Codex (two commands each) · one web app across
   projects · read-only status projections · owner/member roles · protocol
   versioning + v0 migration.
-- **v2** — *the org-shaped product*: teams spanning projects · agent
+  Added 2026-08-27: per-thread **collaboration modes** — `view`, `comment`,
+  `edit` — set by each member for their own agent, default `comment`, which
+  is the v0 behavior. The mode says what a member's agent may do in a thread.
+  It is the document-sharing analogy applied to agents. In every v1 mode the
+  member starts every run.
+- **v2** — *the org-shaped product*: **continuous mode**, the fourth rung of
+  the v1 mode ladder — a member's agent wakes on thread activity instead of
+  waiting for a prompt. Deferred from v1 on 2026-08-27, design intact: the
+  authority is *standing consent*, which a member grants to their own agent
+  alone, on their own machine and their own budget. That is what keeps it
+  inside decision 3 below — a peer never triggers it, and a peer's grant
+  never could. It is bounded (turn count, wall clock, cost), revocable, and
+  pause outranks it. A wake starts a new run and never forces content into a
+  run already in progress, so it does not need the mid-turn injection that
+  Principle V forbids. Nothing in v1 depends on it · **the split role model**,
+  which follows the enterprise pattern where a workspace admin can suspend an
+  account without being in the team's documents. v1 sorts every power onto one
+  of two axes — administration, which acts on the directory and the container
+  and never grants read access to a scope, and work authority, which acts on
+  the work and requires participation in the thread — while one owner role
+  still holds both. v2 splits them: an administrator who provisions, and a
+  contributor/lead/owner ladder that settles work, later refined to per-thread
+  authority. Because each power already names its axis, this is a change of
+  who holds a power, never of what the power does · teams spanning projects · agent
   composes answers for its absent human (opt-in, draft-and-approve) ·
   agent-less stakeholder membership — candidate paid/hosted feature: a
   hosted agent answers on the stakeholder's behalf (open-core rule,

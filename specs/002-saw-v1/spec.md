@@ -7,10 +7,31 @@
 **Status**: Draft, clarified, adversarially reviewed. The founder answered all
 open questions on 2026-08-24 (see Clarifications) and directed a re-scope:
 access levels and multi-repo projects are in v1. Implementation — planning and
-building — proceeds in parallel per the founder's direction; the constitution
-amendment PR (Principles II, III, IV, preamble) must merge before this spec is
-marked approved, and the frozen `packages/shared` rewrite lands as one
-jointly-approved PR before relay/CLI implementation of it starts.
+building — proceeds in parallel per the founder's direction.
+
+The constitution amendment gate is closed: the amendment merged as PR #105 and
+`.specify/memory/constitution.md` is at 2.0.0, last amended 2026-08-24. This
+spec is written against that text. The remaining gate is unchanged: the frozen
+`packages/shared` rewrite lands as one jointly-approved PR before relay/CLI
+implementation of it starts. User Story 7 (threads) is a schema change, so
+that joint PR is the first piece of implementation work.
+
+Session 2026-08-27 added User Story 7 (threads first) and User Story 8
+(collaboration modes), FR-037 to FR-044, and SC-014 to SC-022. It separated
+capability from authority: a mode says what a member's agent may do, and
+authority says whose word settles a matter. It also separated administration
+from work authority in FR-005, which resolved the owner-override conflict
+without weakening FR-008 or SC-006. All clarifications from the session are
+recorded below and no `[NEEDS CLARIFICATION]` marker remains.
+
+Continuous mode and the three-rung authority ladder are both out of v1
+(FR-042), so the collaboration modes need no constitution change. One
+companion amendment does follow from this session, and it is a separate PR
+against `main`: Principle IV gains a pending-assignment clause so that the
+`unassigned` run record of FR-015 is named in the constitution (2.0.0 to
+2.1.0, MINOR). It is filed against `main` and not against this branch because
+this branch predates the 2.0.0 amendment, and editing the file from a 1.2.0
+base would clobber 2.0.0 on merge.
 
 **Input**: User description: "SAW v1 per the product vision: agents become a
 communication interface between people. Threads (work items, epics,
@@ -65,7 +86,88 @@ parallel. Local-first; prefer off-the-shelf; open source."
   spanning multiple repos, with team/group/one-on-one access levels, are in
   v1, accepting roughly double the schema work.
 
+### Session 2026-08-27
+
+- Q: What decides how much of a thread a member's agent may act on? → A: A
+  collaboration mode, set per thread by each member for their own agent:
+  `view`, `comment`, or `edit`. It is the document-sharing analogy applied to
+  agents. Default `comment`, which is the v0 behavior.
+- Q: May an agent start its own run when thread activity arrives? → A: Not in
+  v1. In every v1 mode the member starts every run. Continuous mode is
+  deferred, with its design recorded (FR-042).
+- Q: Is a `decision` a capability the mode ladder unlocks? → A: No. Capability
+  and authority are two separate things. The mode says what a member's agent
+  may *do*. Authority says whose word *settles* a matter. A decision is not a
+  message type behind a capability gate; it is a comment made with authority.
+  The same words carry decision force from one member and read as a proposal
+  from another.
+- Q: Does a decision from higher authority direct the lower-authority
+  member's agent? → A: No. Authority binds the work record, not the agent.
+  The decision settles the matter and the thread records it. The other
+  member's agent MUST surface it and MUST NOT silently ignore it, and that
+  member's human still decides what their own agent does next. This keeps
+  Principle III and the "an input, not an order" rule intact, so no
+  constitution amendment follows.
+- Q: How is authority graded, and where does it live? → A: A small fixed
+  ladder per project — contributor, lead, owner — which extends FR-005's two
+  roles by one rung. Per-thread authority overrides are deferred to v2.
+- Q: Does the authority ladder ship in v1? → A: No. v1 ships the mechanism
+  only: every message carries a force, `advisory` or `binding`, and the
+  author chooses it. Binding force requires the owner role, so FR-005's two
+  roles are unchanged. v2 widens the authority source from "owner" to the
+  three-rung ladder, which is a data change, not a redesign.
+- Q: Does `view` also stop the thread reaching the agent's context? → A: No.
+  `view` governs what the agent may do, not what it may see. FR-012 already
+  owns the delivery axis — muting a thread adjusts delivery, never access —
+  so the mode ladder does not duplicate it. An agent in `view` still reads
+  the thread and can answer its own member's questions from it, which User
+  Story 2 depends on.
+- Q: Is the mode set per thread only? → A: Yes. One place a mode can live:
+  (thread, member). Any thread a member has not set is `comment`. Every grant
+  of `edit` is a deliberate, visible, per-thread act by the member it applies
+  to. A project-wide default is a v2 convenience.
+- Q: Is administration the same power as authority over work? → A: No. They
+  are two axes, as they are in enterprise practice — a workspace admin can
+  suspend an account without being in the team's documents. **Administration**
+  acts on the directory and the container: mint invites, remove members,
+  revoke keys, grant roles, export the store, archive. It MUST NOT grant read
+  access to any scope. **Work authority** acts on the work and requires
+  participation in the thread: post `binding`, override a claim, direct a
+  handoff, close a work item. v1 keeps FR-005's two roles, with the single
+  owner role holding both axes; the spec sorts each power onto its axis so v2
+  can split the roles without a redesign.
+- Q: How is a claim released when its holder is unreachable in a private
+  thread that no owner takes part in? → A: By removing the member, which is an
+  administration action on the directory and already releases every claim they
+  hold (FR-005). It needs no visibility into the thread, so no scope is
+  pierced. Overriding a claim inside a scoped thread stays a work-authority
+  action and requires participation. Both rules hold at once, because the
+  conflict came from one role carrying both powers.
+- Q: A run that touches no claimed thread logs an entry tagged unassigned, but
+  Principle IV requires every entry to be tagged to a feature or story. Where
+  is that fixed? → A: In the constitution. Principle IV gains a
+  pending-assignment clause in this change, so the constitution states what
+  the system does. The amendment is MINOR: it permits a state that 2.0.0 read
+  as forbidden, and nothing compliant with 2.0.0 stops being compliant.
+
 ## User Scenarios & Testing *(mandatory)*
+
+### Implementation order
+
+The position of a story in this document does not set the order of work. The
+priority label and this section set the order.
+
+User Story 7 (threads) ships first. Threads are the container that the other
+stories need. Modes attach to a thread. Journal entries take the scope of
+their thread (FR-017). Claims and handoffs are thread-scoped (FR-013). Ref
+bindings are thread-to-ref (FR-014). Work built before threads is built
+against the flat v0 room, and it must be built again.
+
+User Story 8 (collaboration modes) ships second. It needs threads and nothing
+else.
+
+The other stories follow in their stated priority: US1, US2, US3, US4, US5,
+US6.
 
 ### User Story 1 - A profile, an invite, a project (Priority: P1)
 
@@ -280,6 +382,146 @@ document that renders read-only for someone with no profile.
 
 ---
 
+### User Story 7 - Threads replace the flat room (Priority: P1)
+
+The room stops being flat. A member opens a thread for one piece of work. The
+thread holds a type, a title, participants, a state, a claim state, and the
+git refs the work touches. Messages go into a thread, or go to the project as
+a broadcast. To read one piece of work, a member reads its thread. Nobody
+filters a global feed. When a v0 workspace upgrades, every historic work-item
+tag becomes a thread, so no message and no log entry is lost.
+
+**Why this priority**: Threads are the container that the rest of v1 needs.
+Modes attach to a thread. Journal entries take the scope of their thread.
+Claims and handoffs are thread-scoped. Ref bindings are thread-to-ref. This
+story ships first because work built before it must be built again.
+
+**Scope for this slice**: project scope only. FR-008 adds the team, group, and
+private scopes. Those scopes need profiles and roles (FR-001 to FR-005), which
+belong to User Story 1. At project scope every member reads every thread. That
+is the visibility v0 has today, so this slice moves no trust boundary and does
+not wait for the identity work. FR-008 arrives with User Story 1.
+
+**Independent Test**: Upgrade a v0 workspace that has messages under two
+work-item tags. Every tag is a thread. Each thread holds its own messages in
+their original order, with their original timestamps and claim state. Post a
+new message into one thread and confirm the other thread does not show it.
+Claim one thread and confirm the claim does not change the other. Confirm an
+agent receives only the threads its member takes part in, plus project
+broadcasts.
+
+**Acceptance Scenarios**:
+
+1. **Given** a v0 workspace with messages under work-item tags, **When** the
+   hosting member upgrades, **Then** each tag is a thread, and every message
+   and log entry keeps its content, its order, and its timestamp.
+2. **Given** a thread, **When** a member posts into it, **Then** the message
+   appears in that thread and in no other thread.
+3. **Given** a member who wants to reach everyone, **When** they post a
+   project broadcast, **Then** every member receives it without a thread.
+4. **Given** two open threads, **When** a member claims one, **Then** the
+   claim state of the other thread does not change, and first-claim-wins still
+   decides a contested claim.
+5. **Given** a thread bound to two git refs in one workspace, **When** a
+   member reads the thread, **Then** both refs appear, and each ref states its
+   workspace.
+6. **Given** a member who takes part in one of three threads, **When** their
+   agent receives delivery, **Then** it covers that thread and project
+   broadcasts, and it does not cover the other two threads.
+7. **Given** the upgraded workspace, **When** the v0 guarantees are measured,
+   **Then** gapless ordered delivery, at-least-once injection with
+   acknowledged cursors, first-claim-wins, pause, and automatic run logging
+   all still hold.
+
+---
+
+### User Story 8 - Collaboration modes on a thread (Priority: P1)
+
+A member decides how much their own agent may do in one thread. The choice is
+a mode. In `view` the agent reads the thread and posts nothing. In `comment`
+the agent reads and posts. In `edit` the agent reads, posts, claims work, and
+writes code on the thread's branch. Every member sees every member's mode on
+the thread.
+
+Two members set `edit` on one thread. Each member prompts their own agent. The
+agents agree a plan in the thread and split the work into claims. Each agent
+works on its own machine, on a branch under its own member prefix. Each pushes
+its branch and binds the ref to the thread. The two branches meet in a git
+merge or a pull request. No code crosses the relay.
+
+**Why this priority**: Modes are the control that makes shared threads safe to
+open. Without them, taking part in a thread is all-or-nothing. Modes need
+threads and nothing else, so they ship right after User Story 7.
+
+A mode says what an agent may do. It does not say whose word settles a
+matter. That is authority, and it is a separate control. Every message carries
+a force: `advisory` or `binding`. A member with authority chooses which — they
+can rule, or they can just talk. A decision is a comment made with authority.
+When a binding message lands, the thread records the matter as settled and the
+other member's agent must surface it to its member. It does not redirect that
+agent. The member reads it and decides what their own agent does next, or
+disputes it in the thread.
+
+**Scope for this slice**: `view`, `comment`, and `edit` only, plus the
+`advisory` and `binding` force. In all three modes the member starts every
+run. No agent starts a run of its own. Two extensions are out of v1: continuous
+mode, and the three-rung authority ladder that widens who may bind. v1 grants
+binding force to the owner role, which FR-005 already has (FR-042).
+
+**Independent Test**: Set a thread to `view` for one member and `edit` for the
+other. Confirm the `view` agent reads the thread and that every post and claim
+it attempts is denied with a plain reason. Confirm the `edit` agent claims,
+works, and pushes. Confirm neither member can change the other member's mode
+through the CLI or the web app. Confirm the two members' work meets through
+git and that the relay carried only refs and messages.
+
+**Acceptance Scenarios**:
+
+1. **Given** a thread a member has never set a mode on, **When** their agent
+   acts, **Then** the mode is `comment`, which is the behavior of v0.
+2. **Given** a thread set to `view`, **When** the agent tries to post or to
+   claim, **Then** the action is denied, the agent receives a plain reason,
+   and the denial is recorded.
+3. **Given** a thread set to `comment`, **When** the agent tries to claim work
+   or to write code for the thread, **Then** the action is denied and the
+   agent may still read and post.
+4. **Given** a thread set to `edit`, **When** the agent claims a work item and
+   pushes a branch under its own member prefix, **Then** the claim holds and
+   the ref binds to the thread.
+5. **Given** a member changes their mode on a thread, **When** the change is
+   made, **Then** it is recorded as an attributable event and every member of
+   the thread can see it.
+6. **Given** two members on one thread, **When** one tries to set the other
+   member's agent mode through any surface, **Then** the attempt fails.
+7. **Given** both members in `edit` on one thread, **When** both complete
+   work, **Then** two refs bind to the thread, the branches meet in a merge or
+   a pull request, and no code, file content, or diff crossed the relay.
+8. **Given** a member is paused, **When** their thread mode is `edit`, **Then**
+   the pause still denies every later tool call, because pause outranks mode.
+9. **Given** a member without authority, **When** their agent posts a message
+   marked `binding`, **Then** the post is rejected with a plain reason and the
+   rejection is recorded, and the message is not silently downgraded to
+   `advisory`.
+10. **Given** a member with authority, **When** they post an `advisory`
+    message, **Then** it settles nothing and reads as a proposal, which shows
+    that authority permits binding and does not impose it.
+11. **Given** a member with authority posts a `binding` decision on a thread,
+    **When** another member's agent next runs, **Then** the thread shows the
+    matter as settled and attributable, and that agent surfaces the decision
+    to its member.
+12. **Given** that same binding decision, **When** it is delivered, **Then**
+    zero runs start on the receiving member's machine, the receiving agent is
+    not redirected or stopped, and the receiving member remains free to
+    dispute the decision in the thread.
+13. **Given** a handoff proposed to a member whose mode on the thread is
+    `comment`, **When** it arrives, **Then** the claim stays with the sender
+    and the recipient's agent surfaces the handoff rather than accepting it.
+14. **Given** a proposed handoff, **When** the recipient declines it, **Then**
+    the claim returns to the sender and the decline is recorded and visible to
+    the thread's scope.
+
+---
+
 ### Edge Cases
 
 - A member's device is stolen but other devices are authorized under the
@@ -319,6 +561,40 @@ document that renders read-only for someone with no profile.
   directory converges identically for everyone.
 - A thread binds workspaces whose repos the reading member has not cloned.
   The thread renders fully; only local checkout conveniences degrade.
+- A v0 workspace has messages under no work-item tag at all. They migrate to
+  a general thread for the workspace, so no message is lost and no message
+  needs a tag it never had.
+- Two v0 work-item tags differ only by case or by surrounding space. The
+  migration maps them to one thread and records the merge, rather than
+  creating two threads that look the same to a reader.
+- A member lowers their mode from `edit` to `view` while they hold a claim.
+  The claim stays with them and the thread keeps showing it; their agent
+  simply may no longer act on it. Releasing or handing off the claim is a
+  member action, not an agent action, so it stays available.
+- An agent in `view` is asked by its own human to post to the thread. The
+  agent does not post. It tells its human the thread's mode denies it and
+  that the human may change the mode or post themselves.
+- A member sets `edit` on a thread while paused. The mode change is recorded,
+  and the pause still denies every tool call. Resuming does not replay the
+  denied calls.
+- Two agents in `edit` on one thread modify the same file inside the FR-029
+  window. Both agents are warned on their next turn, from pushed refs and
+  their own run records, never from access to the other member's files.
+- A member loses authority after posting a binding decision. The decision
+  stands, because it was in force when it was made. The record shows the
+  authority the author held at that time.
+- Two binding decisions on one thread contradict each other. The later one
+  settles the matter, the earlier one stays visible as superseded, and the
+  thread shows both with their authors and times. Nothing is deleted.
+- A binding decision arrives for a member who is paused. It is recorded and it
+  waits. On resume, the member's agent surfaces it. The pause never hides it
+  and never auto-applies it.
+- A handoff is proposed to a member who is then removed from the project. The
+  handoff expires, the claim returns to the sender, and the expiry is
+  recorded — FR-005 already releases a removed member's claims.
+- A handoff names a recipient who cannot see the thread's scope. The handoff
+  fails with a plain reason. A claim cannot move to a member who cannot read
+  the work.
 
 ## Requirements *(mandatory)*
 
@@ -347,13 +623,38 @@ document that renders read-only for someone with no profile.
   rooms) and MUST support two or more members; a project MAY exist with
   only its creator before invites are redeemed. The protocol MUST NOT
   encode a member cap; 10 members is the validated design target (SC-009).
-- **FR-005**: v1 MUST have exactly two roles: owner and member. Owners MUST
-  be able to: mint invites, remove members and keys, override a claim,
-  grant owner, and archive or redact within threads they participate in.
-  Removing a member MUST release their claims. Every administrative action
-  (override, removal, archive, redaction, export) MUST be recorded as an
-  attributable event visible to the members of the affected scope. The
-  creator is the first owner.
+- **FR-005**: Powers MUST be sorted onto two independent axes.
+
+  **Administration** acts on the directory and on the container. Its powers
+  are: mint invites, remove a member, revoke a key, grant a role, export the
+  store (FR-024), and archive a thread. An administrative power MUST act on
+  membership and container state alone. It MUST NOT read thread content, and
+  holding it MUST NOT grant read access to any scope. Removing a member MUST
+  release every claim they hold, everywhere, without any need to see the
+  threads those claims are in.
+
+  **Work authority** acts on the work. Its powers are: post a `binding`
+  message (FR-043), override a claim, direct a handoff (FR-044), and close a
+  work item. Every work-authority power MUST require participation in the
+  thread it acts on. No role grants a work-authority power over a thread its
+  holder does not take part in.
+
+  This separation is why FR-008 and SC-006 hold without exception. A claim
+  held by an unreachable member in a scoped thread is released by removing
+  that member, which is administration and pierces no scope. Overriding a
+  claim inside that thread stays work authority and needs participation.
+  Neither rule bends.
+
+  v1 MUST ship exactly two roles, owner and member, with the owner role
+  holding both axes. The creator is the first owner. Because each power names
+  its axis, v2 MAY split the roles — an administrator who provisions, and a
+  contributor/lead/owner ladder that settles work (FR-042(b)) — as a change of
+  who holds a power, never a change of what the power does.
+
+  Every administrative action and every work-authority action MUST be recorded
+  as an attributable event visible to the members of the affected scope. A
+  removal is visible to the project; an override, a directed handoff, or a
+  closure is visible to the thread's scope.
 - **FR-006**: Invites MUST be short signed strings a person can email:
   single-use, expiring (default 7 days, owner-configurable), carrying the
   project and a role. Redemption binds the redeeming profile's key to that
@@ -415,6 +716,11 @@ document that renders read-only for someone with no profile.
   thread produces an entry with no thread: it MUST stay on the member's
   machine, assignable to a thread later; only the v0-style mechanical run
   record (counts and refs, no distilled text) crosses, tagged unassigned.
+  `unassigned` MUST be a pending state, not a final one. The record MUST carry
+  a duty to assign: the member MUST be able to assign it to a thread later, and
+  the surfaces MUST show pending records so the duty is visible rather than
+  silent. Constitution 2.1.0 names this state in Principle IV, so a pending
+  record satisfies the tagging rule while it waits.
 - **FR-016**: Sharing MUST default to automatic — an entry crosses at run
   end unless the member intervenes — with member control at every level: a
   per-thread auto-share toggle (off means entries stage until the member
@@ -523,7 +829,7 @@ document that renders read-only for someone with no profile.
   that any coding tool speaking those standards connects in at most two
   commands with no SAW code changes per tool. Claude Code, Cursor, and
   Codex are v1's validated tier: reading, posting, status, and automatic
-  run journaling MUST work on all three (SC-010). For tools beyond the
+  run journaling MUST work on all three (SC-011). For tools beyond the
   validated tier, a capability the tool exposes no surface for MUST be
   stated to the member at setup. SAW MUST NOT wrap or fork any tool to
   close a gap (Principles I, V); any per-tool adapter that reaches beyond
@@ -569,6 +875,108 @@ document that renders read-only for someone with no profile.
   automatic run logging with spool durability; and local surface
   authentication.
 
+**Collaboration modes**
+
+- **FR-037**: Each thread MUST carry a collaboration mode for each member:
+  `view`, `comment`, or `edit`. The mode states what that member's agent may
+  do in that thread. `view` permits reading only. `comment` permits reading
+  and posting. `edit` permits reading, posting, claiming, and code work on the
+  thread's refs. A mode MUST be set only by the member it applies to. No
+  member, owner included, may set another member's mode through any surface.
+  The mode governs the agent, never the human: a member always reads and posts
+  in any thread within their access (FR-008). The mode is set per thread only;
+  any thread a member has not set is `comment`. A `view` mode MUST NOT change
+  delivery: the agent still receives the thread and can answer its own
+  member's questions from it. Delivery is a separate control that FR-012
+  already owns — muting adjusts delivery, never access.
+
+  Mode is a **capability**, not an **authority**. It states what a member's
+  agent may do. It never states whose word settles a matter. Authority is
+  FR-043, and the two are enforced independently: a member in `edit` with no
+  authority may post and work but cannot bind, and a member with authority in
+  `comment` may bind but cannot claim or write code.
+- **FR-038**: The default mode for a thread a member has not set MUST be
+  `comment`. Migration MUST NOT remove a capability a member's agent already
+  had: in v0 an agent claims a work item by posting an `intent` that carries
+  the tag, so every thread created by the FR-009(a) migration MUST start at
+  `edit` for every member of the workspace, and the migration MUST record why.
+  New threads created after the upgrade start at `comment`. Every mode change
+  MUST be recorded as an attributable event that every member of the thread's
+  scope can see.
+- **FR-039**: A mode MUST be enforced on the member's own machine, at the
+  member's own agent gate, before the action reaches the relay. An action
+  above the current mode MUST be denied, MUST return a plain reason that names
+  the mode, and MUST be recorded. Pause outranks mode: while a member is
+  paused, every later tool call is denied whatever the mode says (FR-036).
+- **FR-040**: In `edit`, work MUST move only through git. Each agent MUST work
+  on branches under its own member prefix; no agent may write to another
+  member's branch. Every branch MUST bind to the thread as a ref (FR-014), and
+  each bound ref MUST state its workspace. Two members' work on one thread MUST
+  meet through a git merge or a pull request. No code, file content, or diff
+  may cross the relay (FR-025). The relay carries refs and messages only.
+- **FR-041**: The mode MUST be readable and settable with parity on the CLI and
+  the web app (FR-033), and every member's mode on a thread MUST be visible to
+  the members of that thread's scope.
+- **FR-042**: Two extensions of this ladder are out of v1 scope. Their designs
+  are recorded so v1 does not foreclose them, and no v1 requirement depends on
+  either.
+  (a) **Continuous mode**, a fourth rung in which an agent starts its own run
+  when thread activity arrives. In every v1 mode the member starts every run.
+  The deferred authority is standing consent, which a member grants to their
+  own agent alone; it is bounded and revocable, it starts a new run and never
+  forces content into a run already in progress, and pause revokes it. v1 MUST
+  NOT ship any path by which one member's action starts another member's agent
+  (FR-019).
+  (b) **The authority ladder**, in which the source of binding force (FR-043)
+  widens from the owner role to a three-rung project role — contributor, lead,
+  owner — and, later, to per-thread authority overrides. v1 keeps FR-005's two
+  roles. Because FR-043 puts the force on the message and checks the authority
+  separately, widening the source is a data change and not a redesign.
+
+**Authority and message force**
+
+- **FR-043**: Every message MUST carry a force: `advisory` or `binding`. Force
+  is chosen by the author, not implied by their role — a member entitled to
+  bind MUST still be able to comment without binding. `binding` MUST be
+  permitted only to a member with authority; in v1 that is the owner role
+  (FR-005), which v2 widens per FR-042(b). A `binding` message from a member
+  without authority MUST be rejected with a plain reason and recorded; it MUST
+  NOT be silently downgraded.
+
+  A `decision` is a comment made with authority: the same content carries
+  decision force as `binding` and reads as a proposal as `advisory`.
+
+  **Authority binds the work record, not the agent.** A `binding` message MUST
+  settle the matter on the record: the thread state changes, the message is
+  attributable, and every member of the scope can see it. It MUST be delivered
+  to the agents of the members it addresses, and such an agent MUST surface it
+  to its member and MUST NOT silently ignore it. It MUST NOT redirect, stop,
+  or otherwise control another member's agent, and it MUST NOT cause any run
+  on another member's machine. The receiving member decides what their own
+  agent does next, and may dispute the decision in the thread. This preserves
+  the rule that a message is an input and not an order (constitution
+  Principle III).
+
+- **FR-044**: A handoff MUST be a transfer of one thread's claim with an
+  explicit lifecycle, not a fire-and-forget message. It MUST name one
+  recipient, carry the current tip ref of the sender's branch and the thread's
+  bound refs (FR-028), and hold a state: `proposed`, `accepted`, `declined`,
+  or `withdrawn`. The claim MUST stay with the sender until the recipient
+  accepts. On accept the claim moves and the thread records the transfer; on
+  decline or withdraw the claim returns to the sender; every transition is
+  attributable and visible to the thread's scope.
+
+  A recipient whose mode on the thread is `view` or `comment` MUST NOT have a
+  handoff accepted on their behalf: their agent surfaces it, and the member
+  either raises their own mode to `edit` and accepts, or declines.
+
+  An owner MAY direct a handoff with `binding` force (FR-043) — delegation
+  rather than offer. A directed handoff MUST move the claim on the record and
+  MUST be surfaced to the recipient's agent, and it MUST NOT start work on the
+  recipient's machine. The recipient's human decides whether their agent acts.
+  Code still moves only through git: a handoff carries refs, never a working
+  tree (Principle VI, FR-040).
+
 ### Key Entities
 
 - **Profile**: a person. Display name + keypair store (one or more device
@@ -594,6 +1002,15 @@ document that renders read-only for someone with no profile.
   the redeemer's profile key at redemption.
 - **Tombstone**: a redaction record — author, timestamps, the fact of
   withholding — that suppresses one item's content everywhere.
+- **Collaboration mode**: (thread, member, mode) where mode is `view`,
+  `comment`, or `edit`. Set by that member alone. Default `comment`. Governs
+  the member's agent, not the member. A capability, never an authority.
+- **Message force**: `advisory` or `binding`, carried by every message and
+  chosen by its author. `binding` needs authority — the owner role in v1. A
+  decision is a comment made with authority.
+- **Handoff**: a claim transfer with a state — `proposed`, `accepted`,
+  `declined`, `withdrawn` — one named recipient, and the sender's tip ref. The
+  claim moves only on accept.
 
 ## Success Criteria *(mandatory)*
 
@@ -638,6 +1055,32 @@ document that renders read-only for someone with no profile.
 - **SC-013**: An external instruction planted in a bound ticket's comments
   results in zero agent actions in adversarial tests; it can only appear
   as quoted data.
+- **SC-014**: Reading one thread returns that thread's messages and no
+  others, and a member who takes part in 1 of 10 threads receives delivery
+  for that thread plus project broadcasts and for nothing else.
+- **SC-015**: In adversarial tests an agent performs zero actions above its
+  thread mode, and every denial names the mode and is recorded.
+- **SC-016**: In adversarial tests, zero attempts to set another member's
+  agent mode succeed, through any surface, owners included.
+- **SC-017**: Two members in `edit` on one thread finish work with both
+  branches pushed, both refs bound to the thread, and the work integrated by
+  merge or pull request — with zero bytes of code, file content, or diff
+  crossing the relay.
+- **SC-018**: An agent's readable set never exceeds its member's: for every
+  thread, message, and journal entry an agent can read, its member can read
+  the same item on their own surfaces.
+- **SC-019**: In v1, zero runs of any member's agent start from another
+  member's action, and zero runs start without that member's own prompt.
+- **SC-020**: In adversarial tests, zero `binding` messages from members
+  without authority are accepted, and zero are silently downgraded — every
+  refusal names the reason and is recorded.
+- **SC-021**: A binding decision reaches every addressed member's agent and is
+  surfaced to that member on the agent's next run, while causing zero runs and
+  zero course changes on the receiving machine that the receiving member did
+  not choose.
+- **SC-022**: Zero handoffs move a claim before the recipient accepts, and
+  every handoff transition — proposed, accepted, declined, withdrawn — is
+  attributable and visible to the thread's scope.
 
 ## Assumptions
 

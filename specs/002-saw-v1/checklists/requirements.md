@@ -3,6 +3,8 @@
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-08-24
 **Updated**: 2026-08-24 — founder answered all clarifications; spec re-scoped
+**Updated**: 2026-08-27 — US7 threads and US8 collaboration modes added;
+re-validated against the enlarged spec
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -53,3 +55,23 @@
 - Least-proven area: Cursor/Codex journaling surfaces (FR-031 validated
   tier), flagged in Assumptions with the Principle V documented-finding
   gate for any beyond-standard adapter.
+
+### 2026-08-27 re-validation
+
+- Every box above still holds against the enlarged spec. Three markers were
+  opened and all three closed inside the same session, so the marker count
+  is zero again: the `view`/`comment` rungs (FR-037), owner claim override
+  against scoped-thread invisibility (FR-005), and unassigned run records
+  against Principle IV (FR-015).
+- The constitution-amendment gate named above is closed. It merged as PR
+  #105 and `main` carries 2.0.0. Note this branch predates that merge and
+  still shows 1.2.0 on disk; it picks 2.0.0 up on merge, which is why no
+  constitution edit belongs on this branch.
+- One companion amendment follows from the 2026-08-27 session and is filed
+  separately against `main`: Principle IV gains a pending-assignment clause
+  for FR-015 (2.0.0 to 2.1.0, MINOR).
+- The remaining gate is unchanged: the frozen `packages/shared` rewrite as
+  one jointly-approved PR. US7 is a schema change, so that gate is now the
+  first piece of implementation work.
+- See `collab-modes.md` for the requirements-quality checklist covering the
+  new threads and collaboration-modes material.
