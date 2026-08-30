@@ -1,4 +1,32 @@
 <!--
+Sync Impact Report (2.1.0)
+- Version change: 2.0.0 -> 2.1.0 (MINOR: guidance materially expanded)
+- Modified principles:
+  - IV. Automatic, Explained, Traceable Logging - one clause added naming
+    the pending-assignment state. 2.0.0 says "Each log entry MUST be tagged
+    to a feature or story" and offers no other option, so a run that serves
+    no named work had nowhere to go. Such runs are ordinary: a member asks
+    their agent a question, and the run is real and must be captured. Spec
+    002 FR-015 produces exactly that record and tags it "unassigned", which
+    the 2.0.0 letter forbids. The amendment names the state and binds a
+    duty to it: an entry MAY be pending assignment, it MUST be assignable
+    later, and the pending state MUST be visible to its author so the duty
+    is not silent. An entry MUST NOT stay pending because no feature fits.
+    Why MINOR: this permits a state 2.0.0 read as forbidden. Nothing is
+    removed from the mandated set, and no spec, plan, or code that complied
+    with 2.0.0 stops complying, so it is not backward-incompatible under
+    the Versioning rule below. It is not PATCH, because the permitted set
+    does change.
+- Added sections: none
+- Removed sections: none
+- Downstream sync: specs/002-saw-v1/spec.md FR-015 is written against this
+  text and states the same duty. No other requirement changes, and no
+  shipped code changes. The collaboration modes added to spec 002 on
+  2026-08-27 (FR-037..FR-044) need no amendment: every v1 mode has the
+  member start every run, so Principle III is untouched, and authority
+  binds the work record without controlling another member's agent.
+- Deferred TODOs: none
+
 Sync Impact Report (2.0.0)
 - Version change: 1.2.0 -> 2.0.0 (MAJOR: two principles redefined in
   backward-incompatible ways)
@@ -181,9 +209,13 @@ principles.
 
 The system MUST log every action. Each log entry MUST state what happened.
 Each log entry MUST state why it happened. Each log entry MUST be tagged to a
-feature or story. Log capture MUST be automatic — SAW MUST NOT rely on agents
-to log manually. A code path that performs an action without emitting a log
-entry is a defect.
+feature or story, or MUST be marked pending assignment. A pending entry MUST
+be assignable to a feature or story later, and the pending state MUST be
+visible to its author, so the duty to assign it is plain and not silent. An
+entry MUST NOT stay pending because no feature fits; it stays pending only
+until its author assigns it. Log capture MUST be automatic — SAW MUST NOT rely
+on agents to log manually. A code path that performs an action without
+emitting a log entry is a defect.
 
 **Rationale**: Multiplayer agent work is hard to reconstruct after the fact.
 Manual logging fails silently; only automatic capture at the system level
@@ -192,6 +224,12 @@ content, not existence: capture stays automatic on the member's own
 machine even when nothing crosses, and a withheld or revoked entry keeps a
 tombstone — author, timestamps, and the fact of withholding — so the
 record stays complete while content stays under the author's control.
+The pending-assignment state serves the same end from the other side. Not
+every run serves a named piece of work: a member asks their agent a question,
+and the run is real and must be logged, but no feature exists to tag it to
+yet. Refusing to log it would break automatic capture. Inventing a tag would
+make the record lie. Pending says what is true — this happened, and where it
+belongs is not yet decided — and it binds the author to decide.
 
 ### V. Standards, Not Forks
 
@@ -282,4 +320,4 @@ wording fixes that do not change meaning.
 constitution. Complexity MUST be justified against the principles; when in
 doubt, choose the option that keeps SAW smaller.
 
-**Version**: 2.0.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-24
+**Version**: 2.1.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-27
