@@ -11,6 +11,10 @@ import {
 } from "../config.js";
 import { Daemon } from "../daemon/daemon.js";
 import { displayRelay, isTunnelAddress, resolveRelay } from "../tunnel.js";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { renderAgentMd } from "../templates/agent-md.js";
+import { sawDir } from "../config.js";
 import { startWebServer } from "../web/server.js";
 import {
   installHooks,
@@ -203,6 +207,24 @@ export async function runUp(options: UpOptions): Promise<void> {
   const config = readConfig(root);
   if (!config) {
     fail("this repository has no SAW workspace. Run saw init or saw join first.", EXIT_ENV_ERROR);
+  }
+
+  // T139: rewrite AGENT.md from the current template on every start. The
+  // file was written only by init and join, so a member who joined before a
+  // room-rule change kept reading the old rules forever. The file is
+  // generated and git-ignored; a member's own edits do not survive, and
+  // that is the point — the template is the single source.
+  try {
+    writeFileSync(
+      join(sawDir(root), "AGENT.md"),
+      renderAgentMd({
+        workspaceName: config.workspace_name,
+        githubUsername: config.github_username,
+        branchPrefix: config.branch_prefix
+      })
+    );
+  } catch {
+    // A read-only checkout must not stop the daemon. The old file stands.
   }
 
   // A tunnel address in the config needs the tunnel up before the daemon

@@ -318,8 +318,12 @@ export class Daemon {
    * before it writes its output therefore sees the same messages again,
    * instead of losing them. Delivery is at least once, never at most once.
    */
-  inject(source: "session-start" | "prompt-submit", prompt?: string): InjectResult {
-    const raw = this.state.messages(this.cursor.value, 500);
+  inject(
+    source: "session-start" | "prompt-submit",
+    prompt?: string,
+    sessionId?: string
+  ): InjectResult {
+    const raw = this.state.messages(this.cursor.valueFor(sessionId), 500);
     // An agent already knows its own posts. Its human's messages still count.
     const unread = raw.filter(
       (m) => !(m.sender === this.config.github_username && m.sender_kind === "agent")
@@ -334,7 +338,7 @@ export class Daemon {
       work_items: this.state.workItems(),
       me: this.config.github_username,
       latest_seq: this.state.latestSeq(),
-      ack_seq: last ? last.seq : this.cursor.value,
+      ack_seq: last ? last.seq : this.cursor.valueFor(sessionId),
       ack_notices: notices.length
     };
   }
@@ -346,8 +350,8 @@ export class Daemon {
    * `notices` is the count the caller received; those are dropped from the
    * pending list. Both values come from the matching `inject` result.
    */
-  ackInjection(seq: number, notices = 0): void {
-    this.cursor.advance(seq);
+  ackInjection(seq: number, notices = 0, sessionId?: string): void {
+    this.cursor.advance(seq, sessionId);
     if (notices > 0) this.pendingNotices.splice(0, notices);
   }
 

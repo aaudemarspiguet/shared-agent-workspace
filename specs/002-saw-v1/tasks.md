@@ -101,7 +101,7 @@ boundary is wrong.
 
 - [ ] T104 [US7] Route messages by `thread_id` in `packages/relay/src/messages.ts`, with a null `thread_id` meaning a project broadcast (issue #128)
 - [ ] T105 [US7] Move delivery, cursors, and sequence numbers to per-thread streams in `packages/relay/src/sync.ts` per contracts §2.2 (issue #129)
-- [ ] T106 [US7] Key the read cursor by coding-tool session id, not repo clone, in `packages/cli/src/daemon/cursor.ts` and `packages/cli/src/daemon/daemon.ts` — today two Claude sessions in one repo consume each other's messages; shares a root cause with T062 (#68) (issue #130)
+- [x] T106 [US7] Key the read cursor by coding-tool session id, not repo clone, in `packages/cli/src/daemon/cursor.ts` and `packages/cli/src/daemon/daemon.ts` — today two Claude sessions in one repo consume each other's messages; shares a root cause with T062 (#68) (issue #130)
 - [ ] T107 [US7] Make `RoomState` thread-aware in `packages/cli/src/daemon/state.ts` (issue #131)
 - [ ] T108 [P] [US7] Integration test asserting a message posted to one thread never appears in another, and delivery covers only participated threads plus broadcasts (SC-014) (issue #132)
 - [ ] T109 [P] [US7] Integration test asserting a claim on one thread leaves another thread's claim state unchanged, and that a contested claim still resolves first-claim-wins (issue #133)
@@ -181,7 +181,7 @@ as one use case. These bind the surface tasks above to that identity.
 - [ ] T136 Assert the Principle III ceiling — an agent's readable set never exceeds its member's — in `tests/integration/` (SC-018) (issue #162)
 - [ ] T137 Assert the v1 boundary in `tests/integration/`: zero runs start from another member's action, and zero start without the member's own prompt (SC-019) (issue #163)
 - [ ] T138 [P] Resolve the open questions the checklist recorded: thread state transitions (CHK005), broadcast permission (CHK006), ref-binding permission (CHK007), default force (CHK008), force on journal entries (CHK009), handoff expiry (CHK010), and mode change mid-run (CHK011) (issue #164)
-- [ ] T139 [P] Refresh `.saw/AGENT.md` from its template on `saw up` in `packages/cli/src/commands/up.ts` — it is written only by init and join today, so new room rules never reach an already-joined member (issue #165)
+- [x] T139 [P] Refresh `.saw/AGENT.md` from its template on `saw up` in `packages/cli/src/commands/up.ts` — it is written only by init and join today, so new room rules never reach an already-joined member (issue #165)
 - [ ] T140 [P] Document threads and modes in `README.md` and `packages/*/README.md`, in ASD-STE (issue #166)
 - [ ] T141 Run the eight quickstart scenarios on two machines and record the outcome in `specs/002-saw-v1/quickstart-results.md` (issue #167)
 - [ ] T142 Confirm `npm test` has not moved from its recorded baseline (issue #168)

@@ -92,9 +92,13 @@ export function renderContext(
 export async function runInjectHook(event: "session-start" | "prompt-submit"): Promise<void> {
   const input = parseHookInput(await readStdin());
   const prompt = typeof input.prompt === "string" ? input.prompt : undefined;
+  // T106: the coding tool names the session on every hook call. The daemon
+  // keeps one read cursor per session, so two sessions in one repo stop
+  // consuming each other's messages.
+  const sessionId = typeof input.session_id === "string" ? input.session_id : undefined;
   const data = (await daemonRequest("/api/inject", {
     method: "POST",
-    body: { source: event, prompt }
+    body: { source: event, prompt, session_id: sessionId }
   })) as InjectResponse | undefined;
   if (!data) return;
 
@@ -117,6 +121,6 @@ export async function runInjectHook(event: "session-start" | "prompt-submit"): P
   // agent never saw.
   await daemonRequest("/api/inject/ack", {
     method: "POST",
-    body: { seq: data.ack_seq, notices: data.ack_notices }
+    body: { seq: data.ack_seq, notices: data.ack_notices, session_id: sessionId }
   });
 }
