@@ -88,14 +88,18 @@ parallel. Local-first; prefer off-the-shelf; open source."
 
 ### Session 2026-08-30
 
-- Q: What is the interface identity of SAW's surfaces? → A (founder): Mimic
-  Jira crossed with Discord/Slack. Those products already got the
-  organization of work and team conversation right, and that is not a wheel
-  SAW should try to reinvent. The product experience boils down to: a link
-  on the tracker ticket opens the SAW thread; the thread reads like a chat
-  channel; and the developer side has a console to monitor the system and
-  configure it. Recorded before spec approval so the surface work is built
-  to this identity, not discovered later.
+- Q: What is the interface identity of SAW's surfaces? → A (founder):
+  Thread-based, all the way down. The UI organizes work the way a tracker
+  does — work items and threads as the units, with visible states — and the
+  conversation inside a thread reads the way team chat does. Mimic Jira
+  crossed with Discord/Slack, because those products got the organization
+  of work and team conversation right, and that is not a wheel SAW should
+  try to reinvent. Binding a thread to a tracker ticket, with the ticket
+  linking back to the thread, is one use case this identity serves — not
+  the primary entry; SAW's own surfaces are the primary entry. The
+  developer side has a console to monitor the system and configure it.
+  Recorded before spec approval so the surface work is built to this
+  identity, not discovered later.
 
 ### Session 2026-08-27
 
@@ -990,19 +994,22 @@ git and that the relay carried only refs and messages.
 
 **Interface identity**
 
-- **FR-045**: SAW's surfaces MUST follow interface conventions developers
-  already know, not invent new ones. The thread surface MUST read as a team
-  chat: a thread list, a message pane newest-last, presence, and addressed
-  messages that read like mentions. Work organization MUST read as a
-  tracker: work items with visible states, and claims that read like
-  assignees. A novel interaction pattern requires a documented finding that
-  no familiar convention fits — the Principle V rule, applied to interface.
-- **FR-046**: The tracker ticket MUST work as a front door. Every SAW status
-  comment on a bound ticket (FR-030) MUST carry a link to its thread.
-  Opening the link on a member's machine MUST land in that member's own SAW
-  surface, on that thread. A viewer without SAW running MUST get a plain
-  explanation of what SAW is and how to join, plus the thread's status
-  projection when its participants enabled one (FR-034).
+- **FR-045**: The thread MUST be the organizing unit of every surface:
+  navigation is by work items and threads with visible states, the way a
+  tracker organizes work; a flat feed is a view over threads, never the
+  primary structure. Inside a thread, the surface MUST read as team chat: a
+  message pane newest-last, presence, and addressed messages that read like
+  mentions. Claims MUST read like assignees. SAW's surfaces MUST follow
+  these conventions developers already know, not invent new ones; a novel
+  interaction pattern requires a documented finding that no familiar
+  convention fits — the Principle V rule, applied to interface.
+- **FR-046**: SAW's own surfaces are the primary entry. When a thread is
+  bound to a tracker ticket (FR-030), the crossing MUST be frictionless in
+  both directions: every SAW status comment on the ticket carries a link to
+  its thread, and opening that link on a member's machine lands in that
+  member's own SAW surface, on that thread. A viewer without SAW running
+  MUST get a plain explanation of what SAW is and how to join, plus the
+  thread's status projection when its participants enabled one (FR-034).
 - **FR-047**: The web app MUST serve as the developer console: connection
   and tunnel state, hook and agent-integration health per repository,
   collaboration modes, member directory and administration — the monitor
@@ -1117,9 +1124,10 @@ git and that the relay carried only refs and messages.
   attributable and visible to the thread's scope.
 
 - **SC-023**: A developer who already uses a team chat tool and a tracker
-  completes the core loop on first use with zero documentation: from a
-  bound ticket, open the thread, read where the work stands, and post a
-  message their teammate's agent surfaces.
+  completes the core loop on first use with zero documentation: open SAW,
+  find the thread for a piece of work, read where it stands, and post a
+  message their teammate's agent surfaces. When the thread is bound to a
+  ticket, the same loop completes starting from the ticket's link.
 
 ## Assumptions
 

@@ -50,11 +50,12 @@ Seven pillars, from the founder's statement:
    not novel — an access model a developer already understands.
 4. **Surfaces.** A CLI, a UI to manage workspaces and threads, and a VS Code
    extension. All of the above for a comprehensive product. Interface
-   identity (decided 2026-08-30): mimic Jira crossed with Discord/Slack —
-   those products got work organization and team conversation right, and
-   SAW does not reinvent that wheel. The tracker ticket is a front door: a
-   link on the ticket opens the SAW thread; the developer side is a console
-   to monitor and configure.
+   identity (decided 2026-08-30): thread-based all the way down — the UI
+   organizes work like a tracker (Jira) and conversation inside a thread
+   like team chat (Discord/Slack); those wheels are not reinvented. A
+   thread bound to a tracker ticket links both ways as one supported use
+   case, not the primary entry; the developer side is a console to monitor
+   and configure.
 5. **Effortless relay.** Invite by email. A couple of commands, or buttons in
    a UI. No Tailscale, no VPN, no network configuration. Local-first
    strongly preferred; server-side components only where truly necessary.
