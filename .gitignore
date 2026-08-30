@@ -27,3 +27,4 @@ coverage/
 .saw/state.json
 .saw/log-spool.jsonl
 .saw/log-spool.jsonl.tmp
+staged-shared-sandbox/

@@ -12,6 +12,15 @@ export const MESSAGE_TYPES = [
 ] as const;
 export type MessageType = (typeof MESSAGE_TYPES)[number];
 
+/**
+ * The force a message carries (spec 002 FR-043). Authority binds the work
+ * record, never another member's agent. `binding` requires authority; the
+ * relay checks it and never silently downgrades (SC-020).
+ */
+export const MESSAGE_FORCES = ["advisory", "binding"] as const;
+export type MessageForce = (typeof MESSAGE_FORCES)[number];
+export const DEFAULT_FORCE: MessageForce = "advisory";
+
 export const MAX_BODY_LENGTH = 4000;
 export const MAX_REFS = 10;
 /** Cap on the short free-text labels: `work_item`, `target`. */
@@ -26,6 +35,18 @@ export const REJECTION_REASONS = [
   "not_json"
 ] as const;
 export type RejectionReason = (typeof REJECTION_REASONS)[number];
+
+/**
+ * A relay-assigned id (thread ids, message ids) is a Crockford-base32 ULID.
+ * The shape check is strict, so an id field can never carry free text.
+ */
+const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+
+export function isValidUlid(value: string): boolean {
+  return ULID_RE.test(value);
+}
+
+export const UlidSchema = z.string().regex(ULID_RE, "not a ulid");
 
 /** A git ref is a branch name or a commit SHA. It is the only pointer to code. */
 export interface GitRef {
@@ -192,13 +213,22 @@ export function findSmuggledContent(body: string): string | null {
   return null;
 }
 
-/** The fields an agent or human sends when they post a message. */
+/**
+ * The fields an agent or human sends when they post a message.
+ *
+ * Spec 002 (T089): `thread_id` and `force` join the envelope. A null or
+ * absent `thread_id` means a project broadcast (FR-011). `force` defaults
+ * to `advisory`; the relay checks authority before accepting `binding`
+ * (FR-043). The five message types are unchanged.
+ */
 export const MessagePostSchema = z.object({
   type: z.enum(MESSAGE_TYPES),
   body: z.string().min(1).max(MAX_BODY_LENGTH),
   refs: z.array(GitRefSchema).max(MAX_REFS).default([]),
   work_item: z.string().min(1).max(MAX_LABEL_LENGTH).optional(),
-  target: z.string().min(1).max(MAX_LABEL_LENGTH).optional()
+  target: z.string().min(1).max(MAX_LABEL_LENGTH).optional(),
+  thread_id: UlidSchema.nullable().optional(),
+  force: z.enum(MESSAGE_FORCES).default(DEFAULT_FORCE)
 });
 export type MessagePost = z.infer<typeof MessagePostSchema>;
 
@@ -240,6 +270,21 @@ export function validatePost(input: unknown): PostValidation {
       };
     }
   }
+  // The two 002 fields carry no free text by construction. A wrong value
+  // still gets its true reason rather than the generic shape error.
+  if (raw.thread_id !== undefined && raw.thread_id !== null) {
+    if (typeof raw.thread_id !== "string" || !isValidUlid(raw.thread_id)) {
+      return { ok: false, reason: "not_json", summary: "thread id is not valid" };
+    }
+  }
+  if (raw.force !== undefined) {
+    if (
+      typeof raw.force !== "string" ||
+      !MESSAGE_FORCES.includes(raw.force as MessageForce)
+    ) {
+      return { ok: false, reason: "not_json", summary: "force is not valid" };
+    }
+  }
   const parsed = MessagePostSchema.safeParse(input);
   if (!parsed.success) {
     const refIssue = parsed.error.issues.find((i) => i.path[0] === "refs");
@@ -269,12 +314,22 @@ export function validatePost(input: unknown): PostValidation {
 export interface StoredMessage {
   id: string;
   seq: number;
+  /**
+   * The message's position inside its thread (spec 002, contracts §2.2).
+   * Assigned by the relay. Absent on rows stored before the upgrade and on
+   * project broadcasts.
+   */
+  thread_seq?: number;
   sender: string;
   sender_kind: "agent" | "human";
   type: MessageType;
   body: string;
   refs: GitRef[];
   target?: string;
+  /** Null means a project broadcast. Absent on rows from before the upgrade. */
+  thread_id?: string | null;
+  force?: MessageForce;
+  /** The v0 tag. Kept on historic rows; new posts carry `thread_id`. */
   work_item?: string;
   sent_at: string;
 }
