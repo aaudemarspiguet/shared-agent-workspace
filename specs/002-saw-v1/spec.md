@@ -86,6 +86,17 @@ parallel. Local-first; prefer off-the-shelf; open source."
   spanning multiple repos, with team/group/one-on-one access levels, are in
   v1, accepting roughly double the schema work.
 
+### Session 2026-08-30
+
+- Q: What is the interface identity of SAW's surfaces? → A (founder): Mimic
+  Jira crossed with Discord/Slack. Those products already got the
+  organization of work and team conversation right, and that is not a wheel
+  SAW should try to reinvent. The product experience boils down to: a link
+  on the tracker ticket opens the SAW thread; the thread reads like a chat
+  channel; and the developer side has a console to monitor the system and
+  configure it. Recorded before spec approval so the surface work is built
+  to this identity, not discovered later.
+
 ### Session 2026-08-27
 
 - Q: What decides how much of a thread a member's agent may act on? → A: A
@@ -977,6 +988,26 @@ git and that the relay carried only refs and messages.
   Code still moves only through git: a handoff carries refs, never a working
   tree (Principle VI, FR-040).
 
+**Interface identity**
+
+- **FR-045**: SAW's surfaces MUST follow interface conventions developers
+  already know, not invent new ones. The thread surface MUST read as a team
+  chat: a thread list, a message pane newest-last, presence, and addressed
+  messages that read like mentions. Work organization MUST read as a
+  tracker: work items with visible states, and claims that read like
+  assignees. A novel interaction pattern requires a documented finding that
+  no familiar convention fits — the Principle V rule, applied to interface.
+- **FR-046**: The tracker ticket MUST work as a front door. Every SAW status
+  comment on a bound ticket (FR-030) MUST carry a link to its thread.
+  Opening the link on a member's machine MUST land in that member's own SAW
+  surface, on that thread. A viewer without SAW running MUST get a plain
+  explanation of what SAW is and how to join, plus the thread's status
+  projection when its participants enabled one (FR-034).
+- **FR-047**: The web app MUST serve as the developer console: connection
+  and tunnel state, hook and agent-integration health per repository,
+  collaboration modes, member directory and administration — the monitor
+  and configure surface, with CLI parity per FR-033 and FR-041.
+
 ### Key Entities
 
 - **Profile**: a person. Display name + keypair store (one or more device
@@ -1084,6 +1115,11 @@ git and that the relay carried only refs and messages.
 - **SC-022**: Zero handoffs move a claim before the recipient accepts, and
   every handoff transition — proposed, accepted, declined, withdrawn — is
   attributable and visible to the thread's scope.
+
+- **SC-023**: A developer who already uses a team chat tool and a tracker
+  completes the core loop on first use with zero documentation: from a
+  bound ticket, open the thread, read where the work stands, and post a
+  message their teammate's agent surfaces.
 
 ## Assumptions
 
