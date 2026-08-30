@@ -32,9 +32,13 @@ is complete.
 
 ## Ownership
 
-Nothing here is assigned. Spec 002 spans both members, and the room rules do not
-let one member assign the other work without a recorded `decision`. Ownership is
-settled in the room first, then written into the issues.
+Settled by the room `decision` at seq 12 (2026-08-30, work item
+002-threads-modes), directed by shreyk2: shreyk2's agent drafts Phase 2
+(the joint shared PR — aaudemarspiguet must approve as frozen-package
+owner before merge), drafts the relay tasks for aaudemarspiguet's owner
+review (his to reclaim on request), and owns the CLI, web, and
+integration-test tasks. T141 is a joint live run. Any line is open to
+dispute in the room.
 
 ## Tests
 
@@ -46,9 +50,9 @@ and this spec's success criteria include adversarial ones (SC-016, SC-020).
 
 ## Phase 1: Setup
 
-- [ ] T084 Add a `npm test` job on `windows-latest` and `ubuntu-latest` to `.github/workflows/`, reporting but not gating, so the 205/214 Windows baseline stops being unverified (issue #108)
-- [ ] T085 [P] Record the pre-change test baseline in `specs/002-saw-v1/quickstart-results.md` — 218/227 on Windows as measured on this branch on 2026-08-27, with the nine known failures split as seven T081 and two T056 (issue #109)
-- [ ] T086 [P] Agree ownership of Phase 2 to Phase 5 in the room and record it as a `decision`, then write the agreed owner into each issue (issue #110)
+- [x] T084 Add a `npm test` job on `windows-latest` and `ubuntu-latest` to `.github/workflows/`, reporting but not gating, so the 205/214 Windows baseline stops being unverified (issue #108)
+- [x] T085 [P] Record the pre-change test baseline in `specs/002-saw-v1/quickstart-results.md` — 218/227 on Windows as measured on this branch on 2026-08-27, with the nine known failures split as seven T081 and two T056 (issue #109)
+- [x] T086 [P] Agree ownership of Phase 2 to Phase 5 in the room and record it as a `decision`, then write the agreed owner into each issue (issue #110)
 
 > **Note**: no task in Phase 1 may edit `packages/shared`. Every change to that
 > package belongs to the single joint pull request in Phase 2.
@@ -157,6 +161,20 @@ cannot bind; a member with authority in `comment` can bind but cannot claim.
 - [ ] T144 [P] [US8] Integration test asserting two members in `edit` on one thread land two pushed refs bound to that thread, and that **zero** bytes of code, file content, or diff crossed the relay (FR-040, SC-017) (issue #161)
 
 ---
+
+## Phase 4b: Interface identity (FR-045..047, session 2026-08-30)
+
+Added after the founders locked the interface identity: thread-based
+navigation as the primary structure, chat inside a thread, the ticket link
+as one use case. These bind the surface tasks above to that identity.
+
+- [ ] T145 [P] Make the web app's primary navigation the thread list with visible states and claims-as-assignees, per FR-045; the flat feed becomes a view over threads (extends T113) (issue TBD)
+- [ ] T146 [P] Inside a thread, render the message pane newest-last with presence and addressed messages as mentions, per FR-045 (extends T113) (issue TBD)
+- [ ] T147 Frame the web app's non-thread pages as the developer console per FR-047: connection and tunnel state, hook and integration health per repository, modes, member directory (issue TBD)
+
+> FR-046 (bound-ticket deep links) belongs to the connector slice with
+> FR-030 and is not in this task set. SC-023's first-use loop is measured
+> when T145-T147 land.
 
 ## Phase 5: Polish & cross-cutting
 

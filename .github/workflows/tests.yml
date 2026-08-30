@@ -1,0 +1,27 @@
+# T084: run the test suite on both platforms. The job reports and does not
+# gate: the Windows baseline has known failures (T081/T056, issues #98 and
+# #60), so a red Windows run is information, not a block. Flip
+# continue-on-error to false when the Windows baseline reaches green.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
