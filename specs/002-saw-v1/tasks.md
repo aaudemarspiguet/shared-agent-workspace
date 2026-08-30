@@ -32,9 +32,13 @@ is complete.
 
 ## Ownership
 
-Nothing here is assigned. Spec 002 spans both members, and the room rules do not
-let one member assign the other work without a recorded `decision`. Ownership is
-settled in the room first, then written into the issues.
+Settled by the room `decision` at seq 12 (2026-08-30, work item
+002-threads-modes), directed by shreyk2: shreyk2's agent drafts Phase 2
+(the joint shared PR — aaudemarspiguet must approve as frozen-package
+owner before merge), drafts the relay tasks for aaudemarspiguet's owner
+review (his to reclaim on request), and owns the CLI, web, and
+integration-test tasks. T141 is a joint live run. Any line is open to
+dispute in the room.
 
 ## Tests
 
@@ -46,9 +50,9 @@ and this spec's success criteria include adversarial ones (SC-016, SC-020).
 
 ## Phase 1: Setup
 
-- [ ] T084 Add a `npm test` job on `windows-latest` and `ubuntu-latest` to `.github/workflows/`, reporting but not gating, so the 205/214 Windows baseline stops being unverified (issue #108)
-- [ ] T085 [P] Record the pre-change test baseline in `specs/002-saw-v1/quickstart-results.md` — 218/227 on Windows as measured on this branch on 2026-08-27, with the nine known failures split as seven T081 and two T056 (issue #109)
-- [ ] T086 [P] Agree ownership of Phase 2 to Phase 5 in the room and record it as a `decision`, then write the agreed owner into each issue (issue #110)
+- [x] T084 Add a `npm test` job on `windows-latest` and `ubuntu-latest` to `.github/workflows/`, reporting but not gating, so the 205/214 Windows baseline stops being unverified (issue #108)
+- [x] T085 [P] Record the pre-change test baseline in `specs/002-saw-v1/quickstart-results.md` — 218/227 on Windows as measured on this branch on 2026-08-27, with the nine known failures split as seven T081 and two T056 (issue #109)
+- [x] T086 [P] Agree ownership of Phase 2 to Phase 5 in the room and record it as a `decision`, then write the agreed owner into each issue (issue #110)
 
 > **Note**: no task in Phase 1 may edit `packages/shared`. Every change to that
 > package belongs to the single joint pull request in Phase 2.
@@ -97,7 +101,7 @@ boundary is wrong.
 
 - [ ] T104 [US7] Route messages by `thread_id` in `packages/relay/src/messages.ts`, with a null `thread_id` meaning a project broadcast (issue #128)
 - [ ] T105 [US7] Move delivery, cursors, and sequence numbers to per-thread streams in `packages/relay/src/sync.ts` per contracts §2.2 (issue #129)
-- [ ] T106 [US7] Key the read cursor by coding-tool session id, not repo clone, in `packages/cli/src/daemon/cursor.ts` and `packages/cli/src/daemon/daemon.ts` — today two Claude sessions in one repo consume each other's messages; shares a root cause with T062 (#68) (issue #130)
+- [x] T106 [US7] Key the read cursor by coding-tool session id, not repo clone, in `packages/cli/src/daemon/cursor.ts` and `packages/cli/src/daemon/daemon.ts` — today two Claude sessions in one repo consume each other's messages; shares a root cause with T062 (#68) (issue #130)
 - [ ] T107 [US7] Make `RoomState` thread-aware in `packages/cli/src/daemon/state.ts` (issue #131)
 - [ ] T108 [P] [US7] Integration test asserting a message posted to one thread never appears in another, and delivery covers only participated threads plus broadcasts (SC-014) (issue #132)
 - [ ] T109 [P] [US7] Integration test asserting a claim on one thread leaves another thread's claim state unchanged, and that a contested claim still resolves first-claim-wins (issue #133)
@@ -158,12 +162,26 @@ cannot bind; a member with authority in `comment` can bind but cannot claim.
 
 ---
 
+## Phase 4b: Interface identity (FR-045..047, session 2026-08-30)
+
+Added after the founders locked the interface identity: thread-based
+navigation as the primary structure, chat inside a thread, the ticket link
+as one use case. These bind the surface tasks above to that identity.
+
+- [ ] T145 [P] Make the web app's primary navigation the thread list with visible states and claims-as-assignees, per FR-045; the flat feed becomes a view over threads (extends T113) (issue TBD)
+- [ ] T146 [P] Inside a thread, render the message pane newest-last with presence and addressed messages as mentions, per FR-045 (extends T113) (issue TBD)
+- [ ] T147 Frame the web app's non-thread pages as the developer console per FR-047: connection and tunnel state, hook and integration health per repository, modes, member directory (issue TBD)
+
+> FR-046 (bound-ticket deep links) belongs to the connector slice with
+> FR-030 and is not in this task set. SC-023's first-use loop is measured
+> when T145-T147 land.
+
 ## Phase 5: Polish & cross-cutting
 
 - [ ] T136 Assert the Principle III ceiling — an agent's readable set never exceeds its member's — in `tests/integration/` (SC-018) (issue #162)
 - [ ] T137 Assert the v1 boundary in `tests/integration/`: zero runs start from another member's action, and zero start without the member's own prompt (SC-019) (issue #163)
 - [ ] T138 [P] Resolve the open questions the checklist recorded: thread state transitions (CHK005), broadcast permission (CHK006), ref-binding permission (CHK007), default force (CHK008), force on journal entries (CHK009), handoff expiry (CHK010), and mode change mid-run (CHK011) (issue #164)
-- [ ] T139 [P] Refresh `.saw/AGENT.md` from its template on `saw up` in `packages/cli/src/commands/up.ts` — it is written only by init and join today, so new room rules never reach an already-joined member (issue #165)
+- [x] T139 [P] Refresh `.saw/AGENT.md` from its template on `saw up` in `packages/cli/src/commands/up.ts` — it is written only by init and join today, so new room rules never reach an already-joined member (issue #165)
 - [ ] T140 [P] Document threads and modes in `README.md` and `packages/*/README.md`, in ASD-STE (issue #166)
 - [ ] T141 Run the eight quickstart scenarios on two machines and record the outcome in `specs/002-saw-v1/quickstart-results.md` (issue #167)
 - [ ] T142 Confirm `npm test` has not moved from its recorded baseline (issue #168)

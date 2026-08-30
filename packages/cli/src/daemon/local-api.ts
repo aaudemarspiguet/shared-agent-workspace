@@ -35,6 +35,17 @@ function respond(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+/**
+ * A session id is an opaque key from the coding tool (T106). Cap it so a
+ * hostile or broken caller cannot grow the state file without limit.
+ */
+function sessionKey(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const id = raw.trim();
+  if (id.length === 0 || id.length > 128) return undefined;
+  return id;
+}
+
 function errorBody(code: string, message: string): object {
   return { error: { code, message } };
 }
@@ -138,16 +149,22 @@ export async function handleApiRequest(
       const body = (await readJsonBody(req)) as {
         source?: string;
         prompt?: string;
+        session_id?: string;
       };
       const source = body.source === "session-start" ? "session-start" : "prompt-submit";
-      respond(res, 200, daemon.inject(source, body.prompt));
+      respond(res, 200, daemon.inject(source, body.prompt, sessionKey(body.session_id)));
       return true;
     }
 
     // The second half of the two-phase injection. The cursor moves only when
     // the hook reports that it delivered the messages.
     if (req.method === "POST" && path === "/api/inject/ack") {
-      const body = (await readJsonBody(req)) as { seq?: number; notices?: number };
+      const body = (await readJsonBody(req)) as {
+        seq?: number;
+        notices?: number;
+        session_id?: string;
+      };
+      const sessionId = sessionKey(body.session_id);
       if (typeof body.seq !== "number" || !Number.isFinite(body.seq)) {
         respond(res, 400, errorBody("invalid_input", "seq must be a number"));
         return true;
@@ -157,7 +174,7 @@ export async function handleApiRequest(
       // persisted, so the member stays silent after a restart. When the cache
       // holds no messages, the bound is the cursor itself, because inject()
       // answers with the cursor value in that case.
-      const highest = Math.max(daemon.state.latestSeq(), daemon.cursor.value);
+      const highest = Math.max(daemon.state.latestSeq(), daemon.cursor.valueFor(sessionId));
       if (body.seq > highest) {
         respond(
           res,
@@ -175,8 +192,8 @@ export async function handleApiRequest(
         );
         return true;
       }
-      daemon.ackInjection(body.seq, notices);
-      respond(res, 200, { ok: true, cursor: daemon.cursor.value });
+      daemon.ackInjection(body.seq, notices, sessionId);
+      respond(res, 200, { ok: true, cursor: daemon.cursor.valueFor(sessionId) });
       return true;
     }
 

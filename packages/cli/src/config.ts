@@ -60,9 +60,20 @@ export interface DaemonInfo {
 }
 
 /** Local daemon state that must survive restarts. */
-export interface LocalState {
-  /** Highest message seq already injected into the agent context. */
+/** One coding-tool session's read position (T106). */
+export interface SessionCursor {
   last_injected_seq: number;
+  updated_at: string;
+}
+
+export interface LocalState {
+  /**
+   * The repo-level floor: the highest seq any session has acked. Old
+   * versions stored the single repo cursor here; the meaning is compatible.
+   */
+  last_injected_seq: number;
+  /** Per-session cursors (T106). Absent in files from older versions. */
+  sessions?: Record<string, SessionCursor>;
 }
 
 export const DEFAULT_WEB_PORT = 7420;
