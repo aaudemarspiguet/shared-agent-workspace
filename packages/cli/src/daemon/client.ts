@@ -14,6 +14,7 @@ import type {
   PauseStateFrame,
   RunLogEntryInput,
   ServerFrame,
+  StoredHandoff,
   StoredMessage,
   StoredThread,
   StoredThreadMode,
@@ -43,6 +44,7 @@ export interface RelayClientHandlers {
   onThread?: (thread: StoredThread) => void;
   onThreadMode?: (mode: StoredThreadMode) => void;
   onThreadRef?: (binding: ThreadRefBinding) => void;
+  onHandoff?: (handoff: StoredHandoff) => void;
 }
 
 export type ThreadOpenOutcome =
@@ -154,6 +156,29 @@ export class RelayClient {
       );
       this.send({ kind: "post", post, sender_kind: senderKind });
     });
+  }
+
+  /** Set (or read) this member's own mode on a thread (spec 002 US8). */
+  threadModeSet(threadId: string, mode?: "view" | "comment" | "edit"): void {
+    if (!this.connected) return;
+    this.send({ kind: "thread_mode_set", set: { thread_id: threadId, mode } });
+  }
+
+  /** Propose (or direct) a handoff. The answer arrives as a handoff frame. */
+  handoffPropose(propose: {
+    thread_id: string;
+    to: string;
+    tip_ref: { kind: "branch" | "commit"; value: string };
+    directed?: boolean;
+  }): void {
+    if (!this.connected) return;
+    this.send({ kind: "handoff_propose", propose });
+  }
+
+  /** Accept, decline, or withdraw a handoff. */
+  handoffResolve(handoffId: string, toState: "accepted" | "declined" | "withdrawn"): void {
+    if (!this.connected) return;
+    this.send({ kind: "handoff_resolve", handoff_id: handoffId, to_state: toState });
   }
 
   /** Open a thread. Resolves with the thread the relay made (spec 002). */
@@ -297,6 +322,9 @@ export class RelayClient {
       case "thread_mode":
         this.handlers.onThreadMode?.(frame.mode);
         return;
+      case "handoff":
+        this.handlers.onHandoff?.(frame.handoff);
+        return;
       case "thread_ref":
         this.handlers.onThreadRef?.(frame.binding);
         return;
@@ -315,7 +343,7 @@ export class RelayClient {
       case "pong":
         return;
       case "error":
-        if (frame.code === "unknown_thread") {
+        if (frame.code === "unknown_thread" || frame.code === "no_authority") {
           this.take(this.pendingPosts)?.resolve({
             ok: false,
             code: "rejected",

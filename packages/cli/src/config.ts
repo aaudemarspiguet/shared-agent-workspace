@@ -74,6 +74,14 @@ export interface LocalState {
   last_injected_seq: number;
   /** Per-session cursors (T106). Absent in files from older versions. */
   sessions?: Record<string, SessionCursor>;
+  /** Binding decisions this member has not answered yet (spec 002 T129). */
+  pending_bindings?: Array<{
+    seq: number;
+    thread_id: string;
+    sender: string;
+    body: string;
+    at: string;
+  }>;
 }
 
 export const DEFAULT_WEB_PORT = 7420;

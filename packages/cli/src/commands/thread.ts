@@ -55,3 +55,61 @@ export async function runThreadOpen(options: { title?: string; type?: string }):
   const { thread } = res.json as { thread: { id: string; title: string; type: string } };
   console.log(`Opened thread ${thread.id} [${thread.type}] ${thread.title}`);
 }
+
+export async function runThreadMode(options: {
+  id?: string;
+  mode?: string;
+}): Promise<void> {
+  const root = resolveRepoRoot();
+  if (!root) fail("this directory is not inside a git repository");
+  if (!options.id) fail("--id is required");
+  if (options.mode !== "view" && options.mode !== "comment" && options.mode !== "edit") {
+    fail("--mode must be view, comment, or edit");
+  }
+  const res = await daemonCall(root, "/api/thread/mode", {
+    method: "POST",
+    body: { thread_id: options.id, mode: options.mode }
+  });
+  if (!res || res.status !== 200) fail(NO_DAEMON);
+  console.log(`Your mode on ${options.id} is now ${options.mode}. It restrains your own agent only.`);
+}
+
+export async function runThreadHandoff(options: {
+  action?: string;
+  id?: string;
+  to?: string;
+  ref?: string;
+  handoff?: string;
+}): Promise<void> {
+  const root = resolveRepoRoot();
+  if (!root) fail("this directory is not inside a git repository");
+  const action = options.action;
+  if (action === "propose") {
+    if (!options.id || !options.to || !options.ref) {
+      fail("propose needs --id <thread>, --to <member>, --ref <branch>");
+    }
+    const res = await daemonCall(root, "/api/handoff", {
+      method: "POST",
+      body: {
+        action: "propose",
+        thread_id: options.id,
+        to: options.to,
+        tip_ref: { kind: "branch", value: options.ref }
+      }
+    });
+    if (!res || res.status !== 200) fail(NO_DAEMON);
+    console.log(`Handoff proposed to ${options.to}. The claim moves when they accept.`);
+    return;
+  }
+  if (action === "accept" || action === "decline" || action === "withdraw") {
+    if (!options.handoff) fail(`${action} needs --handoff <id>`);
+    const res = await daemonCall(root, "/api/handoff", {
+      method: "POST",
+      body: { action, handoff_id: options.handoff }
+    });
+    if (!res || res.status !== 200) fail(NO_DAEMON);
+    console.log(`Handoff ${options.handoff}: ${action} sent.`);
+    return;
+  }
+  fail("action must be propose, accept, decline, or withdraw");
+}

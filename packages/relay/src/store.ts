@@ -5,6 +5,8 @@ import Database from "better-sqlite3";
 import { ulid } from "ulid";
 import {
   MIGRATED_THREAD_MODE,
+  type HandoffState,
+  type StoredHandoff,
   type GitRef,
   type LogSource,
   type MessagePost,
@@ -726,6 +728,96 @@ export class RelayStore {
       mode: r.mode,
       set_at: r.set_at
     }));
+  }
+
+  // ---- Handoffs (spec 002 US8, T132) ----
+
+  private rowToHandoff(r: {
+    id: string;
+    thread_id: string;
+    from_member: string;
+    to_member: string;
+    state: string;
+    tip_ref_kind: GitRef["kind"];
+    tip_ref_value: string;
+    directed: number;
+    created_at: string;
+    resolved_at: string | null;
+  }): StoredHandoff {
+    return {
+      id: r.id,
+      thread_id: r.thread_id,
+      from_member: r.from_member,
+      to_member: r.to_member,
+      state: r.state as HandoffState,
+      tip_ref: { kind: r.tip_ref_kind, value: r.tip_ref_value },
+      directed: r.directed === 1,
+      created_at: r.created_at,
+      resolved_at: r.resolved_at
+    };
+  }
+
+  createHandoff(
+    threadId: string,
+    fromMember: string,
+    toMember: string,
+    tipRef: GitRef,
+    directed: boolean
+  ): StoredHandoff {
+    const handoff: StoredHandoff = {
+      id: ulid(),
+      thread_id: threadId,
+      from_member: fromMember,
+      to_member: toMember,
+      state: directed ? "accepted" : "proposed",
+      tip_ref: tipRef,
+      directed,
+      created_at: now(),
+      resolved_at: directed ? now() : null
+    };
+    this.db
+      .prepare(
+        `INSERT INTO handoffs
+         (id, thread_id, from_member, to_member, state, tip_ref_kind, tip_ref_value, directed, created_at, resolved_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        handoff.id,
+        threadId,
+        fromMember,
+        toMember,
+        handoff.state,
+        tipRef.kind,
+        tipRef.value,
+        directed ? 1 : 0,
+        handoff.created_at,
+        handoff.resolved_at
+      );
+    return handoff;
+  }
+
+  handoffById(id: string): StoredHandoff | undefined {
+    const r = this.db.prepare("SELECT * FROM handoffs WHERE id = ?").get(id) as
+      | Parameters<RelayStore["rowToHandoff"]>[0]
+      | undefined;
+    return r ? this.rowToHandoff(r) : undefined;
+  }
+
+  handoffs(workspaceId: string): StoredHandoff[] {
+    const rows = this.db
+      .prepare(
+        `SELECT h.* FROM handoffs h JOIN threads t ON t.id = h.thread_id
+         WHERE t.workspace_id = ? ORDER BY h.created_at`
+      )
+      .all(workspaceId) as Array<Parameters<RelayStore["rowToHandoff"]>[0]>;
+    return rows.map((r) => this.rowToHandoff(r));
+  }
+
+  setHandoffState(id: string, state: HandoffState): StoredHandoff | undefined {
+    this.db
+      .prepare("UPDATE handoffs SET state = ?, resolved_at = ? WHERE id = ?")
+      .run(state, now(), id);
+    return this.handoffById(id);
   }
 
   // ---- Messages ----

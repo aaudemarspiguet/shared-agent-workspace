@@ -223,6 +223,94 @@ export async function handleApiRequest(
       return true;
     }
 
+    if (req.method === "GET" && path === "/api/mode") {
+      const threadId = url.searchParams.get("thread_id") ?? "";
+      const view = daemon.state.threadById(threadId);
+      if (!view) {
+        respond(res, 404, errorBody("invalid_input", "thread not found"));
+        return true;
+      }
+      respond(res, 200, { thread_id: threadId, mode: view.my_mode });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/thread/mode") {
+      const body = (await readJsonBody(req)) as { thread_id?: string; mode?: string };
+      const mode =
+        body.mode === "view" || body.mode === "comment" || body.mode === "edit"
+          ? body.mode
+          : undefined;
+      if (!body.thread_id || !mode) {
+        respond(res, 400, errorBody("invalid_input", "thread_id and mode are required"));
+        return true;
+      }
+      daemon.setThreadMode(body.thread_id, mode);
+      respond(res, 200, { ok: true, thread_id: body.thread_id, mode });
+      return true;
+    }
+
+    if (req.method === "GET" && path === "/api/handoffs") {
+      respond(res, 200, { handoffs: daemon.handoffs() });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/handoff") {
+      const body = (await readJsonBody(req)) as {
+        action?: string;
+        thread_id?: string;
+        to?: string;
+        tip_ref?: { kind?: string; value?: string };
+        directed?: boolean;
+        handoff_id?: string;
+      };
+      if (body.action === "propose") {
+        if (!body.thread_id || !body.to || !body.tip_ref?.kind || !body.tip_ref.value) {
+          respond(res, 400, errorBody("invalid_input", "thread_id, to, and tip_ref are required"));
+          return true;
+        }
+        daemon.handoffPropose({
+          thread_id: body.thread_id,
+          to: body.to,
+          tip_ref: {
+            kind: body.tip_ref.kind === "commit" ? "commit" : "branch",
+            value: body.tip_ref.value
+          },
+          directed: body.directed === true
+        });
+        respond(res, 200, { ok: true });
+        return true;
+      }
+      if (body.action === "accept" || body.action === "decline" || body.action === "withdraw") {
+        if (!body.handoff_id) {
+          respond(res, 400, errorBody("invalid_input", "handoff_id is required"));
+          return true;
+        }
+        const toState =
+          body.action === "accept" ? "accepted" : body.action === "decline" ? "declined" : "withdrawn";
+        daemon.handoffResolve(body.handoff_id, toState);
+        respond(res, 200, { ok: true });
+        return true;
+      }
+      respond(res, 400, errorBody("invalid_input", "action must be propose, accept, decline, or withdraw"));
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/mode-denial") {
+      // T120: every mode denial is recorded. The daemon logs it as a system
+      // run entry, spooled like any other when the relay is away.
+      const body = (await readJsonBody(req)) as { thread_id?: string; action?: string; mode?: string };
+      const at = new Date().toISOString();
+      void daemon.runStopSystem({
+        started_at: at,
+        ended_at: at,
+        what: { tools_used: {} },
+        why_trigger: `mode denial: ${body.action ?? "action"} needs more than ${body.mode ?? "the current mode"} on thread ${body.thread_id ?? "unknown"}`,
+        ...(body.thread_id ? { thread_id: body.thread_id } : {})
+      });
+      respond(res, 200, { ok: true });
+      return true;
+    }
+
     if (req.method === "GET" && path === "/api/pause") {
       respond(res, 200, { paused: daemon.pauseMirror.ownPaused });
       return true;

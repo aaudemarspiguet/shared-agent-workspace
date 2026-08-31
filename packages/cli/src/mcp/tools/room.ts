@@ -101,7 +101,13 @@ export function registerRoomTools(server: McpServer, root: string): void {
       }
     },
     async (args: Record<string, unknown>) => {
-      const gate = await agentGate(root);
+      const threadId = typeof args.thread_id === "string" ? args.thread_id : undefined;
+      const gate = await agentGate(
+        root,
+        threadId
+          ? { threadId, action: args.type === "intent" ? "claim" : "post" }
+          : undefined
+      );
       if (gate) return gate;
       const res = await daemonCall(root, "/api/post", {
         method: "POST",

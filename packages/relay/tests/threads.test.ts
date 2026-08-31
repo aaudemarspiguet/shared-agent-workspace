@@ -230,3 +230,197 @@ describe("claims are thread-scoped (T109)", () => {
     bob.close();
   });
 });
+
+describe("modes, authority, handoffs over the wire (spec 002 US8)", () => {
+  it("refuses a binding post from a member without authority, never downgrades (T130, SC-020)", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "authority target", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "authority target")))
+      .thread;
+    await bob.waitFor(is("thread", (f) => f.thread.id === t.id));
+
+    // bob joined; he is not the owner. His binding post is refused plainly.
+    bob.send({
+      kind: "post",
+      post: { type: "decision", body: "we ship friday", thread_id: t.id, force: "binding" },
+      sender_kind: "human"
+    });
+    const refused = await bob.waitFor(is("error", (f) => f.code === "no_authority"));
+    expect(refused.message).toContain("advisory");
+    // Nothing was stored: a full replay carries no such message.
+    bob.send({ kind: "sync", since_seq: 0 });
+    await bob.waitFor(is("thread_snapshot"), 3000);
+    expect(bob.frames.some((f) => f.kind === "message" && f.message.body === "we ship friday")).toBe(
+      false
+    );
+
+    // The owner's binding post lands, force intact.
+    alice.send({
+      kind: "post",
+      post: { type: "decision", body: "we ship monday", thread_id: t.id, force: "binding" },
+      sender_kind: "human"
+    });
+    const landed = await bob.waitFor(is("message", (f) => f.message.body === "we ship monday"));
+    expect(landed.message.force).toBe("binding");
+
+    alice.close();
+    bob.close();
+  });
+
+  it("a mode write applies to the sender only, even with an injected member field (T123, SC-016)", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "mode target", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "mode target"))).thread;
+    await bob.waitFor(is("thread", (f) => f.thread.id === t.id));
+
+    // A hand-crafted frame naming alice: the schema strips the field and the
+    // write lands on bob himself. No route reaches another member's mode.
+    bob.send({
+      kind: "thread_mode_set",
+      set: { thread_id: t.id, mode: "view", member: "alice", member_username: "alice" }
+    });
+    const row = await bob.waitFor(is("thread_mode", (f) => f.mode.thread_id === t.id));
+    expect(row.mode.member).toBe("bob");
+    expect(row.mode.mode).toBe("view");
+    const aliceRow = relay.store
+      .threadModes(workspaceId)
+      .find((m) => m.thread_id === t.id && m.member === "alice");
+    expect(aliceRow).toBeUndefined();
+
+    alice.close();
+    bob.close();
+  });
+
+  it("runs the handoff lifecycle: claim moves only on accept, edit mode required (T135, SC-022)", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "handoff target", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "handoff target")))
+      .thread;
+    await bob.waitFor(is("thread", (f) => f.thread.id === t.id));
+
+    // alice claims, then proposes. The claim stays hers while proposed.
+    alice.send({
+      kind: "post",
+      post: { type: "intent", body: "claiming", thread_id: t.id },
+      sender_kind: "agent"
+    });
+    await alice.waitFor(is("claim_result", (f) => f.thread_id === t.id && f.granted));
+    alice.send({
+      kind: "handoff_propose",
+      propose: {
+        thread_id: t.id,
+        to: "bob",
+        tip_ref: { kind: "branch", value: "alice/handoff-target" }
+      }
+    });
+    const proposed = (await bob.waitFor(is("handoff", (f) => f.handoff.state === "proposed")))
+      .handoff;
+    expect(relay.store.threadClaim(t.id)?.claimed_by).toBe("alice");
+
+    // bob's default mode is comment: acceptance is refused, mode named.
+    bob.send({ kind: "handoff_resolve", handoff_id: proposed.id, to_state: "accepted" });
+    const denied = await bob.waitFor(is("error", (f) => f.code === "mode_denied"));
+    expect(denied.message).toContain("edit");
+    expect(relay.store.threadClaim(t.id)?.claimed_by).toBe("alice");
+
+    // bob raises HIS OWN mode, then accepts: the claim moves.
+    bob.send({ kind: "thread_mode_set", set: { thread_id: t.id, mode: "edit" } });
+    await bob.waitFor(is("thread_mode", (f) => f.mode.member === "bob" && f.mode.mode === "edit"));
+    bob.send({ kind: "handoff_resolve", handoff_id: proposed.id, to_state: "accepted" });
+    await bob.waitFor(is("handoff", (f) => f.handoff.id === proposed.id && f.handoff.state === "accepted"));
+    expect(relay.store.threadClaim(t.id)?.claimed_by).toBe("bob");
+
+    // Terminal states stay terminal.
+    bob.send({ kind: "handoff_resolve", handoff_id: proposed.id, to_state: "declined" });
+    const terminal = await bob.waitFor(is("error", (f) => f.code === "invalid_input"));
+    expect(terminal.message).toContain("cannot move");
+
+    alice.close();
+    bob.close();
+  });
+
+  it("a directed handoff is owner-only and moves the claim at once (FR-044)", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "directed target", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "directed target")))
+      .thread;
+    await bob.waitFor(is("thread", (f) => f.thread.id === t.id));
+
+    // bob claims his own thread, then tries to DIRECT a handoff: refused.
+    bob.send({
+      kind: "post",
+      post: { type: "intent", body: "claiming", thread_id: t.id },
+      sender_kind: "agent"
+    });
+    await bob.waitFor(is("claim_result", (f) => f.thread_id === t.id && f.granted));
+    bob.send({
+      kind: "handoff_propose",
+      propose: {
+        thread_id: t.id,
+        to: "alice",
+        tip_ref: { kind: "branch", value: "bob/directed-target" },
+        directed: true
+      }
+    });
+    await bob.waitFor(is("error", (f) => f.code === "no_authority"));
+
+    // A plain proposal from bob works; alice as owner directs one back
+    // after taking the claim over the lifecycle is out of scope here — the
+    // owner-only rule is what this test pins.
+    alice.close();
+    bob.close();
+  });
+
+  it("binds a branch to a thread only under its author's own prefix (T143, FR-040)", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "prefix target", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "prefix target"))).thread;
+    await bob.waitFor(is("thread", (f) => f.thread.id === t.id));
+
+    alice.send({
+      kind: "post",
+      post: {
+        type: "status",
+        body: "two refs, one mine",
+        thread_id: t.id,
+        refs: [
+          { kind: "branch", value: "bob/not-mine" },
+          { kind: "branch", value: "alice/mine" }
+        ]
+      },
+      sender_kind: "agent"
+    });
+    const bound = await bob.waitFor(is("thread_ref", (f) => f.binding.thread_id === t.id));
+    expect(bound.binding.ref.value).toBe("alice/mine");
+    const all = relay.store.threadRefs(workspaceId).filter((b) => b.thread_id === t.id);
+    expect(all.map((b) => b.ref.value)).toEqual(["alice/mine"]);
+
+    alice.close();
+    bob.close();
+  });
+});

@@ -136,7 +136,57 @@ function appendToFeed(node) {
 }
 
 function renderItem(item) {
+  if (item.kind === "handoff") return renderHandoff(item.data);
   return item.kind === "message" ? renderMessage(item.data) : renderNotice(item.data);
+}
+
+/** One handoff card. The claim moves only when the recipient accepts. */
+function renderHandoff(h) {
+  const thread = state.threadsById.get(h.thread_id);
+  const div = el("div", "msg handoff-card");
+  const label =
+    h.state === "proposed"
+      ? h.directed
+        ? "directed handoff"
+        : "handoff proposed"
+      : "handoff " + h.state;
+  div.appendChild(
+    el(
+      "div",
+      "meta",
+      `${label}: ${h.from_member} → ${h.to_member} on "${(thread && thread.title) || h.thread_id}" ` +
+        `[tip ${h.tip_ref.kind}:${h.tip_ref.value}]`
+    )
+  );
+  const answer = async (action) => {
+    try {
+      await api("/api/handoff", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, handoff_id: h.id })
+      });
+    } catch {
+      showComposerError(DAEMON_DOWN);
+    }
+  };
+  if (h.state === "proposed" && state.me === h.to_member) {
+    const row = el("div", "handoff-actions");
+    const accept = el("button", "", "Accept (needs your mode at edit)");
+    accept.addEventListener("click", () => answer("accept"));
+    const decline = el("button", "", "Decline");
+    decline.addEventListener("click", () => answer("decline"));
+    row.appendChild(accept);
+    row.appendChild(decline);
+    div.appendChild(row);
+  }
+  if (h.state === "proposed" && state.me === h.from_member) {
+    const row = el("div", "handoff-actions");
+    const withdraw = el("button", "", "Withdraw");
+    withdraw.addEventListener("click", () => answer("withdraw"));
+    row.appendChild(withdraw);
+    div.appendChild(row);
+  }
+  return div;
 }
 
 /** Does one feed entry belong to the view the member chose? */
@@ -144,6 +194,10 @@ function passesFilter(item) {
   if (state.selection.mode === "all") return true;
   // Claim notices carry no thread, so they live in the full view only.
   if (item.kind === "notice") return false;
+  if (item.kind === "handoff") {
+    if (state.selection.mode === "broadcasts") return false;
+    return item.data.thread_id === state.selection.threadId;
+  }
   const threadId = item.data.thread_id;
   if (state.selection.mode === "broadcasts") return !threadId;
   return threadId === state.selection.threadId;
@@ -250,6 +304,27 @@ function renderThreads(threads) {
         meta.appendChild(el("span", "assignee", t.claimed_by));
       }
       if (t.message_count) meta.appendChild(el("span", "count", String(t.message_count)));
+      // Your own mode on the thread (spec 002 T121). It restrains your own
+      // agent only; there is no control for the other member's, by design.
+      const mode = document.createElement("select");
+      mode.className = "mode-select";
+      mode.title = "your agent's mode on this thread (yours only)";
+      ["view", "comment", "edit"].forEach((m) => mode.appendChild(new Option(m, m)));
+      mode.value = t.my_mode || "comment";
+      mode.addEventListener("click", (ev) => ev.stopPropagation());
+      mode.addEventListener("change", async (ev) => {
+        ev.stopPropagation();
+        try {
+          await api("/api/thread/mode", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ thread_id: t.id, mode: mode.value })
+          });
+        } catch {
+          showComposerError(DAEMON_DOWN);
+        }
+      });
+      meta.appendChild(mode);
       list.appendChild(row(t.title, "thread", t.id, meta));
     });
 
@@ -352,6 +427,13 @@ function connect() {
       if (event.kind === "message" && event.message) addMessage(event.message);
       if (event.kind === "claim_result" && event.claim) {
         addItem("notice", event.claim);
+      }
+      if (event.kind === "handoff" && event.handoff) {
+        state.feedItems = state.feedItems.filter(
+          (i) => !(i.kind === "handoff" && i.data.id === event.handoff.id)
+        );
+        state.feedItems.push({ kind: "handoff", data: event.handoff });
+        renderFeed();
       }
       if (data.status) renderStatus(data.status);
     }

@@ -32,7 +32,8 @@ export const REJECTION_REASONS = [
   "invalid_ref",
   "payload_too_large",
   "content_smuggling",
-  "not_json"
+  "not_json",
+  "no_authority"
 ] as const;
 export type RejectionReason = (typeof REJECTION_REASONS)[number];
 

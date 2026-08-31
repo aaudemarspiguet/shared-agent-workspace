@@ -4,6 +4,7 @@
 import type {
   ClaimResultFrame,
   Mode,
+  StoredHandoff,
   PresenceFrame,
   StoredMessage,
   StoredThread,
@@ -49,6 +50,7 @@ export class RoomState {
   private threadsById = new Map<string, StoredThread>();
   private threadModes = new Map<string, Mode>();
   private threadRefs = new Map<string, ThreadRefBinding[]>();
+  private handoffsById = new Map<string, StoredHandoff>();
   private threadClaims = new Map<
     string,
     { state: WorkItemView["state"]; claimed_by?: string }
@@ -267,6 +269,7 @@ export class RoomState {
 
   applyThreadSnapshot(frame: ThreadSnapshotFrame): void {
     for (const thread of frame.threads) this.threadsById.set(thread.id, thread);
+    for (const handoff of frame.handoffs) this.handoffsById.set(handoff.id, handoff);
     for (const mode of frame.modes) {
       if (mode.member === this.me) this.threadModes.set(mode.thread_id, mode.mode);
     }
@@ -294,6 +297,16 @@ export class RoomState {
 
   setMyThreadMode(threadId: string, mode: Mode): void {
     this.threadModes.set(threadId, mode);
+  }
+
+  addHandoff(handoff: StoredHandoff): void {
+    this.handoffsById.set(handoff.id, handoff);
+  }
+
+  handoffs(): StoredHandoff[] {
+    return [...this.handoffsById.values()].sort((a, b) =>
+      a.created_at.localeCompare(b.created_at)
+    );
   }
 
   threadById(id: string): ThreadView | undefined {
