@@ -30,13 +30,25 @@
 
   <main>
     <section id="room" class="panel active">
-      <div class="room-controls">
-        <label for="room-filter">Show</label>
-        <select id="room-filter" title="filter the room by work item">
-          <option value="" data-mode="all">all work items</option>
-        </select>
-      </div>
-      <div id="feed" class="feed" aria-live="polite"></div>
+      <div class="room-layout">
+        <aside id="threads" aria-label="threads">
+          <div class="threads-head">
+            <span>Threads</span>
+            <button id="thread-new" type="button" title="open a thread">+</button>
+          </div>
+          <form id="thread-form" hidden>
+            <input id="thread-title" type="text" maxlength="200" placeholder="thread title" />
+            <select id="thread-type">
+              <option value="work_item">work item</option>
+              <option value="brainstorm">brainstorm</option>
+              <option value="general">general</option>
+            </select>
+            <button id="thread-create" type="submit">Open</button>
+          </form>
+          <div id="thread-list" role="listbox"></div>
+        </aside>
+        <div class="room-main">
+          <div id="feed" class="feed" aria-live="polite"></div>
       <form id="composer">
         <div class="row">
           <select id="msg-type" title="message type">
@@ -46,7 +58,6 @@
             <option value="decision">decision</option>
             <option value="handoff">handoff</option>
           </select>
-          <input id="msg-work-item" type="text" placeholder="work item (optional)" />
           <select id="msg-target" title="redirect target">
             <option value="">to: everyone</option>
           </select>
@@ -58,6 +69,8 @@
         </div>
         <div id="composer-error" class="error" hidden></div>
       </form>
+        </div>
+      </div>
     </section>
 
     <section id="log" class="panel">

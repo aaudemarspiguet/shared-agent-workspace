@@ -6,6 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { resolveRepoRoot } from "../config.js";
 import { registerPeerActivityTool } from "./tools/peer-activity.js";
 import { registerRoomTools } from "./tools/room.js";
+import { registerThreadTools } from "./tools/thread-open.js";
 import { registerStatusTool } from "./tools/status.js";
 import { registerWorkLogTool } from "./tools/work-log.js";
 
@@ -15,6 +16,7 @@ export function createMcpServer(root: string): McpServer {
     version: "0.1.0"
   });
   registerRoomTools(server, root);
+  registerThreadTools(server, root);
   registerStatusTool(server, root);
   registerWorkLogTool(server, root);
   registerPeerActivityTool(server, root);

@@ -2,6 +2,7 @@
 // One WebSocket to the relay. Reconnect with backoff. Sync replay on connect.
 // Request frames resolve in FIFO order: the relay answers one frame at a time.
 import WebSocket from "ws";
+import { PROTOCOL_VERSION } from "@saw/shared";
 import type {
   ClaimResultFrame,
   ErrorFrame,
@@ -13,7 +14,12 @@ import type {
   PauseStateFrame,
   RunLogEntryInput,
   ServerFrame,
-  StoredMessage
+  StoredMessage,
+  StoredThread,
+  StoredThreadMode,
+  ThreadOpen,
+  ThreadRefBinding,
+  ThreadSnapshotFrame
 } from "@saw/shared";
 
 export interface RelayClientOptions {
@@ -33,7 +39,15 @@ export interface RelayClientHandlers {
   onPauseState?: (frame: PauseStateFrame) => void;
   onConnectionChange?: (connected: boolean) => void;
   onServerError?: (frame: ErrorFrame) => void;
+  onThreadSnapshot?: (frame: ThreadSnapshotFrame) => void;
+  onThread?: (thread: StoredThread) => void;
+  onThreadMode?: (mode: StoredThreadMode) => void;
+  onThreadRef?: (binding: ThreadRefBinding) => void;
 }
+
+export type ThreadOpenOutcome =
+  | { ok: true; thread: StoredThread }
+  | { ok: false; message: string };
 
 export type PostOutcome =
   | { ok: true; seq: number; sent_at: string }
@@ -69,6 +83,9 @@ export class RelayClient {
   private pendingPosts: Pending<PostOutcome>[] = [];
   private pendingAppends: Pending<LogAppendOutcome>[] = [];
   private pendingQueries: Pending<LogQueryOutcome>[] = [];
+  private pendingThreadOpens: Pending<ThreadOpenOutcome>[] = [];
+  /** This member's name, from hello_ok. Correlates thread_open answers. */
+  private memberName?: string;
 
   constructor(options: RelayClientOptions, handlers: RelayClientHandlers) {
     this.options = options;
@@ -90,7 +107,8 @@ export class RelayClient {
         kind: "hello",
         workspace_id: this.options.workspaceId,
         token: this.options.token,
-        client: this.options.clientName ?? "saw-daemon/0.1"
+        client: this.options.clientName ?? "saw-daemon/0.1",
+        protocol: PROTOCOL_VERSION
       });
     });
 
@@ -135,6 +153,25 @@ export class RelayClient {
         })
       );
       this.send({ kind: "post", post, sender_kind: senderKind });
+    });
+  }
+
+  /** Open a thread. Resolves with the thread the relay made (spec 002). */
+  threadOpen(open: ThreadOpen): Promise<ThreadOpenOutcome> {
+    if (!this.connected) {
+      return Promise.resolve({
+        ok: false,
+        message: "the relay is not connected"
+      });
+    }
+    return new Promise<ThreadOpenOutcome>((resolve) => {
+      this.pendingThreadOpens.push(
+        this.pending<ThreadOpenOutcome>(resolve, {
+          ok: false,
+          message: "the relay did not answer in time"
+        })
+      );
+      this.send({ kind: "thread_open", open });
     });
   }
 
@@ -192,7 +229,12 @@ export class RelayClient {
     const entry: Pending<T> = {
       resolve,
       timer: setTimeout(() => {
-        const lists = [this.pendingPosts, this.pendingAppends, this.pendingQueries];
+        const lists = [
+          this.pendingPosts,
+          this.pendingAppends,
+          this.pendingQueries,
+          this.pendingThreadOpens
+        ];
         for (const list of lists) {
           const index = list.indexOf(entry as never);
           if (index >= 0) list.splice(index, 1);
@@ -214,6 +256,7 @@ export class RelayClient {
       case "hello_ok":
         this.helloed = true;
         this.attempts = 0;
+        this.memberName = frame.member;
         this.handlers.onHello?.(frame);
         this.handlers.onConnectionChange?.(true);
         this.sync(this.lastSeenSeq);
@@ -239,6 +282,24 @@ export class RelayClient {
       case "claim_result":
         this.handlers.onClaimResult?.(frame);
         return;
+      case "thread_snapshot":
+        this.handlers.onThreadSnapshot?.(frame);
+        return;
+      case "thread":
+        // The relay answers a thread_open with the thread it made, straight
+        // to the opener. Threads other members opened arrive here too, so a
+        // pending open takes only a thread this member created.
+        if (frame.thread.created_by === this.memberName) {
+          this.take(this.pendingThreadOpens)?.resolve({ ok: true, thread: frame.thread });
+        }
+        this.handlers.onThread?.(frame.thread);
+        return;
+      case "thread_mode":
+        this.handlers.onThreadMode?.(frame.mode);
+        return;
+      case "thread_ref":
+        this.handlers.onThreadRef?.(frame.binding);
+        return;
       case "log_ok":
         this.take(this.pendingAppends)?.resolve({ ok: true, id: frame.id });
         return;
@@ -254,6 +315,14 @@ export class RelayClient {
       case "pong":
         return;
       case "error":
+        if (frame.code === "unknown_thread") {
+          this.take(this.pendingPosts)?.resolve({
+            ok: false,
+            code: "rejected",
+            message: frame.message
+          });
+          return;
+        }
         this.handlers.onServerError?.(frame);
         if (frame.code === "auth_failed") this.closed = true;
         return;

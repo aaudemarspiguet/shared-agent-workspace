@@ -24,7 +24,7 @@ import { RunContext } from "./run-context.js";
 import { RoomState, type ClaimNotice, type WorkItemView } from "./state.js";
 
 export interface DaemonEvent {
-  kind: "message" | "presence" | "pause_state" | "claim_result" | "connection";
+  kind: "message" | "presence" | "pause_state" | "claim_result" | "connection" | "threads";
   message?: StoredMessage;
   presence?: PresenceFrame;
   pause?: PauseStateFrame;
@@ -33,6 +33,8 @@ export interface DaemonEvent {
 }
 
 export interface InjectResult {
+  /** Titles of the threads the unread messages live in (T114). */
+  thread_titles: Record<string, string>;
   messages: StoredMessage[];
   notices: ClaimNotice[];
   paused: boolean;
@@ -53,6 +55,8 @@ export interface WorkspaceStatus {
   paused: boolean;
   unread_count: number;
   work_items: WorkItemView[];
+  /** Threads with claim state and this member's own mode (spec 002 T112). */
+  threads: import("./state.js").ThreadView[];
   relay_connected: boolean;
 }
 
@@ -142,6 +146,24 @@ export class Daemon {
           if (this.state.addMessage(message)) {
             this.emit({ kind: "message", message });
           }
+        },
+        onThreadSnapshot: (frame) => {
+          this.state.applyThreadSnapshot(frame);
+          this.emit({ kind: "threads" });
+        },
+        onThread: (thread) => {
+          this.state.addThread(thread);
+          this.emit({ kind: "threads" });
+        },
+        onThreadRef: (binding) => {
+          this.state.addThreadRef(binding);
+          this.emit({ kind: "threads" });
+        },
+        onThreadMode: (mode) => {
+          if (mode.member === this.config.github_username) {
+            this.state.setMyThreadMode(mode.thread_id, mode.mode);
+          }
+          this.emit({ kind: "threads" });
         },
         onClaimResult: (frame) => {
           // The relay is the authority on who holds a work item. Apply the
@@ -255,6 +277,30 @@ export class Daemon {
   // ---- Operations ----
 
   /** Post one message. Agent posts are blocked while this member is paused. */
+  /** Open a thread on the relay (spec 002 T110). */
+  async threadOpen(open: {
+    type: "work_item" | "brainstorm" | "general";
+    title: string;
+  }): Promise<
+    { ok: true; thread: import("./state.js").ThreadView } | { ok: false; message: string }
+  > {
+    const outcome = await this.client.threadOpen({
+      type: open.type,
+      title: open.title,
+      workspace_id: this.config.workspace_id
+    });
+    if (!outcome.ok) return outcome;
+    this.state.addThread(outcome.thread);
+    const view = this.state.threadById(outcome.thread.id);
+    if (!view) return { ok: false, message: "thread was not mirrored" };
+    return { ok: true, thread: view };
+  }
+
+  /** The thread list with claim state and this member's mode (T112). */
+  threads(): import("./state.js").ThreadView[] {
+    return this.state.threads();
+  }
+
   async post(post: MessagePost, senderKind: "agent" | "human"): Promise<PostOutcome> {
     if (senderKind === "agent" && this.pauseMirror.ownPaused) {
       return {
@@ -299,8 +345,15 @@ export class Daemon {
   messages(
     sinceSeq = 0,
     limit = 200,
-    workItem?: string
+    workItem?: string,
+    threadId?: string
   ): { messages: StoredMessage[]; latest_seq: number } {
+    if (threadId) {
+      return {
+        messages: this.state.threadMessages(threadId, limit).filter((m) => m.seq > sinceSeq),
+        latest_seq: this.state.latestSeq()
+      };
+    }
     return {
       messages: this.state.recentMessages(sinceSeq, limit, workItem),
       // Always the true latest seq of the room. A filter is a view: it must
@@ -329,6 +382,15 @@ export class Daemon {
       (m) => !(m.sender === this.config.github_username && m.sender_kind === "agent")
     );
     const notices = [...this.pendingNotices];
+    // Titles for the threads the unread messages live in, so the hook can
+    // group by thread without a second call (T114).
+    const threadTitles: Record<string, string> = {};
+    for (const m of unread) {
+      if (m.thread_id && !(m.thread_id in threadTitles)) {
+        const view = this.state.threadById(m.thread_id);
+        if (view) threadTitles[m.thread_id] = view.title;
+      }
+    }
     this.runContext.recordInjection(source, { prompt, injected: unread });
     const last = raw[raw.length - 1];
     return {
@@ -338,6 +400,7 @@ export class Daemon {
       work_items: this.state.workItems(),
       me: this.config.github_username,
       latest_seq: this.state.latestSeq(),
+      thread_titles: threadTitles,
       ack_seq: last ? last.seq : this.cursor.valueFor(sessionId),
       ack_notices: notices.length
     };
@@ -374,6 +437,7 @@ export class Daemon {
       me: this.config.github_username,
       paused: this.pauseMirror.ownPaused,
       unread_count: unread.length,
+      threads: this.state.threads(),
       work_items: this.state.workItems(),
       relay_connected: this.connected
     };
