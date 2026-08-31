@@ -61,20 +61,24 @@ and this spec's success criteria include adversarial ones (SC-016, SC-020).
 
 ## Phase 2: Foundational — the `packages/shared` rewrite
 
-**⚠ GATE: this phase lands as ONE jointly-approved pull request. No relay or CLI
-work in Phase 3 or later begins until it merges.** This is the last open merge
-gate on spec 002, and User Story 7 is a schema change, so it is the first work.
+**⚠ GATE: this phase lands as ONE jointly-approved pull request. No work that
+depends on the `packages/shared` schema begins until it merges.** A Phase 3+
+task with no schema dependency may land early — the constraint was always the
+schema, not the phase number (narrowed per room seq 16, confirmed by shreyk2
+on 2026-08-30; T106 and T139 landed under this reading). This is the last open
+merge gate on spec 002, and User Story 7 is a schema change, so it is the
+first work.
 
-- [ ] T087 Add the `Thread` entity — id, workspace_id, type, title, scope, state, created_by, created_at, migrated_from_tag — in `packages/shared/src/threads.ts` per data-model.md (issue #111)
-- [ ] T088 [P] Add the mode ladder — `view` < `comment` < `edit` — with its comparison helper in `packages/shared/src/modes.ts` (issue #112)
-- [ ] T089 Extend the message envelope in `packages/shared/src/messages.ts` with nullable `thread_id` and `force`, defaulting `force` to `advisory`; leave `MESSAGE_TYPES` unchanged (issue #113)
-- [ ] T090 Extend the zod boundary schemas in `packages/shared/src/messages.ts` so FR-025's checks — size caps, diff and fence detection, encoded-payload detection — apply to every new free-text field (issue #114)
-- [ ] T091 [P] Add the `Handoff` entity with its four states and transition rules in `packages/shared/src/threads.ts` per data-model.md (issue #115)
-- [ ] T092 [P] Add the pending-assignment state to the run record in `packages/shared/src/log.ts` per FR-015 (issue #116)
-- [ ] T093 Add the protocol version and its `NEEDS_UPGRADE` error text to every frame in `packages/shared/src/frames.ts`, treating a version-less first frame as v0, per FR-035 and contracts §2.1 (issue #117)
-- [ ] T094 [P] Unit tests for the thread and handoff schemas in `packages/shared/tests/` (issue #118)
-- [ ] T095 [P] Unit tests asserting the boundary rejects code, diffs, and encoded payloads in `thread_id`, `force`, and every new free-text field, in `packages/shared/tests/` (issue #119)
-- [ ] T096 Export the new surface from `packages/shared/src/index.ts` and confirm `npm run build` passes across all three packages (issue #120)
+- [x] T087 Add the `Thread` entity — id, workspace_id, type, title, scope, state, created_by, created_at, migrated_from_tag — in `packages/shared/src/threads.ts` per data-model.md (issue #111)
+- [x] T088 [P] Add the mode ladder — `view` < `comment` < `edit` — with its comparison helper in `packages/shared/src/modes.ts` (issue #112)
+- [x] T089 Extend the message envelope in `packages/shared/src/messages.ts` with nullable `thread_id` and `force`, defaulting `force` to `advisory`; leave `MESSAGE_TYPES` unchanged (issue #113)
+- [x] T090 Extend the zod boundary schemas in `packages/shared/src/messages.ts` so FR-025's checks — size caps, diff and fence detection, encoded-payload detection — apply to every new free-text field (issue #114)
+- [x] T091 [P] Add the `Handoff` entity with its four states and transition rules in `packages/shared/src/threads.ts` per data-model.md (issue #115)
+- [x] T092 [P] Add the pending-assignment state to the run record in `packages/shared/src/log.ts` per FR-015 (issue #116)
+- [x] T093 Add the protocol version and its `NEEDS_UPGRADE` error text to every frame in `packages/shared/src/frames.ts`, treating a version-less first frame as v0, per FR-035 and contracts §2.1 (issue #117)
+- [x] T094 [P] Unit tests for the thread and handoff schemas in `packages/shared/tests/` (issue #118)
+- [x] T095 [P] Unit tests asserting the boundary rejects code, diffs, and encoded payloads in `thread_id`, `force`, and every new free-text field, in `packages/shared/tests/` (issue #119)
+- [x] T096 Export the new surface from `packages/shared/src/index.ts` and confirm `npm run build` passes across all three packages (issue #120)
 
 ---
 

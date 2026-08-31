@@ -5,6 +5,7 @@ import {
   findSmuggledContent,
   isValidBranchName,
   isValidCommitSha,
+  isValidUlid,
   MAX_LABEL_LENGTH,
   type RejectionReason
 } from "./messages.js";
@@ -54,7 +55,9 @@ export const RunLogEntryInputSchema = z.object({
   ended_at: z.string().datetime(),
   what: RunWhatSchema,
   why_trigger: z.string().min(1).max(MAX_WHY_TRIGGER_LENGTH),
-  work_item: z.string().min(1).max(MAX_LABEL_LENGTH).optional()
+  work_item: z.string().min(1).max(MAX_LABEL_LENGTH).optional(),
+  /** The thread this run served (spec 002). Absent when none was claimed. */
+  thread_id: z.string().optional()
 });
 export type RunLogEntryInput = z.infer<typeof RunLogEntryInputSchema>;
 
@@ -70,7 +73,8 @@ export const RunLogEntryWireSchema = z.object({
   ended_at: z.string().datetime(),
   what: RunWhatWireSchema.default({}),
   why_trigger: z.string().default(""),
-  work_item: z.string().optional()
+  work_item: z.string().optional(),
+  thread_id: z.string().optional()
 });
 export type RunLogEntryWire = z.infer<typeof RunLogEntryWireSchema>;
 
@@ -84,6 +88,7 @@ export const MISSING_WHY_TRIGGER = "[no trigger recorded]";
 export type LogRedactionField =
   | "why_trigger"
   | "work_item"
+  | "thread_id"
   | "what"
   | "what.branch"
   | "what.head"
@@ -167,6 +172,19 @@ export function validateLogEntry(input: RunLogEntryWire): LogEntryValidation {
       workItem = workItem.slice(0, MAX_LABEL_LENGTH);
     }
     if (workItem !== undefined && workItem.trim().length === 0) workItem = undefined;
+  }
+
+  // ---- thread_id ----
+  // An id field is shape-checked, never free text. A wrong value is dropped
+  // with its reason, not refused: the run must still be logged (FR-015).
+  let threadId = input.thread_id;
+  if (threadId !== undefined && !isValidUlid(threadId)) {
+    redactions.push({
+      field: "thread_id",
+      reason: "not_json",
+      summary: "thread id is not valid"
+    });
+    threadId = undefined;
   }
 
   // ---- what.tools_used ----
@@ -258,7 +276,8 @@ export function validateLogEntry(input: RunLogEntryWire): LogEntryValidation {
       ended_at: input.ended_at,
       what,
       why_trigger: whyTrigger,
-      ...(workItem !== undefined ? { work_item: workItem } : {})
+      ...(workItem !== undefined ? { work_item: workItem } : {}),
+      ...(threadId !== undefined ? { thread_id: threadId } : {})
     },
     redactions
   };
@@ -268,6 +287,16 @@ export function validateLogEntry(input: RunLogEntryWire): LogEntryValidation {
 export const LOG_SOURCES = ["hook_stop", "boundary_rejection", "system"] as const;
 export type LogSource = (typeof LOG_SOURCES)[number];
 
+/**
+ * The pending-assignment state (spec 002 FR-015, constitution 2.1.0,
+ * Principle IV). A run that served no named work is real and must be
+ * captured; its record is marked pending rather than tagged with an
+ * invented feature. The duties travel with the state: the pending state
+ * MUST be visible to its author, the record MUST be assignable to a thread
+ * later, and it stays pending only until its author assigns it.
+ */
+export const PENDING_WORK_ITEM = "unassigned";
+
 /** A stored work log entry, as the relay returns it. */
 export interface StoredLogEntry {
   id: string;
@@ -276,14 +305,24 @@ export interface StoredLogEntry {
   ended_at: string;
   what: RunWhat;
   why_trigger: string;
-  work_item: string; // "unassigned" when no work item is known
+  /** PENDING_WORK_ITEM when the run is pending assignment. */
+  work_item: string;
+  /** The thread the run served. Null while pending assignment (spec 002). */
+  thread_id?: string | null;
   source: LogSource;
+}
+
+/** True when a stored entry is pending assignment (FR-015). */
+export function isPendingAssignment(entry: Pick<StoredLogEntry, "work_item" | "thread_id">): boolean {
+  return (entry.thread_id ?? null) === null && entry.work_item === PENDING_WORK_ITEM;
 }
 
 /** Query filters for the work log. */
 export const LogQuerySchema = z.object({
   member: z.enum(["me", "peer", "any"]).default("any"),
   work_item: z.string().optional(),
+  /** Filter to one thread (spec 002). */
+  thread_id: z.string().optional(),
   since: z.string().datetime().optional(),
   limit: z.number().int().min(1).max(200).default(50)
 });
