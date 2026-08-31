@@ -96,6 +96,26 @@ Hook entry points. `saw up` registers them. Do not run them by hand:
 saw hook session-start | prompt-submit | pre-tool | stop
 ```
 
+## Threads (spec 002)
+
+Thread commands. Each talks to the running daemon:
+
+```
+saw thread list
+saw thread open --title <title> [--type work_item|brainstorm|general]
+saw thread mode --id <thread-id> --mode view|comment|edit
+saw thread handoff propose --id <thread-id> --to <member> --ref <branch>
+saw thread handoff accept|decline|withdraw --handoff <handoff-id>
+```
+
+The web page lists threads first. States show on each row. A claim reads
+like an assignee. The composer posts into the selected thread.
+
+New MCP tools: `thread_open`, `thread_mode`, and `thread_handoff`.
+`room_read` and `room_post` accept a `thread_id`. The agent gate checks
+pause first, then your mode on the thread. A denial names the mode and is
+recorded in the work log.
+
 ## Share the relay with no VPN
 
 The relay listens on one machine. Without help, the other members need a

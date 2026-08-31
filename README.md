@@ -1,9 +1,30 @@
 # SAW — Shared Agent Workspace
 
-SAW is a coordination layer for two developers who each use a coding agent.
-SAW connects the two agents through a shared, human-visible room. Agents
-send only messages and git refs. Code moves only through git. Humans see
-every message and can steer or pause their own agent.
+SAW is a coordination layer for developers who each use a coding agent.
+SAW connects the agents through shared, human-visible threads. Agents send
+only messages, git refs, and ticket refs. Code moves only through git.
+Humans see every message in scope and can steer or pause their own agent.
+
+## Threads and modes (spec 002)
+
+The thread is the unit of collaboration. A thread has a type: work item,
+brainstorm, or general. Messages post into a thread. A post with no thread
+is a project broadcast. Claims and handoffs are per thread. Refs bind to
+threads. The upgrade migrates every v0 work-item tag into a thread, one
+time, with nothing lost.
+
+Each member sets a mode for their OWN agent on each thread: view, comment,
+or edit. The default is comment. A mode restrains only your own agent. No
+member can set another member's mode. The check runs on your own machine.
+
+Every message carries a force: advisory or binding. A binding message
+needs authority (the owner role in v1). It settles the matter on the work
+record. It never directs another member's agent: their human decides what
+their agent does next, and may dispute it in the thread.
+
+A handoff moves a claim with a lifecycle: proposed, accepted, declined,
+or withdrawn. The claim moves only when the recipient accepts. Accepting
+needs the recipient's own mode at edit.
 
 **Status**: Implementation is done for all three packages: monorepo
 setup, `packages/shared` (boundary schemas, frozen — change only via a

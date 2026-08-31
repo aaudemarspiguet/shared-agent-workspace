@@ -10,6 +10,8 @@ point of comparison (T142 checks against this table).
 | 2026-08-27 | 002 spec branch | Windows | 218/227 | Nine known failures: seven are T081 POSIX-only test-harness assumptions (issue #98), two are T056 credential-ACL gaps (issue #60). Product faults: none known. |
 | 2026-08-30 | main (spec 002 merged) | macOS | 229/229 | Includes the two relay-tunnel tests added by PR #107. |
 
+| 2026-08-31 | 002 implementation stack (through Phase 4, PR #177) | macOS | 276/276 | T142 check: every pre-change test still passes; the 17 added tests cover migration, thread routing, modes, authority, and handoffs. |
+
 The Windows measurement is Amogh's, taken on the 002 spec branch on
 2026-08-27. The macOS measurement is from the merge day. The CI job added
 by T084 (`.github/workflows/tests.yml`) reports both platforms on every

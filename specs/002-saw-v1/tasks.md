@@ -186,9 +186,9 @@ as one use case. These bind the surface tasks above to that identity.
 - [ ] T137 Assert the v1 boundary in `tests/integration/`: zero runs start from another member's action, and zero start without the member's own prompt (SC-019) (issue #163)
 - [ ] T138 [P] Resolve the open questions the checklist recorded: thread state transitions (CHK005), broadcast permission (CHK006), ref-binding permission (CHK007), default force (CHK008), force on journal entries (CHK009), handoff expiry (CHK010), and mode change mid-run (CHK011) (issue #164)
 - [x] T139 [P] Refresh `.saw/AGENT.md` from its template on `saw up` in `packages/cli/src/commands/up.ts` — it is written only by init and join today, so new room rules never reach an already-joined member (issue #165)
-- [ ] T140 [P] Document threads and modes in `README.md` and `packages/*/README.md`, in ASD-STE (issue #166)
+- [x] T140 [P] Document threads and modes in `README.md` and `packages/*/README.md`, in ASD-STE (issue #166)
 - [ ] T141 Run the eight quickstart scenarios on two machines and record the outcome in `specs/002-saw-v1/quickstart-results.md` (issue #167)
-- [ ] T142 Confirm `npm test` has not moved from its recorded baseline (issue #168)
+- [x] T142 Confirm `npm test` has not moved from its recorded baseline (issue #168)
 
 ---
 
