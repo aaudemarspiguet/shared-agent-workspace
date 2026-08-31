@@ -1,8 +1,15 @@
-// Message flow: accept a post, assign seq, persist, broadcast in order.
-import type { MessagePost } from "@saw/shared";
-import { applyWorkItemTransition } from "./claims.js";
+// Message flow: accept a post, resolve its thread, assign order, persist,
+// broadcast. Spec 002 T104: messages route by thread; a null thread_id is a
+// project broadcast; a v0-era work_item tag resolves to its thread, so an
+// old client keeps working through the migration window.
+import type { MessagePost, StoredThread } from "@saw/shared";
+import { applyClaimTransition } from "./claims.js";
 import type { ConnectionRegistry } from "./presence.js";
 import type { MemberRow, RelayStore } from "./store.js";
+
+export type PostOutcome =
+  | { ok: true }
+  | { ok: false; code: "invalid_input"; message: string };
 
 /**
  * Handle one boundary-validated post from an authenticated member.
@@ -14,9 +21,36 @@ export function handlePost(
   sender: MemberRow,
   post: MessagePost,
   senderKind: "agent" | "human"
-): void {
+): PostOutcome {
   const workspaceId = sender.workspace_id;
-  const message = store.insertMessage(workspaceId, sender, senderKind, post);
+
+  // Resolve the container before anything is stored (T104):
+  // an explicit thread_id must name a real thread of this workspace; a
+  // work_item tag resolves through the fold map, creating the thread on
+  // first mention exactly as v0 created work items; neither means a
+  // project broadcast.
+  let thread: StoredThread | null = null;
+  if (post.thread_id) {
+    const found = store.threadById(post.thread_id);
+    if (!found || found.workspace_id !== workspaceId) {
+      return { ok: false, code: "invalid_input", message: "thread not found" };
+    }
+    thread = found;
+  } else if (post.work_item) {
+    thread = store.resolveThreadForTag(workspaceId, post.work_item, sender.github_username);
+  }
+
+  const message = store.insertMessage(workspaceId, sender, senderKind, post, thread?.id ?? null);
+
+  if (thread) {
+    // Posting into a thread makes the sender a participant (FR-012), and
+    // the refs a post carries bind to the thread (FR-014, T115).
+    store.addParticipant(thread.id, sender.github_username);
+    for (const ref of post.refs) {
+      const binding = store.bindThreadRef(thread.id, workspaceId, ref, sender.github_username);
+      registry.broadcast(store, workspaceId, { kind: "thread_ref", binding });
+    }
+  }
 
   registry.sendTo(sender.id, {
     kind: "post_ok",
@@ -33,8 +67,9 @@ export function handlePost(
   );
 
   // Claims resolve in the same order the messages were recorded.
-  if (post.work_item) {
-    const claim = applyWorkItemTransition(store, workspaceId, sender, post.type, post.work_item);
+  if (thread) {
+    const claim = applyClaimTransition(store, workspaceId, sender, post.type, thread);
     if (claim) registry.broadcast(store, workspaceId, claim);
   }
+  return { ok: true };
 }

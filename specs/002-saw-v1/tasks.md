@@ -93,18 +93,18 @@ boundary is wrong.
 
 ### Store and migration
 
-- [ ] T097 [US7] Add `threads`, `thread_participants`, and `thread_refs` tables to the relay store schema in `packages/relay/src/store.ts` (issue #121)
-- [ ] T098 [US7] Rekey claims from workspace to thread in `packages/relay/src/claims.ts`, preserving first-claim-wins (issue #122)
-- [ ] T099 [US7] Write the FR-009(a) store migration in `packages/relay/src/store.ts` — one thread per historic tag, a `general` thread per workspace for untagged messages, running exactly once (issue #123)
-- [ ] T100 [US7] Make the migration fold tags differing only by case or surrounding space into one thread, and record the merge (issue #124)
-- [ ] T101 [US7] Set every migrated thread to mode `edit` for every member, and record why — v0 agents could already claim, so `comment` would remove a capability (research R3) (issue #125)
-- [ ] T102 [P] [US7] Integration test in `tests/integration/` asserting the migration loses zero messages and zero log entries, and that every historic tag is queryable as a thread (SC-008) (issue #126)
-- [ ] T103 [P] [US7] Integration test asserting the migration runs exactly once when re-invoked (issue #127)
+- [x] T097 [US7] Add `threads`, `thread_participants`, and `thread_refs` tables to the relay store schema in `packages/relay/src/store.ts` (issue #121)
+- [x] T098 [US7] Rekey claims from workspace to thread in `packages/relay/src/claims.ts`, preserving first-claim-wins (issue #122)
+- [x] T099 [US7] Write the FR-009(a) store migration in `packages/relay/src/store.ts` — one thread per historic tag, a `general` thread per workspace for untagged messages, running exactly once (issue #123)
+- [x] T100 [US7] Make the migration fold tags differing only by case or surrounding space into one thread, and record the merge (issue #124)
+- [x] T101 [US7] Set every migrated thread to mode `edit` for every member, and record why — v0 agents could already claim, so `comment` would remove a capability (research R3) (issue #125)
+- [x] T102 [P] [US7] Integration test in `tests/integration/` asserting the migration loses zero messages and zero log entries, and that every historic tag is queryable as a thread (SC-008) (issue #126)
+- [x] T103 [P] [US7] Integration test asserting the migration runs exactly once when re-invoked (issue #127)
 
 ### Routing and delivery
 
-- [ ] T104 [US7] Route messages by `thread_id` in `packages/relay/src/messages.ts`, with a null `thread_id` meaning a project broadcast (issue #128)
-- [ ] T105 [US7] Move delivery, cursors, and sequence numbers to per-thread streams in `packages/relay/src/sync.ts` per contracts §2.2 (issue #129)
+- [x] T104 [US7] Route messages by `thread_id` in `packages/relay/src/messages.ts`, with a null `thread_id` meaning a project broadcast (issue #128)
+- [x] T105 [US7] Move delivery, cursors, and sequence numbers to per-thread streams in `packages/relay/src/sync.ts` per contracts §2.2 (issue #129)
 - [x] T106 [US7] Key the read cursor by coding-tool session id, not repo clone, in `packages/cli/src/daemon/cursor.ts` and `packages/cli/src/daemon/daemon.ts` — today two Claude sessions in one repo consume each other's messages; shares a root cause with T062 (#68) (issue #130)
 - [ ] T107 [US7] Make `RoomState` thread-aware in `packages/cli/src/daemon/state.ts` (issue #131)
 - [ ] T108 [P] [US7] Integration test asserting a message posted to one thread never appears in another, and delivery covers only participated threads plus broadcasts (SC-014) (issue #132)
@@ -117,7 +117,7 @@ boundary is wrong.
 - [ ] T112 [US7] Add `threads` with claim state to `workspace_status` in `packages/cli/src/mcp/tools/status.ts` (issue #136)
 - [ ] T113 [US7] Add thread commands to the CLI, and the matching thread list to the web app in `packages/cli/src/web/`, at parity (issue #137)
 - [ ] T114 [US7] Deliver per thread in `packages/cli/src/hooks/inject.ts`, so an agent receives its participated threads plus broadcasts (issue #138)
-- [ ] T115 [US7] Bind refs to threads many-to-many in `packages/relay/src/store.ts`, each ref naming its workspace, per FR-014 (issue #139)
+- [x] T115 [US7] Bind refs to threads many-to-many in `packages/relay/src/store.ts`, each ref naming its workspace, per FR-014 (issue #139)
 
 ---
 

@@ -3,7 +3,11 @@
 // A connection must authenticate with `hello` before any other frame.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { MAX_FRAME_BYTES } from "@saw/shared";
+import {
+  MAX_FRAME_BYTES,
+  NEEDS_UPGRADE_CODE,
+  needsUpgradeMessage,
+  PROTOCOL_VERSION } from "@saw/shared";
 import { parseClientFrame } from "./boundary.js";
 import { joinWorkspace, mintWorkspaceInvite, registerWorkspace } from "./join.js";
 import { handleLogAppend, handleLogQuery } from "./log.js";
@@ -11,7 +15,7 @@ import { handlePost } from "./messages.js";
 import { handlePauseSet } from "./pause.js";
 import { ConnectionRegistry } from "./presence.js";
 import { RelayStore, type MemberRow } from "./store.js";
-import { handleSync } from "./sync.js";
+import { handleSync, sendThreadSnapshot } from "./sync.js";
 
 export interface RelayServer {
   store: RelayStore;
@@ -81,6 +85,19 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
       const frame = parsed.frame;
 
       if (frame.kind === "hello") {
+        // FR-035: a hello without a version is the pre-versioning v0
+        // protocol and is served through the migration window. A version
+        // above ours means the CLIENT is newer; refuse with the plain
+        // instruction so its member learns what to do.
+        if (frame.protocol !== undefined && frame.protocol > PROTOCOL_VERSION) {
+          send(ws, {
+            kind: "error",
+            code: NEEDS_UPGRADE_CODE,
+            message: needsUpgradeMessage("relay")
+          });
+          ws.close();
+          return;
+        }
         const authed = store.authMember(frame.workspace_id, frame.token);
         if (!authed) {
           send(ws, { kind: "error", code: "auth_failed", message: "token is not valid" });
@@ -93,12 +110,15 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           kind: "hello_ok",
           member: member.github_username,
           latest_seq: store.latestSeq(member.workspace_id),
-          paused: store.isPaused(member.id)
+          paused: store.isPaused(member.id),
+          protocol: PROTOCOL_VERSION
         });
         registry.broadcastPresence(store, member.workspace_id, member.github_username, true);
         // The broadcast above only reaches members who are already here. This
         // is the other direction: what the joiner missed by arriving late.
         registry.sendPresenceSnapshot(store, member.workspace_id, member.id);
+        // Thread state travels the same way: everything the joiner missed.
+        sendThreadSnapshot(store, registry, member);
         return;
       }
 
@@ -110,7 +130,71 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
 
       switch (frame.kind) {
         case "post":
-          if (parsed.post) handlePost(store, registry, member, parsed.post, frame.sender_kind);
+          if (parsed.post) {
+            const outcome = handlePost(store, registry, member, parsed.post, frame.sender_kind);
+            if (!outcome.ok) {
+              send(ws, { kind: "error", code: outcome.code, message: outcome.message });
+            }
+          }
+          break;
+        case "thread_open": {
+          if (!parsed.open) break;
+          const thread = store.createThread(
+            member.workspace_id,
+            parsed.open,
+            member.github_username
+          );
+          // The opener gets the thread first (their tool call is waiting on
+          // the id); everyone else learns of it in the same broadcast shape.
+          registry.sendTo(member.id, { kind: "thread", thread });
+          registry.broadcast(
+            store,
+            member.workspace_id,
+            { kind: "thread", thread },
+            { excludeMemberId: member.id }
+          );
+          break;
+        }
+        case "thread_state_set": {
+          // CHK005 (who may move a thread between states) is an open task
+          // (T138). Until it is decided, any member of the project scope may,
+          // and the change is attributable: the new state broadcasts to all.
+          const thread = store.threadById(frame.thread_id);
+          if (!thread || thread.workspace_id !== member.workspace_id) {
+            send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          store.setThreadState(frame.thread_id, frame.state);
+          const updated = store.threadById(frame.thread_id);
+          if (updated) registry.broadcast(store, member.workspace_id, { kind: "thread", thread: updated });
+          break;
+        }
+        case "thread_ref_bind": {
+          if (!parsed.ref) break;
+          const thread = store.threadById(frame.thread_id);
+          if (!thread || thread.workspace_id !== member.workspace_id) {
+            send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          const binding = store.bindThreadRef(
+            frame.thread_id,
+            member.workspace_id,
+            parsed.ref,
+            member.github_username
+          );
+          registry.broadcast(store, member.workspace_id, { kind: "thread_ref", binding });
+          break;
+        }
+        case "thread_mode_set":
+        case "handoff_propose":
+        case "handoff_resolve":
+          // Phase 4 (US8) implements these. Answering plainly beats a silent
+          // drop: the caller's tool run must not hang on a missing reply.
+          send(ws, {
+            kind: "error",
+            code: "not_implemented",
+            message: "modes and handoff lifecycle arrive with the next relay release (spec 002 phase 4)"
+          });
           break;
         case "sync":
           handleSync(store, registry, member, frame.since_seq);
