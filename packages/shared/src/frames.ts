@@ -61,7 +61,12 @@ export const PostFrameSchema = z.object({
   // The post payload stays opaque here. validatePost judges it at the
   // boundary, so a bad post gets its true rejection reason.
   post: z.unknown(),
-  sender_kind: z.enum(["agent", "human"]).default("agent")
+  /**
+   * companion is spec 002 FR-053: the member's thread responder posting as
+   * its own identity, attributed to the member. Only "agent" messages can
+   * take session turns in the wake rule, so a companion wakes nobody.
+   */
+  sender_kind: z.enum(["agent", "human", "companion"]).default("agent")
 });
 
 export const SyncFrameSchema = z.object({

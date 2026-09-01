@@ -21,7 +21,7 @@ export function applyClaimTransition(
   sender: MemberRow,
   type: MessageType,
   thread: StoredThread,
-  senderKind: "agent" | "human" = "agent"
+  senderKind: "agent" | "human" | "companion" = "agent"
 ): ClaimResultFrame | null {
   if (thread.type !== "work_item") return null;
   return store.transact(() => {

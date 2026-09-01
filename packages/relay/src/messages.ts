@@ -21,7 +21,7 @@ export function handlePost(
   registry: ConnectionRegistry,
   sender: MemberRow,
   post: MessagePost,
-  senderKind: "agent" | "human"
+  senderKind: "agent" | "human" | "companion"
 ): PostOutcome {
   const workspaceId = sender.workspace_id;
 

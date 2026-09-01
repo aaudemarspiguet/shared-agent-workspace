@@ -12,6 +12,12 @@ export interface WakeRun {
   threadTitle: string;
   reason: "own_message" | "session_turn";
   sessionId: string | null;
+  /**
+   * Present for a companion answer (FR-053): this exact prompt runs, and
+   * the spawned tool carries SAW_COMPANION=1 so its posts take the
+   * companion identity structurally.
+   */
+  companionPrompt?: string;
 }
 
 /** The tool-agnostic contract (FR-054). One method, declared support. */
@@ -74,10 +80,13 @@ export class ClaudeWakeAdapter implements WakeAdapter {
         }
       };
       try {
-        const child = spawn("claude", ["-p", wakePrompt(run)], {
+        const child = spawn("claude", ["-p", run.companionPrompt ?? wakePrompt(run)], {
           cwd: root,
           stdio: ["ignore", "ignore", "ignore"],
-          detached: false
+          detached: false,
+          env: run.companionPrompt
+            ? { ...process.env, SAW_COMPANION: "1" }
+            : process.env
         });
         child.on("error", (err) => done(false, err.message));
         child.on("exit", (code) => done(code === 0, code === 0 ? undefined : `exit ${code}`));

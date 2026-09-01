@@ -1090,7 +1090,7 @@ export class RelayStore {
   insertMessage(
     workspaceId: string,
     sender: MemberRow,
-    senderKind: "agent" | "human",
+    senderKind: "agent" | "human" | "companion",
     post: MessagePost,
     threadId: string | null = null
   ): StoredMessage {

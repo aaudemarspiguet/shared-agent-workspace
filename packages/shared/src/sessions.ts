@@ -191,7 +191,8 @@ export function validateConvergePropose(
 export interface WakeQuestion {
   /** Who the arriving message is from, and which kind of author. */
   sender: string;
-  sender_kind: "agent" | "human";
+  /** companion messages wake nobody: only "human" and "agent" rules exist. */
+  sender_kind: "agent" | "human" | "companion";
   /** The member whose agent might wake. */
   recipient: string;
   /** Does the recipient have auto mode on for this thread? */

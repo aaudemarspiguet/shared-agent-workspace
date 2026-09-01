@@ -111,7 +111,13 @@ export function registerRoomTools(server: McpServer, root: string): void {
       if (gate) return gate;
       const res = await daemonCall(root, "/api/post", {
         method: "POST",
-        body: { ...args, sender_kind: "agent" }
+        // A run the companion started carries SAW_COMPANION=1 (FR-053):
+        // its posts take the companion identity structurally, not by hoping
+        // the prompt is obeyed.
+        body: {
+          ...args,
+          sender_kind: process.env.SAW_COMPANION === "1" ? "companion" : "agent"
+        }
       });
       if (!res) return errorResult("not_connected", NOT_RUNNING);
       if (res.status !== 200) return mapDaemonError(res.status, res.json);

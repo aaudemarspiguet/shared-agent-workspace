@@ -23,6 +23,7 @@ import { ReadCursor } from "./cursor.js";
 import { generateLocalToken } from "./local-auth.js";
 import { LogSpool } from "./log-spool.js";
 import { ClaudeWakeAdapter } from "./wake.js";
+import { Companion, runCompanion } from "./companion.js";
 import { PauseMirror } from "./pause.js";
 import { RunContext } from "./run-context.js";
 import { RoomState, type ClaimNotice, type WorkItemView } from "./state.js";
@@ -118,6 +119,11 @@ export interface DaemonOptions {
    * means the Claude Code adapter. Tests inject a fake.
    */
   wakeAdapter?: import("./wake.js").WakeAdapter;
+  /**
+   * How long the companion waits for the member's own answer before it
+   * answers itself (FR-053). Tests shorten it.
+   */
+  companionGraceMs?: number;
   root: string;
   clientName?: string;
   /** Cap on unsent runs held in .saw/log-spool.jsonl. Tests set it small. */
@@ -143,6 +149,7 @@ export class Daemon {
   private pendingNotices: ClaimNotice[] = [];
   private pendingBindings: PendingBinding[] = [];
   private wakeAdapter?: import("./wake.js").WakeAdapter;
+  private companion: Companion;
   /** The last error frame from the relay. It names a refused connection. */
   private lastRelayError: ErrorFrame | undefined;
   /** Set by `start` while it waits. A refused credential ends the wait. */
@@ -163,6 +170,7 @@ export class Daemon {
     this.logSpool = new LogSpool(options.root, options.logSpoolCapacity);
     this.pendingBindings = readState(options.root).pending_bindings ?? [];
     this.wakeAdapter = options.wakeAdapter ?? new ClaudeWakeAdapter();
+    this.companion = new Companion(config.github_username, options.companionGraceMs);
 
     this.client = new RelayClient(
       {
@@ -199,6 +207,16 @@ export class Daemon {
               this.persistBindings();
             }
             this.emit({ kind: "message", message });
+            // The companion watches for questions its member has not
+            // answered (FR-053). It answers through the same serialized
+            // runner as wakes, so it never interferes with a running turn.
+            this.companion.observe(
+              message,
+              message.thread_id
+                ? this.state.threadById(message.thread_id)?.title
+                : undefined,
+              (q) => void this.answerAsCompanion(q)
+            );
           }
         },
         onThreadSnapshot: (frame) => {
@@ -310,6 +328,7 @@ export class Daemon {
   }
 
   stop(): void {
+    this.companion.stop();
     this.onRelayRefused = undefined;
     this.client.close();
   }
@@ -409,6 +428,41 @@ export class Daemon {
     }
   }
 
+  /** One companion answer, through the same serialized runner as wakes. */
+  private async answerAsCompanion(
+    q: import("./companion.js").CompanionQuestion
+  ): Promise<void> {
+    if (this.pauseMirror.ownPaused) return;
+    if (!this.wakeAdapter) return;
+    if (this.wakeInFlight) {
+      // A run is going; the member's agent may well answer. Stay silent.
+      return;
+    }
+    this.wakeInFlight = true;
+    try {
+      const outcome = await runCompanion(
+        this.wakeAdapter,
+        this.config.github_username,
+        q,
+        this.root
+      );
+      if (!outcome.ok) {
+        const at = new Date().toISOString();
+        await this.runStopSystem({
+          started_at: at,
+          ended_at: at,
+          what: { tools_used: {} },
+          why_trigger: `companion answer failed: ${outcome.message ?? "the tool did not start"}`,
+          thread_id: q.threadId
+        });
+      }
+    } finally {
+      this.wakeInFlight = false;
+      const next = this.wakeQueue.shift();
+      if (next) void this.handleWake(next);
+    }
+  }
+
   /** Auto mode and session passthroughs (spec 002 US9, human acts). */
   autoModeSet(threadId: string, enabled: boolean): void {
     this.client.autoModeSet(threadId, enabled);
@@ -492,7 +546,10 @@ export class Daemon {
     return this.state.threads();
   }
 
-  async post(post: MessagePost, senderKind: "agent" | "human"): Promise<PostOutcome> {
+  async post(
+    post: MessagePost,
+    senderKind: "agent" | "human" | "companion"
+  ): Promise<PostOutcome> {
     const targetThread = post.thread_id ?? null;
     if (senderKind === "agent" && this.pauseMirror.ownPaused) {
       return {
@@ -527,6 +584,10 @@ export class Daemon {
       // Answering into a thread settles its pending binding decisions for
       // this member (T129): they stop appearing every turn.
       if (targetThread) this.clearBindingsFor(targetThread);
+      // The member's own words also cancel any pending companion answer:
+      // someone real spoke (FR-053). Own posts never reach onMessage, so
+      // the observer hears them here.
+      this.companion.observe(message, undefined, () => {});
     }
     return outcome;
   }

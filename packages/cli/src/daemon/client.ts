@@ -145,7 +145,10 @@ export class RelayClient {
   }
 
   /** Post one message. Resolves with the relay verdict. */
-  post(post: MessagePost, senderKind: "agent" | "human"): Promise<PostOutcome> {
+  post(
+    post: MessagePost,
+    senderKind: "agent" | "human" | "companion"
+  ): Promise<PostOutcome> {
     if (!this.connected) {
       return Promise.resolve({
         ok: false,
