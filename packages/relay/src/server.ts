@@ -8,7 +8,7 @@ import {
   NEEDS_UPGRADE_CODE,
   needsUpgradeMessage,
   PROTOCOL_VERSION } from "@saw/shared";
-import { parseClientFrame } from "./boundary.js";
+import { branchPrefixRefusal, parseClientFrame } from "./boundary.js";
 import { joinWorkspace, mintWorkspaceInvite, registerWorkspace } from "./join.js";
 import { handleLogAppend, handleLogQuery } from "./log.js";
 import { handlePost } from "./messages.js";
@@ -178,6 +178,17 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           const thread = store.threadById(frame.thread_id);
           if (!thread || thread.workspace_id !== member.workspace_id) {
             send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          // FR-040 (T143). This path had no prefix check at all: the rule
+          // was written inline in the post path only, so binding through
+          // the frame bound anything, including the other member's branch
+          // namespace, and did it silently. Same rule, same refusal, told
+          // to the sender rather than dropped.
+          const refusal = branchPrefixRefusal(parsed.ref, member.github_username);
+          if (refusal) {
+            store.appendRejectionLog(member.workspace_id, member.id, "invalid_ref", refusal);
+            send(ws, { kind: "error", code: "invalid_input", message: refusal });
             break;
           }
           const binding = store.bindThreadRef(

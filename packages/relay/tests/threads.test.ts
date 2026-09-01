@@ -391,6 +391,69 @@ describe("modes, authority, handoffs over the wire (spec 002 US8)", () => {
     bob.close();
   });
 
+  // The prefix rule has two ways in, and until this test it held on only
+  // one of them: the frame path had no check at all, so a member could bind
+  // the other member's branch namespace by binding directly instead of
+  // posting - silently, with no refusal and no rejection log.
+  it("refuses the other member's branch on the DIRECT bind frame too (T143, FR-040)", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "direct bind guard", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "direct bind guard"))).thread;
+    await bob.waitFor(is("thread", (f) => f.thread.id === t.id));
+
+    // Alice binds a branch under BOB's prefix through the frame.
+    alice.send({
+      kind: "thread_ref_bind",
+      thread_id: t.id,
+      workspace_id: workspaceId,
+      ref: { kind: "branch", value: "bob/not-mine" }
+    });
+    const err = await alice.waitFor(is("error", (f) => f.message.includes("bob/not-mine")));
+    // The refusal names the branch and the prefix that would have worked.
+    expect(err.message).toContain("alice/");
+
+    // The refusal is recorded, not only spoken: nothing drops silently.
+    alice.send({ kind: "log_query", query: { member: "any", limit: 50 }, peer_activity: false });
+    const log = await alice.waitFor(is("log_result", (f) => !f.peer));
+    expect(
+      log.entries.some(
+        (e) => e.source === "boundary_rejection" && (e.why_trigger ?? "").includes("bob/not-mine")
+      )
+    ).toBe(true);
+
+    // Her own branch binds through the same frame.
+    alice.send({
+      kind: "thread_ref_bind",
+      thread_id: t.id,
+      workspace_id: workspaceId,
+      ref: { kind: "branch", value: "alice/mine" }
+    });
+    await alice.waitFor(is("thread_ref", (f) => f.binding.ref.value === "alice/mine"));
+
+    // A commit has no owner, so it binds for anyone.
+    alice.send({
+      kind: "thread_ref_bind",
+      thread_id: t.id,
+      workspace_id: workspaceId,
+      ref: { kind: "commit", value: "b".repeat(40) }
+    });
+    await alice.waitFor(is("thread_ref", (f) => f.binding.ref.kind === "commit"));
+
+    const bound = relay.store
+      .threadRefs(workspaceId)
+      .filter((b) => b.thread_id === t.id)
+      .map((b) => b.ref.value);
+    expect(bound).not.toContain("bob/not-mine");
+    expect(bound).toContain("alice/mine");
+    alice.close();
+    bob.close();
+  });
+
   it("binds a branch to a thread only under its author's own prefix (T143, FR-040)", async () => {
     const alice = await connect(aliceToken);
     const bob = await connect(bobToken);

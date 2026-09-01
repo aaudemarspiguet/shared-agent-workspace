@@ -3,6 +3,7 @@
 // project broadcast; a v0-era work_item tag resolves to its thread, so an
 // old client keeps working through the migration window.
 import type { MessagePost, StoredThread, UnboundRef } from "@saw/shared";
+import { branchPrefixRefusal } from "./boundary.js";
 import { applyClaimTransition } from "./claims.js";
 import type { ConnectionRegistry } from "./presence.js";
 import type { MemberRow, RelayStore } from "./store.js";
@@ -74,12 +75,11 @@ export function handlePost(
     // and the refusal is recorded.
     store.addParticipant(thread.id, sender.github_username);
     for (const ref of post.refs) {
-      if (ref.kind === "branch" && !ref.value.startsWith(`${sender.github_username}/`)) {
-        const summary =
-          `branch "${ref.value}" is not under your own prefix ` +
-          `"${sender.github_username}/", so it did not bind to the thread. ` +
-          `The message posted and still carries the ref. Rename the branch ` +
-          `under your prefix and post it again to bind it.`;
+      const refusal = branchPrefixRefusal(ref, sender.github_username);
+      if (refusal) {
+        // The post path adds one fact the frame path cannot: the message
+        // itself still went through and still carries the ref.
+        const summary = `${refusal} The message posted and still carries the ref.`;
         store.appendRejectionLog(workspaceId, sender.id, "invalid_ref", summary);
         unbound.push({ ref, reason: "invalid_ref", summary });
         continue;
