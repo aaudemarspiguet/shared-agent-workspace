@@ -20,7 +20,8 @@ import type {
   StoredThreadMode,
   ThreadOpen,
   ThreadRefBinding,
-  ThreadSnapshotFrame
+  ThreadSnapshotFrame,
+  UnboundRef
 } from "@saw/shared";
 
 export interface RelayClientOptions {
@@ -52,7 +53,7 @@ export type ThreadOpenOutcome =
   | { ok: false; message: string };
 
 export type PostOutcome =
-  | { ok: true; seq: number; sent_at: string }
+  | { ok: true; seq: number; sent_at: string; unbound_refs?: UnboundRef[] }
   | { ok: false; code: "rejected" | "not_connected"; message: string };
 
 export type LogAppendOutcome =
@@ -294,7 +295,8 @@ export class RelayClient {
         this.take(this.pendingPosts)?.resolve({
           ok: true,
           seq: frame.seq,
-          sent_at: frame.sent_at
+          sent_at: frame.sent_at,
+          ...(frame.unbound_refs?.length ? { unbound_refs: frame.unbound_refs } : {})
         });
         return;
       case "post_rejected":
