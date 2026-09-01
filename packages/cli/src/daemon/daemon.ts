@@ -22,7 +22,6 @@ import { RelayClient, type PostOutcome } from "./client.js";
 import { ReadCursor } from "./cursor.js";
 import { generateLocalToken } from "./local-auth.js";
 import { LogSpool } from "./log-spool.js";
-import { ClaudeWakeAdapter } from "./wake.js";
 import { PauseMirror } from "./pause.js";
 import { RunContext } from "./run-context.js";
 import { RoomState, type ClaimNotice, type WorkItemView } from "./state.js";
@@ -114,10 +113,18 @@ export interface DaemonOptions {
    */
   relayWsUrl?: string;
   /**
-   * How a wake starts a run in the member's coding tool (FR-054). Absent
-   * means the Claude Code adapter. Tests inject a fake.
+   * How a wake starts a run in the member's coding tool (FR-054).
+   *
+   * Required, and deliberately so. This used to default to the real Claude
+   * Code adapter with a comment saying tests inject a fake — and the shared
+   * integration harness never did, so the whole suite spawned real headless
+   * `claude` runs on the developer's own account. It surfaced on Windows,
+   * where a live process's working directory cannot be removed, as an EBUSY
+   * on teardown in four tests that never mention waking. A default that
+   * reaches for the real world is not a default a test can opt out of by
+   * accident, so there is no longer one: every caller states its adapter.
    */
-  wakeAdapter?: import("./wake.js").WakeAdapter;
+  wakeAdapter: import("./wake.js").WakeAdapter;
   root: string;
   clientName?: string;
   /** Cap on unsent runs held in .saw/log-spool.jsonl. Tests set it small. */
@@ -162,7 +169,7 @@ export class Daemon {
     this.runContext = new RunContext(config.github_username);
     this.logSpool = new LogSpool(options.root, options.logSpoolCapacity);
     this.pendingBindings = readState(options.root).pending_bindings ?? [];
-    this.wakeAdapter = options.wakeAdapter ?? new ClaudeWakeAdapter();
+    this.wakeAdapter = options.wakeAdapter;
 
     this.client = new RelayClient(
       {

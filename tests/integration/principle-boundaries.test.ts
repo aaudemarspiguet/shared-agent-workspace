@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { StoredLogEntry, StoredMessage } from "@saw/shared";
 import {
   apiGet,
+  expectNoWakes,
   startWeb,
   twoMemberWorkspace,
   waitFor,
@@ -116,6 +117,18 @@ describe("run-origin boundary (T137, SC-019)", () => {
     const logs = await ws.bob.daemon.log({ member: "me" });
     expect(logs.ok).toBe(true);
     expect(logs.entries).toEqual([]);
+
+    // And zero were even ASKED for. The run log records runs that ended;
+    // this records runs that were started, which is the thing SC-019 is
+    // actually about. Reading only the log let the suite pass while the
+    // daemon spawned real coding-tool runs through the default adapter.
+    expectNoWakes(ws.bob);
+
+    // The other half of SC-019, and the positive control that keeps the
+    // assertion above from being vacuous: alice's OWN message did start a
+    // run on alice's side. A recorder that never records would satisfy
+    // "zero wakes for bob" no matter what the daemon did.
+    expect(ws.alice.wakes.runs.map((r) => r.reason)).toEqual(["own_message"]);
 
     // Nothing consumed bob's unread stream either: injection happens only on
     // bob's own turn, so his cursor has not moved.

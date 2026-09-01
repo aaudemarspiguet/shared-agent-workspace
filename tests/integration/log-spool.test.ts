@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startRelay, type RelayServer } from "@saw/relay";
 import { Daemon, registerWorkspace, writeMemberFiles } from "@saw/cli";
-import { REPO_REMOTE, waitFor, waitForValue } from "./helpers.js";
+import { REPO_REMOTE, RecordingWakeAdapter, waitFor, waitForValue } from "./helpers.js";
 
 /** A small cap, so the cap test does not need hundreds of runs. */
 const TEST_CAPACITY = 4;
@@ -79,7 +79,8 @@ beforeAll(async () => {
   daemon = new Daemon({
     root,
     clientName: "itest-spool",
-    logSpoolCapacity: TEST_CAPACITY
+    logSpoolCapacity: TEST_CAPACITY,
+    wakeAdapter: new RecordingWakeAdapter()
   });
   if (!(await daemon.start(6000))) throw new Error("the daemon did not connect");
 });
@@ -209,7 +210,8 @@ describe("durable log spool (T055)", () => {
     daemon = new Daemon({
       root,
       clientName: "itest-spool-restart",
-      logSpoolCapacity: TEST_CAPACITY
+      logSpoolCapacity: TEST_CAPACITY,
+      wakeAdapter: new RecordingWakeAdapter()
     });
     expect(daemon.logSpool.size).toBe(1);
 
