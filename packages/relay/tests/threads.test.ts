@@ -169,7 +169,7 @@ describe("threads over the wire (T108)", () => {
       post: { type: "status", body: "into nowhere", thread_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV" },
       sender_kind: "agent"
     });
-    const refused = await alice.waitFor(is("error", (f) => f.code === "invalid_input"));
+    const refused = await alice.waitFor(is("error", (f) => f.code === "unknown_thread"));
     expect(refused.message).toContain("thread not found");
 
     alice.close();

@@ -33,16 +33,28 @@ export function registerRoomTools(server: McpServer, root: string): void {
           .min(1)
           .max(100)
           .optional()
-          .describe("Feature tag. Return only messages for this work item. Default: all.")
+          .describe("Feature tag. Return only messages for this work item. Default: all."),
+        thread_id: z
+          .string()
+          .min(1)
+          .max(26)
+          .optional()
+          .describe("Thread id from workspace_status. Return only that thread. Default: all.")
       }
     },
-    async (args: { since_seq?: number; limit?: number; work_item?: string }) => {
+    async (args: {
+      since_seq?: number;
+      limit?: number;
+      work_item?: string;
+      thread_id?: string;
+    }) => {
       const gate = await agentGate(root);
       if (gate) return gate;
       const params = new URLSearchParams();
       if (args.since_seq !== undefined) params.set("since_seq", String(args.since_seq));
       params.set("limit", String(args.limit ?? 50));
       if (args.work_item !== undefined) params.set("work_item", args.work_item);
+      if (args.thread_id !== undefined) params.set("thread_id", args.thread_id);
       const res = await daemonCall(root, `/api/messages?${params.toString()}`);
       if (!res) return errorResult("not_connected", NOT_RUNNING);
       if (res.status !== 200) return mapDaemonError(res.status, res.json);
@@ -76,7 +88,16 @@ export function registerRoomTools(server: McpServer, root: string): void {
           .min(1)
           .max(100)
           .optional()
-          .describe("Feature tag. An intent with this claims the item.")
+          .describe("Feature tag. An intent with this claims the item."),
+        thread_id: z
+          .string()
+          .min(1)
+          .max(26)
+          .optional()
+          .describe(
+            "Post into this thread. Omitted with no work_item means a project broadcast. " +
+              "An intent into a work_item thread claims it; the first claim wins."
+          )
       }
     },
     async (args: Record<string, unknown>) => {

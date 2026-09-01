@@ -262,3 +262,28 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   word-break: break-word;
 }
 .empty { color: var(--muted); text-align: center; padding: 24px; }
+
+/* ---- Threads sidebar (spec 002 T113, FR-045) ---- */
+.room-layout { display: grid; grid-template-columns: 220px 1fr; gap: 12px; min-height: 0; }
+#threads { border-right: 1px solid var(--line, #ddd); padding-right: 10px; overflow-y: auto; }
+.threads-head { display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; margin-bottom: 6px; }
+.threads-head button { border: 1px solid var(--line, #ccc); background: none;
+  border-radius: 4px; width: 22px; height: 22px; cursor: pointer; }
+#thread-form { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+#thread-form input, #thread-form select { width: 100%; box-sizing: border-box; }
+.thread-row { padding: 6px 8px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; }
+.thread-row:hover { background: rgba(127, 127, 127, 0.12); }
+.thread-row.selected { background: rgba(90, 130, 255, 0.18); }
+.thread-title { display: block; font-size: 13px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.thread-meta { display: flex; gap: 4px; margin-top: 2px; flex-wrap: wrap; }
+.thread-meta .badge { font-size: 10px; padding: 1px 5px; border-radius: 8px;
+  background: rgba(127, 127, 127, 0.18); }
+.thread-meta .badge.state { background: rgba(240, 180, 0, 0.25); }
+.thread-meta .assignee { font-size: 10px; padding: 1px 5px; border-radius: 8px;
+  background: rgba(90, 200, 120, 0.22); }
+.thread-meta .count { font-size: 10px; opacity: 0.7; margin-left: auto; }
+@media (max-width: 700px) { .room-layout { grid-template-columns: 1fr; }
+  #threads { border-right: none; border-bottom: 1px solid var(--line, #ddd);
+    padding-bottom: 8px; } }

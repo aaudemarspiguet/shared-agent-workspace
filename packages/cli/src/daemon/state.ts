@@ -1,12 +1,31 @@
 // In-memory room state for one member daemon.
 // Holds the ordered message cache, member presence, and a work item mirror.
 // The relay stays authoritative. This state only serves local reads fast.
-import type { ClaimResultFrame, PresenceFrame, StoredMessage } from "@saw/shared";
+import type {
+  ClaimResultFrame,
+  Mode,
+  PresenceFrame,
+  StoredMessage,
+  StoredThread,
+  StoredThreadMode,
+  ThreadRefBinding,
+  ThreadSnapshotFrame
+} from "@saw/shared";
 
 export interface MemberView {
   github_username: string;
   online: boolean;
   last_seen_at?: string;
+}
+
+export interface ThreadView extends StoredThread {
+  /** Claim state mirrored from the stream, v0-style, keyed by thread. */
+  claim_state: "open" | "claimed" | "handed_off" | "done";
+  claimed_by?: string;
+  /** This member's mode on the thread. Default comment (FR-038). */
+  my_mode: Mode;
+  refs: ThreadRefBinding[];
+  message_count: number;
 }
 
 export interface WorkItemView {
@@ -27,6 +46,14 @@ export class RoomState {
   private messagesBySeq = new Map<number, StoredMessage>();
   private memberDir = new Map<string, MemberView>();
   private items = new Map<string, WorkItemView>();
+  private threadsById = new Map<string, StoredThread>();
+  private threadModes = new Map<string, Mode>();
+  private threadRefs = new Map<string, ThreadRefBinding[]>();
+  private threadClaims = new Map<
+    string,
+    { state: WorkItemView["state"]; claimed_by?: string }
+  >();
+  private threadMsgCount = new Map<string, number>();
   private notices: ClaimNotice[] = [];
   /** Arrival order of the claim that each item holds now. See `stampClaim`. */
   private claimOrder = new Map<string, number>();
@@ -47,6 +74,7 @@ export class RoomState {
     this.messagesBySeq.set(message.seq, message);
     this.noteMember(message.sender);
     this.applyItemTransition(message);
+    this.applyThreadTransition(message);
     return true;
   }
 
@@ -162,6 +190,40 @@ export class RoomState {
   }
 
   /**
+   * The same v0 state machine, keyed by thread (spec 002 T107). The thread
+   * type gates it at read time: claims only surface for work_item threads,
+   * so an intent inside a brainstorm stays conversation.
+   */
+  private applyThreadTransition(message: StoredMessage): void {
+    const threadId = message.thread_id;
+    if (!threadId) return;
+    this.threadMsgCount.set(threadId, (this.threadMsgCount.get(threadId) ?? 0) + 1);
+    const claim = this.threadClaims.get(threadId) ?? { state: "open" as const };
+    const sender = message.sender;
+    if (message.type === "intent") {
+      if (claim.state === "open") {
+        claim.state = "claimed";
+        claim.claimed_by = sender;
+      } else if (claim.state === "handed_off" && claim.claimed_by === sender) {
+        claim.state = "claimed";
+      }
+    } else if (message.type === "handoff") {
+      if (claim.state === "claimed" && claim.claimed_by === sender) {
+        const other = this.members().find((m) => m.github_username !== sender);
+        if (other) {
+          claim.state = "handed_off";
+          claim.claimed_by = other.github_username;
+        }
+      }
+    } else if (message.type === "decision") {
+      if (claim.state === "claimed" && claim.claimed_by === sender) {
+        claim.state = "done";
+      }
+    }
+    this.threadClaims.set(threadId, claim);
+  }
+
+  /**
    * Record when an item became claimed, as an arrival order.
    *
    * The mirror reads the message stream in seq order, so a higher tick
@@ -201,6 +263,71 @@ export class RoomState {
     return newest;
   }
 
+  // ---- Threads (spec 002 T107) ----
+
+  applyThreadSnapshot(frame: ThreadSnapshotFrame): void {
+    for (const thread of frame.threads) this.threadsById.set(thread.id, thread);
+    for (const mode of frame.modes) {
+      if (mode.member === this.me) this.threadModes.set(mode.thread_id, mode.mode);
+    }
+    const grouped = new Map<string, ThreadRefBinding[]>();
+    for (const binding of frame.refs) {
+      const list = grouped.get(binding.thread_id) ?? [];
+      list.push(binding);
+      grouped.set(binding.thread_id, list);
+    }
+    for (const [threadId, list] of grouped) this.threadRefs.set(threadId, list);
+  }
+
+  addThread(thread: StoredThread): void {
+    this.threadsById.set(thread.id, thread);
+  }
+
+  addThreadRef(binding: ThreadRefBinding): void {
+    const list = this.threadRefs.get(binding.thread_id) ?? [];
+    const exists = list.some(
+      (b) => b.ref.kind === binding.ref.kind && b.ref.value === binding.ref.value
+    );
+    if (!exists) list.push(binding);
+    this.threadRefs.set(binding.thread_id, list);
+  }
+
+  setMyThreadMode(threadId: string, mode: Mode): void {
+    this.threadModes.set(threadId, mode);
+  }
+
+  threadById(id: string): ThreadView | undefined {
+    const thread = this.threadsById.get(id);
+    return thread ? this.toThreadView(thread) : undefined;
+  }
+
+  threads(): ThreadView[] {
+    return [...this.threadsById.values()]
+      .map((t) => this.toThreadView(t))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  private toThreadView(thread: StoredThread): ThreadView {
+    const claim =
+      thread.type === "work_item" ? this.threadClaims.get(thread.id) : undefined;
+    return {
+      ...thread,
+      claim_state: claim?.state ?? "open",
+      claimed_by: claim?.claimed_by,
+      my_mode: this.threadModes.get(thread.id) ?? "comment",
+      refs: this.threadRefs.get(thread.id) ?? [],
+      message_count: this.threadMsgCount.get(thread.id) ?? 0
+    };
+  }
+
+  /** The NEWEST messages of one thread, in seq order (the tail, T078). */
+  threadMessages(threadId: string, limit = 200): StoredMessage[] {
+    const all = [...this.messagesBySeq.values()]
+      .filter((m) => m.thread_id === threadId)
+      .sort((a, b) => a.seq - b.seq);
+    return all.slice(Math.max(0, all.length - limit));
+  }
+
   // ---- Claim notices ----
 
   /**
@@ -231,6 +358,12 @@ export class RoomState {
       this.stampClaim(frame.work_item);
     }
     this.items.set(frame.work_item, item);
+    if (frame.thread_id) {
+      const claim = this.threadClaims.get(frame.thread_id) ?? { state: "open" as const };
+      claim.claimed_by = frame.claimed_by;
+      if (claim.state === "open") claim.state = "claimed";
+      this.threadClaims.set(frame.thread_id, claim);
+    }
   }
 
   addClaimNotice(frame: ClaimResultFrame): void {

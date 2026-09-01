@@ -9,7 +9,7 @@ import type { MemberRow, RelayStore } from "./store.js";
 
 export type PostOutcome =
   | { ok: true }
-  | { ok: false; code: "invalid_input"; message: string };
+  | { ok: false; code: "unknown_thread"; message: string };
 
 /**
  * Handle one boundary-validated post from an authenticated member.
@@ -33,7 +33,7 @@ export function handlePost(
   if (post.thread_id) {
     const found = store.threadById(post.thread_id);
     if (!found || found.workspace_id !== workspaceId) {
-      return { ok: false, code: "invalid_input", message: "thread not found" };
+      return { ok: false, code: "unknown_thread", message: "thread not found" };
     }
     thread = found;
   } else if (post.work_item) {

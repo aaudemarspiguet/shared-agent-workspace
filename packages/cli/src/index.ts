@@ -14,4 +14,5 @@ export { startWebServer } from "./web/server.js";
 export { installHooks, sawHookCommandBase } from "./hooks/install.js";
 export { composeRunWhat, countToolUses, gitWhat } from "./hooks/summary.js";
 export { renderAgentMd } from "./templates/agent-md.js";
+export { renderContext, type InjectResponse } from "./hooks/inject.js";
 export { writeMemberFiles } from "./commands/init.js";

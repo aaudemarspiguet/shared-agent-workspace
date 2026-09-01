@@ -25,13 +25,14 @@ const state = {
   // Is the push socket to the daemon open now? The composer needs it.
   socketOpen: false,
   seen: new Set(),
-  // Every feed entry the page holds, in arrival order. The work item filter
-  // renders from this list, so it never refetches (T066).
+  // Every feed entry the page holds, in arrival order. Views render from
+  // this list, so nothing refetches (T066).
   feedItems: [],
-  // mode is "all", "untagged", or "item". tag applies to "item" only.
-  filter: { mode: "all", tag: "" },
-  // The work item tags the filter control shows now.
-  filterTags: null
+  // The thread is the organizing unit of the page (spec 002, FR-045).
+  // mode is "all", "broadcasts", or "thread"; threadId applies to "thread".
+  selection: { mode: "all", threadId: "" },
+  // ThreadView rows by id, from /api/status. Titles, claims, and counts.
+  threadsById: new Map()
 };
 
 const $ = (id) => document.getElementById(id);
@@ -138,12 +139,14 @@ function renderItem(item) {
   return item.kind === "message" ? renderMessage(item.data) : renderNotice(item.data);
 }
 
-/** Does one feed entry pass the work item filter the user chose? */
+/** Does one feed entry belong to the view the member chose? */
 function passesFilter(item) {
-  if (state.filter.mode === "all") return true;
-  const tag = item.data.work_item;
-  if (state.filter.mode === "untagged") return !tag;
-  return tag === state.filter.tag;
+  if (state.selection.mode === "all") return true;
+  // Claim notices carry no thread, so they live in the full view only.
+  if (item.kind === "notice") return false;
+  const threadId = item.data.thread_id;
+  if (state.selection.mode === "broadcasts") return !threadId;
+  return threadId === state.selection.threadId;
 }
 
 /** Hold one entry, and show it when the filter allows it. */
@@ -203,50 +206,97 @@ function renderStatus(status) {
     .forEach((m) => target.appendChild(new Option("to: " + m.github_username, m.github_username)));
   target.value = current;
 
-  renderFilterOptions(status.work_items);
+  renderThreads(status.threads || []);
 }
 
-// ---- Work item filter (T066) ----
+// ---- Thread list (spec 002 T113, FR-045) ----
 
-// The mode, not the value, decides how an option filters. A work item tag can
-// be any text, so the value alone cannot tell the default options from a tag.
-function filterOption(label, mode, tag) {
-  const option = new Option(label, tag);
-  option.dataset.mode = mode;
-  return option;
-}
+/**
+ * The sidebar is the primary navigation: threads with visible states and
+ * claims that read like assignees. The flat feed stays as a view.
+ */
+function renderThreads(threads) {
+  state.threadsById = new Map(threads.map((t) => [t.id, t]));
+  const list = $("thread-list");
+  list.textContent = "";
 
-/** Fill the filter with the work items the page knows. Keep the choice. */
-function renderFilterOptions(workItems) {
-  const select = $("room-filter");
-  const tags = (workItems || []).map((w) => w.feature_tag).sort();
-  const key = tags.join("\n");
-  if (key === state.filterTags) return;
-  state.filterTags = key;
-  select.textContent = "";
-  select.appendChild(filterOption("all work items", "all", ""));
-  select.appendChild(filterOption("untagged", "untagged", "untagged"));
-  tags.forEach((tag) => select.appendChild(filterOption(tag, "item", tag)));
+  const row = (label, mode, threadId, extra) => {
+    const div = el("div", "thread-row");
+    div.setAttribute("role", "option");
+    const selected =
+      state.selection.mode === mode &&
+      (mode !== "thread" || state.selection.threadId === threadId);
+    if (selected) div.classList.add("selected");
+    div.appendChild(el("span", "thread-title", label));
+    if (extra) div.appendChild(extra);
+    div.addEventListener("click", () => {
+      state.selection = { mode, threadId: threadId || "" };
+      renderThreads(Array.from(state.threadsById.values()));
+      renderFeed();
+    });
+    return div;
+  };
 
-  const options = Array.from(select.options);
-  const index = options.findIndex(
-    (o) =>
-      o.dataset.mode === state.filter.mode &&
-      (state.filter.mode !== "item" || o.value === state.filter.tag)
-  );
-  select.selectedIndex = index >= 0 ? index : 0;
-  if (index < 0) {
-    // The chosen work item is gone. Go back to the full room.
-    state.filter = { mode: "all", tag: "" };
+  list.appendChild(row("All activity", "all", ""));
+  list.appendChild(row("Broadcasts", "broadcasts", ""));
+  threads
+    .slice()
+    .sort((a, b) => (b.message_count || 0) - (a.message_count || 0))
+    .forEach((t) => {
+      const meta = el("span", "thread-meta");
+      meta.appendChild(el("span", "badge " + t.type, t.type.replace("_", " ")));
+      if (t.state !== "open") meta.appendChild(el("span", "badge state", t.state));
+      if (t.type === "work_item" && t.claimed_by) {
+        meta.appendChild(el("span", "assignee", t.claimed_by));
+      }
+      if (t.message_count) meta.appendChild(el("span", "count", String(t.message_count)));
+      list.appendChild(row(t.title, "thread", t.id, meta));
+    });
+
+  // The selected thread can disappear (archived elsewhere). Fall back.
+  if (
+    state.selection.mode === "thread" &&
+    !state.threadsById.has(state.selection.threadId)
+  ) {
+    state.selection = { mode: "all", threadId: "" };
     renderFeed();
   }
 }
 
-$("room-filter").addEventListener("change", (e) => {
-  const option = e.target.selectedOptions[0];
-  if (!option) return;
-  state.filter = { mode: option.dataset.mode || "all", tag: option.value };
-  renderFeed();
+$("thread-new").addEventListener("click", () => {
+  const form = $("thread-form");
+  form.hidden = !form.hidden;
+  if (!form.hidden) $("thread-title").focus();
+});
+
+$("thread-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const title = $("thread-title").value.trim();
+  if (!title) return;
+  let res;
+  try {
+    res = await api("/api/thread/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: $("thread-type").value, title })
+    });
+  } catch {
+    showComposerError(DAEMON_DOWN);
+    return;
+  }
+  const answer = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showComposerError((answer.error && answer.error.message) || "the thread was not opened");
+    return;
+  }
+  $("thread-title").value = "";
+  $("thread-form").hidden = true;
+  if (answer.thread) {
+    state.threadsById.set(answer.thread.id, answer.thread);
+    state.selection = { mode: "thread", threadId: answer.thread.id };
+    renderThreads(Array.from(state.threadsById.values()));
+    renderFeed();
+  }
 });
 
 // ---- Live channel ----
@@ -328,8 +378,7 @@ $("composer").addEventListener("submit", async (e) => {
     body,
     sender_kind: "human"
   };
-  const workItem = $("msg-work-item").value.trim();
-  if (workItem) payload.work_item = workItem;
+  if (state.selection.mode === "thread") payload.thread_id = state.selection.threadId;
   const target = $("msg-target").value;
   if (target) payload.target = target;
 

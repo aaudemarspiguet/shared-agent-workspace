@@ -49,6 +49,26 @@ program
     await runUp(opts);
   });
 
+const thread = program
+  .command("thread")
+  .description("Threads: the unit of collaboration (spec 002).");
+thread
+  .command("list")
+  .description("List the workspace's threads with claim state.")
+  .action(async () => {
+    const { runThreadList } = await import("./commands/thread.js");
+    await runThreadList();
+  });
+thread
+  .command("open")
+  .description("Open a thread.")
+  .option("--title <title>", "thread title")
+  .option("--type <type>", "work_item (default), brainstorm, or general")
+  .action(async (opts: { title?: string; type?: string }) => {
+    const { runThreadOpen } = await import("./commands/thread.js");
+    await runThreadOpen(opts);
+  });
+
 program
   .command("share-relay")
   .description("Share this machine's relay: members reach it with no VPN and no port forwarding.")

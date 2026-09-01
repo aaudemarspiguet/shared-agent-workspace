@@ -106,17 +106,17 @@ boundary is wrong.
 - [x] T104 [US7] Route messages by `thread_id` in `packages/relay/src/messages.ts`, with a null `thread_id` meaning a project broadcast (issue #128)
 - [x] T105 [US7] Move delivery, cursors, and sequence numbers to per-thread streams in `packages/relay/src/sync.ts` per contracts §2.2 (issue #129)
 - [x] T106 [US7] Key the read cursor by coding-tool session id, not repo clone, in `packages/cli/src/daemon/cursor.ts` and `packages/cli/src/daemon/daemon.ts` — today two Claude sessions in one repo consume each other's messages; shares a root cause with T062 (#68) (issue #130)
-- [ ] T107 [US7] Make `RoomState` thread-aware in `packages/cli/src/daemon/state.ts` (issue #131)
+- [x] T107 [US7] Make `RoomState` thread-aware in `packages/cli/src/daemon/state.ts` (issue #131)
 - [ ] T108 [P] [US7] Integration test asserting a message posted to one thread never appears in another, and delivery covers only participated threads plus broadcasts (SC-014) (issue #132)
 - [ ] T109 [P] [US7] Integration test asserting a claim on one thread leaves another thread's claim state unchanged, and that a contested claim still resolves first-claim-wins (issue #133)
 
 ### Surfaces
 
-- [ ] T110 [US7] Add the `thread_open` MCP tool in `packages/cli/src/mcp/tools/` per contracts §1.2 (issue #134)
-- [ ] T111 [US7] Extend `room_read` and `room_post` with `thread_id` in `packages/cli/src/mcp/tools/room.ts`, keeping the v0 shape when it is omitted (issue #135)
-- [ ] T112 [US7] Add `threads` with claim state to `workspace_status` in `packages/cli/src/mcp/tools/status.ts` (issue #136)
-- [ ] T113 [US7] Add thread commands to the CLI, and the matching thread list to the web app in `packages/cli/src/web/`, at parity (issue #137)
-- [ ] T114 [US7] Deliver per thread in `packages/cli/src/hooks/inject.ts`, so an agent receives its participated threads plus broadcasts (issue #138)
+- [x] T110 [US7] Add the `thread_open` MCP tool in `packages/cli/src/mcp/tools/` per contracts §1.2 (issue #134)
+- [x] T111 [US7] Extend `room_read` and `room_post` with `thread_id` in `packages/cli/src/mcp/tools/room.ts`, keeping the v0 shape when it is omitted (issue #135)
+- [x] T112 [US7] Add `threads` with claim state to `workspace_status` in `packages/cli/src/mcp/tools/status.ts` (issue #136)
+- [x] T113 [US7] Add thread commands to the CLI, and the matching thread list to the web app in `packages/cli/src/web/`, at parity (issue #137)
+- [x] T114 [US7] Deliver per thread in `packages/cli/src/hooks/inject.ts`, so an agent receives its participated threads plus broadcasts (issue #138)
 - [x] T115 [US7] Bind refs to threads many-to-many in `packages/relay/src/store.ts`, each ref naming its workspace, per FR-014 (issue #139)
 
 ---

@@ -8,6 +8,7 @@ import { daemonRequest, emit, parseHookInput, readStdin } from "./io.js";
 
 export interface InjectResponse {
   messages: StoredMessage[];
+  thread_titles?: Record<string, string>;
   notices: ClaimNotice[];
   paused: boolean;
   work_items: WorkItemView[];
@@ -22,6 +23,36 @@ function renderMessage(m: StoredMessage): string {
     m.refs.length > 0 ? ` [refs: ${m.refs.map((r) => `${r.kind}:${r.value}`).join(", ")}]` : "";
   const item = m.work_item ? ` (work_item: ${m.work_item})` : "";
   return `- #${m.seq} ${m.sender} (${m.sender_kind}) ${m.type}${target}: ${m.body}${refs}${item}`;
+}
+
+/**
+ * Group general messages by thread (spec 002 T114). Broadcasts come first
+ * under their own heading; each thread's unread follow under the thread's
+ * title. The text stays short: every line is paid for on every turn.
+ */
+function renderGrouped(messages: StoredMessage[], titles: Record<string, string>): string[] {
+  const lines: string[] = [];
+  const broadcasts = messages.filter((m) => !m.thread_id);
+  const byThread = new Map<string, StoredMessage[]>();
+  for (const m of messages) {
+    if (!m.thread_id) continue;
+    const list = byThread.get(m.thread_id) ?? [];
+    list.push(m);
+    byThread.set(m.thread_id, list);
+  }
+  if (broadcasts.length > 0 && byThread.size === 0) {
+    // Nothing is threaded: keep the flat v0 shape, no headings.
+    return broadcasts.map(renderMessage);
+  }
+  if (broadcasts.length > 0) {
+    lines.push("Broadcasts:");
+    for (const m of broadcasts) lines.push(renderMessage(m));
+  }
+  for (const [threadId, list] of byThread) {
+    lines.push(`Thread "${titles[threadId] ?? threadId}" (${list.length} new):`);
+    for (const m of list) lines.push(renderMessage(m));
+  }
+  return lines;
 }
 
 /**
@@ -73,7 +104,7 @@ export function renderContext(
         ? `Unread room messages (${room.length}):`
         : `New room messages since your last turn (${room.length}):`
     );
-    for (const message of room) lines.push(renderMessage(message));
+    lines.push(...renderGrouped(room, data.thread_titles ?? {}));
   }
   if (addressed.length > 0) {
     lines.push(

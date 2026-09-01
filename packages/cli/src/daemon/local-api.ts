@@ -101,7 +101,9 @@ export async function handleApiRequest(
       // true latest and the read cursor does not move: a filter is a view,
       // so the caller keeps its position (T066).
       const workItem = url.searchParams.get("work_item") ?? undefined;
-      respond(res, 200, daemon.messages(sinceSeq, limit, workItem));
+      // thread_id narrows to one thread the same way (spec 002 T111).
+      const threadId = url.searchParams.get("thread_id") ?? undefined;
+      respond(res, 200, daemon.messages(sinceSeq, limit, workItem, threadId));
       return true;
     }
 
@@ -194,6 +196,30 @@ export async function handleApiRequest(
       }
       daemon.ackInjection(body.seq, notices, sessionId);
       respond(res, 200, { ok: true, cursor: daemon.cursor.valueFor(sessionId) });
+      return true;
+    }
+
+    if (req.method === "GET" && path === "/api/threads") {
+      respond(res, 200, { threads: daemon.threads() });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/thread/open") {
+      const body = (await readJsonBody(req)) as { type?: string; title?: string };
+      const type =
+        body.type === "work_item" || body.type === "brainstorm" || body.type === "general"
+          ? body.type
+          : undefined;
+      if (!type || typeof body.title !== "string" || body.title.length === 0) {
+        respond(res, 400, errorBody("invalid_input", "type and title are required"));
+        return true;
+      }
+      const outcome = await daemon.threadOpen({ type, title: body.title });
+      if (!outcome.ok) {
+        respond(res, 503, errorBody("not_connected", outcome.message));
+        return true;
+      }
+      respond(res, 200, { thread: outcome.thread });
       return true;
     }
 
