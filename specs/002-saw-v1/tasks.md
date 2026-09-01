@@ -182,8 +182,8 @@ as one use case. These bind the surface tasks above to that identity.
 
 ## Phase 5: Polish & cross-cutting
 
-- [ ] T136 Assert the Principle III ceiling — an agent's readable set never exceeds its member's — in `tests/integration/` (SC-018) (issue #162)
-- [ ] T137 Assert the v1 boundary in `tests/integration/`: zero runs start from another member's action, and zero start without the member's own prompt (SC-019) (issue #163)
+- [x] T136 Assert the Principle III ceiling — an agent's readable set never exceeds its member's — in `tests/integration/` (SC-018) (issue #162)
+- [x] T137 Assert the v1 boundary in `tests/integration/`: zero runs start from another member's action, and zero start without the member's own prompt (SC-019) (issue #163)
 - [ ] T138 [P] Resolve the open questions the checklist recorded: thread state transitions (CHK005), broadcast permission (CHK006), ref-binding permission (CHK007), default force (CHK008), force on journal entries (CHK009), handoff expiry (CHK010), and mode change mid-run (CHK011) (issue #164)
 - [x] T139 [P] Refresh `.saw/AGENT.md` from its template on `saw up` in `packages/cli/src/commands/up.ts` — it is written only by init and join today, so new room rules never reach an already-joined member (issue #165)
 - [ ] T140 [P] Document threads and modes in `README.md` and `packages/*/README.md`, in ASD-STE (issue #166)
