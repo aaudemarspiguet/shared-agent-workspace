@@ -81,10 +81,17 @@ export class ClaudeWakeAdapter implements WakeAdapter {
         }
       };
       try {
-        const child = spawn("claude", ["-p", run.companionPrompt ?? wakePrompt(run)], {
+        // Through launchFor or not at all: a bare spawn of the name cannot
+        // start an npm-installed .cmd shim on Windows, while supportsWake's
+        // `where` says yes — the #179 bug. The first fix of this line landed
+        // as an import with no call site, and only the lint gate caught the
+        // unused name; the adapter test now drives this path for real.
+        const launch = launchFor("claude", ["-p", run.companionPrompt ?? wakePrompt(run)]);
+        const child = spawn(launch.file, launch.args, {
           cwd: root,
           stdio: ["ignore", "ignore", "ignore"],
           detached: false,
+          shell: launch.shell,
           env: run.companionPrompt
             ? { ...process.env, SAW_COMPANION: "1" }
             : process.env
