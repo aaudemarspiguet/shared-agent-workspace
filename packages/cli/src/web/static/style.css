@@ -294,6 +294,11 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   #threads { border-right: none; border-bottom: 1px solid var(--line, #ddd);
     padding-bottom: 8px; max-height: 35vh; } }
 
+/* ---- Pings (FR-045: an addressed message reads like a mention) ---- */
+.msg.mention { border-left: 3px solid var(--amber); background: #221c11; }
+#ping-btn { font-size: 12px; padding: 2px 8px; border-radius: 10px; color: var(--muted); }
+#ping-btn.on { color: var(--amber); border-color: var(--amber); }
+
 /* ---- Modes + handoffs (spec 002 US8) ---- */
 .mode-select { font-size: 10px; margin-left: auto; }
 .handoff-card { border-left: 3px solid rgba(240, 180, 0, 0.8); padding-left: 8px; }
