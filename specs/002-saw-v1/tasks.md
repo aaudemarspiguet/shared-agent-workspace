@@ -180,6 +180,28 @@ as one use case. These bind the surface tasks above to that identity.
 > FR-030 and is not in this task set. SC-023's first-use loop is measured
 > when T145-T147 land.
 
+## Phase 6: US9 — auto mode, companions, plain speech (session 2026-08-31)
+
+**Gate**: the schema pieces (T148) land through the joint `packages/shared`
+rule, after the #175–#177 stack merges. Everything here queues behind that
+stack.
+
+- [ ] T148 Add the session vocabulary to `packages/shared`: auto-mode state per (member, thread), session (task statement, readiness per member, per-member turn budget default 50, turn counts, state open/converged/concluded/ended, ended_by), convergence proposal (summary, refs), and the wake-eligibility rule as a pure function — a member's own message wakes their own agent; inside a live session, a participating agent's session message wakes the other participating agent; nothing else wakes anybody (issue TBD)
+- [ ] T149 Relay: session lifecycle — readiness handshake in either order, session start on the second ready, turn counting per member, budget suspension, end-by-either-human recorded, convergence proposal storage, conclusion only on a human approval frame (issue TBD)
+- [ ] T150 Relay: wake routing per the T148 eligibility rule; deliver a wake as a distinct frame carrying the thread context pointer, never as a normal message (issue TBD)
+- [ ] T151 CLI daemon: the wake adapter contract — one documented interface, start one run with thread context in the member's coding tool; per-tool support declared at setup; Claude Code implementation first (issue TBD)
+- [ ] T152 CLI daemon: honor wakes — own-member message wake outside sessions, session wakes inside; pause outranks auto mode at once; budget enforcement on the member's own side as well (issue TBD)
+- [ ] T153 Companion service in the CLI: thread-scoped responder with read access to thread, work log, and bound refs in scope; answers as its own identity attributed to the member; no code, no claims, no bindings, no binding force; one work-log entry per companion session; works with the coding tool closed (issue TBD)
+- [ ] T154 Surfaces: auto-mode toggle, readiness control, turn-budget box (default 50), convergence approve control, session status and who-ended-it, companion chat — web and CLI at parity (issue TBD)
+- [ ] T155 Done-ness unification: an agent decision proposes done; the claim concludes only on the human approval control; update the claim machine reading in relay and mirrors (issue TBD)
+- [ ] T156 Plain speech: rewrite the agent posting rules in the AGENT.md template — lead with the point, plain words, define a term on first use, no shorthand or identifier dumps; refresh ships via T139 (issue TBD)
+- [ ] T157 [P] Integration: SC-025 adversarial wake tests and SC-027 one-sided auto mode (issue TBD)
+- [ ] T158 [P] Integration: SC-026 full session round trip with budgets and human-approved convergence (issue TBD)
+- [ ] T159 [P] Integration: SC-028 companion answers with the coding tool closed, and performs zero privileged actions in adversarial tests (issue TBD)
+- [ ] T160 [P] SC-024 readability check: a scripted first-use pass over live agent posts, recorded in quickstart-results (issue TBD)
+
+---
+
 ## Phase 5: Polish & cross-cutting
 
 - [x] T136 Assert the Principle III ceiling — an agent's readable set never exceeds its member's — in `tests/integration/` (SC-018) (issue #162)

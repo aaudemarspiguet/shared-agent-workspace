@@ -165,6 +165,49 @@ parallel. Local-first; prefer off-the-shelf; open source."
   the system does. The amendment is MINOR: it permits a state that 2.0.0 read
   as forbidden, and nothing compliant with 2.0.0 stops being compliant.
 
+### Session 2026-08-31
+
+Both founders synced live, then answered together (room seq 29 and chat).
+
+- Q: The seven recorded questions (T138)? → A: 1, 2, 3, 4, and 6 as
+  recommended. 5 with two additions: a human makes every final decision by
+  an explicit manual act (a visible control, not an inference), and when
+  two agents work asynchronously they MUST reach a convergence point that
+  concludes only on human approval. 7 as recommended, with two additions:
+  the surface MUST show the member that access changed, and the member can
+  revert the agent's work through git.
+- Q: How should agents write in the room? → A: Like a teammate. Agent
+  posts MUST be human-friendly: lead with the point, plain words, no
+  invented shorthand or identifier dumps. The room today reads like radio
+  code and a system congratulating itself; nobody wants that.
+- Q: May agents trigger each other? → A: Yes, through a feature the
+  founders named auto mode. Each member turns auto mode on for their own
+  agent on a thread. A working session starts only after the members agree
+  on the task and each declares ready — "I'm ready", then the other's
+  "ready", then the agents kick off. Both on: the agents may trigger each
+  other, each on its own member's machine and budget. Exactly one on: that
+  agent may work autonomously, and no cross-triggering happens. Budgets:
+  a maximum number of turns per member, default 50, set in a visible
+  control. Pause always wins at once. Either human ends a session at any
+  time. Outside a session, a member's own message wakes their own agent —
+  and nothing else wakes anybody.
+- Q: The companion (room seq 28)? → A: Adopted. Each member gets a
+  companion: a lightweight responder on the thread that answers questions
+  about the thread and monitors a running session without interfering. It
+  sits OUTSIDE the mode ladder, holds read access to the thread, the work
+  log, and the bound refs in the member's scope, never authors code, never
+  claims, never binds. It pulls; the coding agent is never made to push.
+  Because it sits outside the ladder, the ladder still governs exactly one
+  coding agent per member, and PR #177 stands as built.
+- Q: Who concludes work? → A: A human, always, by a manual act. An agent
+  — solo or in a session — may PROPOSE done with a summary and refs; the
+  claim concludes only when a human approves. This narrows the session
+  2026-08-30 answer to question 1: "the claim holder marks done" now means
+  the claim holder's HUMAN.
+- Q: PR sequencing? → A: Merge #175 and #176 after review. #177 proceeds
+  too, since the companion sits outside the ladder. The new work in this
+  session queues behind them.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### Implementation order
@@ -534,6 +577,62 @@ git and that the relay carried only refs and messages.
 14. **Given** a proposed handoff, **When** the recipient declines it, **Then**
     the claim returns to the sender and the decline is recorded and visible to
     the thread's scope.
+
+---
+
+### User Story 9 - The room holds a conversation: auto mode and companions (Priority: P1)
+
+Shrey types into a SAW thread from the web page. His own agent wakes and
+answers — no terminal visit, no retyping. He and Amogh agree in the thread
+on a task, each turns auto mode on, each declares ready. The two agents
+kick off: one works, one guides — or both work, or they bounce research
+ideas — each on its own machine, each within its member's turn budget.
+When they believe the work is done they propose convergence with a summary
+and refs. Nothing concludes until a human approves it with an explicit
+control. At any moment, either human's pause freezes their own agent
+instantly. Meanwhile, Amogh's companion answers Shrey's question about the
+thread's state without touching the running session. And every post any
+agent writes reads like a teammate wrote it.
+
+**Why this priority**: This is the founding vision's core scenario — the
+agents as a communication interface — and the current chat cannot hold a
+conversation at all (verified: messages reach an agent only at session
+start and on the member's own terminal prompt).
+
+**Independent Test**: With both members' auto mode on and readiness
+declared on one thread, the agents exchange at least three autonomous
+turns each, stay within budget, propose convergence, and the claim
+concludes only after a human approval. With only one member's auto mode
+on, that agent works autonomously and zero runs start on the other
+machine. A companion answers a thread question while its member's coding
+tool is closed.
+
+**Acceptance Scenarios**:
+
+1. **Given** a member types a message into their own SAW surface, **When**
+   it posts, **Then** their own agent wakes with the thread's context —
+   and the other member's agent does not.
+2. **Given** an agreed task and both members ready with auto mode on,
+   **When** the session starts, **Then** each agent's messages wake the
+   other, every run stays on its own member's machine and budget, and the
+   turn counts never exceed each member's configured maximum.
+3. **Given** exactly one member has auto mode on, **When** that agent
+   works, **Then** it continues autonomously and zero runs start on the
+   other member's machine.
+4. **Given** agents propose convergence, **When** no human has approved,
+   **Then** the claim is not concluded; **When** a human approves through
+   the visible control, **Then** it concludes and the session ends,
+   recorded.
+5. **Given** a running session, **When** either human pauses their agent
+   or ends the session, **Then** that agent stops at its next tool call
+   and the session state records who ended it.
+6. **Given** a member's coding tool is closed, **When** the other human
+   asks a question in the thread, **Then** that member's companion answers
+   from the thread, the work log, and the bound refs — and posts as
+   itself, never as the member.
+7. **Given** any agent posts to the room, **Then** the post leads with its
+   point in plain language, and a first-use reader understands it without
+   the project dictionary.
 
 ---
 
@@ -1015,6 +1114,54 @@ git and that the relay carried only refs and messages.
   collaboration modes, member directory and administration — the monitor
   and configure surface, with CLI parity per FR-033 and FR-041.
 
+**The conversation: plain speech, auto mode, companions (US9)**
+
+- **FR-048**: Every agent post MUST be human-friendly: it leads with the
+  point, uses plain words, defines a project term on first use, and never
+  uses invented shorthand or identifier dumps. The agent instructions MUST
+  state these rules, and the readability outcome is measured (SC-024).
+- **FR-049**: A member's own message on any SAW surface MUST count as that
+  member's own prompt: it wakes their own agent with the thread's context.
+  Outside a session, nothing else wakes an agent — not the other member's
+  messages, not any agent's messages. (This reads SC-019's "the member's
+  own prompt" as surface-agnostic; the safety half — no run starts from
+  another member's action — stands unchanged.)
+- **FR-050**: Auto mode MUST be a per-member, per-thread control. A
+  session MUST start only from an agreed task and an explicit readiness
+  declaration from each participating member, in either order, visible on
+  the thread. With both members in auto mode, each agent's session
+  messages wake the other. With exactly one, that agent MAY work
+  autonomously and cross-triggering MUST NOT happen. Every run stays on
+  its own member's machine and budget.
+- **FR-051**: A session MUST carry a per-member turn budget, default 50,
+  set through a visible control. A member's agent MUST NOT exceed its
+  budget; exhaustion suspends the session for a human's word. Pause MUST
+  win over auto mode at once, and either human MUST be able to end a
+  session at any time; the end is recorded with who ended it.
+- **FR-052**: Concluding work MUST be a human's manual act. An agent —
+  solo or in session — MAY propose done, with a summary and refs. The
+  claim or session concludes only on a human approval through a visible
+  control. A session that ends by budget or stop without approval is
+  recorded as unconcluded.
+- **FR-053**: Each member MUST have a companion: a responder on the thread
+  that answers questions about the thread and observes a running session
+  without interfering. It sits outside the mode ladder. It MUST hold read
+  access to the thread, the work log, and the bound refs within its
+  member's scope, and nothing beyond. It MUST post as its own identity,
+  attributed to its member, and MUST NOT author code, claim, bind refs,
+  or post with binding force. It answers by pulling stored state; the
+  coding agent is never made to push to it. One work-log entry covers a
+  companion's session, not each answer.
+- **FR-054**: Waking a coding agent MUST go through a documented,
+  tool-agnostic adapter contract: start one run with the thread's context
+  in the member's coding tool. Each tool integration declares at setup
+  whether it supports waking. A tool without wake support still gets the
+  full companion (FR-053) — the conversation floor is tool-independent.
+- **FR-055**: When a member changes their agent's mode mid-run, it takes
+  effect at the next tool call, the surface MUST show the member that
+  access changed, and the documentation MUST state how to revert the
+  agent's work through git (branch-per-agent makes the diff reversible).
+
 ### Key Entities
 
 - **Profile**: a person. Display name + keypair store (one or more device
@@ -1128,6 +1275,22 @@ git and that the relay carried only refs and messages.
   find the thread for a piece of work, read where it stands, and post a
   message their teammate's agent surfaces. When the thread is bound to a
   ticket, the same loop completes starting from the ticket's link.
+
+- **SC-024**: In first-use tests, a reader new to the project understands
+  agent posts without the project dictionary; zero posts lead with an
+  identifier instead of a point.
+- **SC-025**: In adversarial tests outside a session, the other member's
+  messages and any agent's messages cause zero runs; a member's own SAW
+  message wakes their own agent within one turn.
+- **SC-026**: A full session round trip passes in the integration suite:
+  agreed task, both ready, at least three autonomous turns each, budgets
+  never exceeded, convergence proposed, concluded only after a human
+  approval.
+- **SC-027**: With exactly one member in auto mode, that agent completes
+  autonomous turns while zero runs start on the other member's machine.
+- **SC-028**: A companion answers a thread question correctly while its
+  member's coding tool is closed, posting as itself; in adversarial tests
+  it performs zero claims, zero ref bindings, and zero binding posts.
 
 ## Assumptions
 
