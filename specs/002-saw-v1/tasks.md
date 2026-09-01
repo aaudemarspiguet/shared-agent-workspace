@@ -190,14 +190,15 @@ stack.
 - [ ] T149 Relay: session lifecycle — readiness handshake in either order, session start on the second ready, turn counting per member, budget suspension, end-by-either-human recorded, convergence proposal storage, conclusion only on a human approval frame (issue TBD)
 - [ ] T150 Relay: wake routing per the T148 eligibility rule; deliver a wake as a distinct frame carrying the thread context pointer, never as a normal message (issue TBD)
 - [ ] T151 CLI daemon: the wake adapter contract — one documented interface, start one run with thread context in the member's coding tool; per-tool support declared at setup; Claude Code implementation first (issue TBD)
-- [ ] T152 CLI daemon: honor wakes — own-member message wake outside sessions, session wakes inside; pause outranks auto mode at once; budget enforcement on the member's own side as well (issue TBD)
-- [ ] T153 Companion service in the CLI: thread-scoped responder with read access to thread, work log, and bound refs in scope; answers as its own identity attributed to the member; no code, no claims, no bindings, no binding force; one work-log entry per companion session; works with the coding tool closed (issue TBD)
+- [ ] T152 CLI daemon: honor wakes — own-member message wake outside sessions, session wakes inside; pause outranks auto mode at once; budget enforcement on the member's own side as well; enforce the one-active-thread cap until T161 lands (FR-028) (issue TBD)
+- [ ] T153 Companion service in the CLI: thread-scoped responder with read access to thread, work log, and bound refs in scope; answers as its own identity attributed to the member; no code, no claims, no bindings, no binding force; one work-log entry per companion session; works with the coding tool closed. If it runs as SAW's own runtime rather than riding the member's existing tool, the plan MUST include the Principle V documented finding saying why no standard surface fits (raised in #178 review) (issue TBD)
 - [ ] T154 Surfaces: auto-mode toggle, readiness control, turn-budget box (default 50), convergence approve control, session status and who-ended-it, companion chat — web and CLI at parity (issue TBD)
 - [ ] T155 Done-ness unification: an agent decision proposes done; the claim concludes only on the human approval control; update the claim machine reading in relay and mirrors (issue TBD)
 - [ ] T156 Plain speech: rewrite the agent posting rules in the AGENT.md template — lead with the point, plain words, define a term on first use, no shorthand or identifier dumps; refresh ships via T139 (issue TBD)
 - [ ] T157 [P] Integration: SC-025 adversarial wake tests and SC-027 one-sided auto mode (issue TBD)
 - [ ] T158 [P] Integration: SC-026 full session round trip with budgets and human-approved convergence (issue TBD)
 - [ ] T159 [P] Integration: SC-028 companion answers with the coding tool closed, and performs zero privileged actions in adversarial tests (issue TBD)
+- [ ] T161 Worktree per (member, thread): automate a working copy per active thread on the member's machine per FR-028, with the interim one-active-thread cap enforced in T152 until this lands; the binding is per member per thread, since threads bind refs many-to-many while a worktree is one-to-one with a branch (raised in #178 review) (issue TBD)
 - [ ] T160 [P] SC-024 readability check: a scripted first-use pass over live agent posts, recorded in quickstart-results (issue TBD)
 
 ---
