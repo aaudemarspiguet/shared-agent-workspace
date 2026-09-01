@@ -17,6 +17,7 @@ function q(over: Partial<WakeQuestion>): WakeQuestion {
     sender_kind: "human",
     recipient: "alice",
     recipient_auto_on: false,
+    recipient_paused: false,
     session: null,
     ...over
   };
@@ -112,6 +113,24 @@ describe("the wake rule (FR-049, FR-050)", () => {
   });
 });
 
+describe("pause wins over every wake (FR-051)", () => {
+  it("a paused member's agent never wakes, their own typing included", () => {
+    expect(wakeEligible(q({ recipient_paused: true }))).toEqual({ wake: false });
+    expect(
+      wakeEligible(
+        q({
+          sender: "bob",
+          sender_kind: "agent",
+          recipient: "alice",
+          recipient_auto_on: true,
+          recipient_paused: true,
+          session: { state: "live", live_participants: ["alice", "bob"] }
+        })
+      )
+    ).toEqual({ wake: false });
+  });
+});
+
 describe("session payloads and boundary (T148, FR-025)", () => {
   it("accepts a fair readiness and defaults exist", () => {
     const v = validateSessionReady({ thread_id: ULID, task: "wire the auth flow" });
@@ -137,6 +156,16 @@ describe("session payloads and boundary (T148, FR-025)", () => {
       refs: [{ kind: "commit", value: "zzz" }]
     });
     expect(v).toMatchObject({ ok: false, reason: "invalid_ref" });
+  });
+
+  it("over-long text reports its true reason (review finding 2)", () => {
+    expect(validateSessionReady({ thread_id: ULID, task: "x".repeat(601) })).toMatchObject({
+      ok: false,
+      reason: "payload_too_large"
+    });
+    expect(
+      validateConvergePropose({ session_id: ULID, summary: "x".repeat(2001) })
+    ).toMatchObject({ ok: false, reason: "payload_too_large" });
   });
 
   it("bounds the turn budget", () => {

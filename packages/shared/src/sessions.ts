@@ -6,6 +6,7 @@
 import { z } from "zod";
 import {
   findSmuggledContent,
+  MAX_REFS,
   UlidSchema,
   type GitRef,
   type RejectionReason
@@ -87,6 +88,12 @@ export type AutoModeSet = z.infer<typeof AutoModeSetSchema>;
  * Declare readiness. The first declaration on a thread names the task and
  * creates the session (forming); the second makes it live. `max_turns` is
  * the declarer's own budget; absent means the default.
+ *
+ * `task` is optional in the PAYLOAD because only the first declaration
+ * carries it — but a session always has one: the relay MUST refuse a
+ * first readiness with no task (FR-050), so `StoredSession.task` is never
+ * empty. Stated here so the guarantee lives in the law, not in a
+ * handler's memory.
  */
 export const SessionReadySchema = z.object({
   thread_id: ThreadIdSchema,
@@ -105,7 +112,7 @@ export type SessionEnd = z.infer<typeof SessionEndSchema>;
 export const ConvergeProposeSchema = z.object({
   session_id: UlidSchema,
   summary: z.string().min(1).max(MAX_CONVERGENCE_SUMMARY_LENGTH),
-  refs: z.array(GitRefSchema).max(10).default([])
+  refs: z.array(GitRefSchema).max(MAX_REFS).default([])
 });
 export type ConvergePropose = z.infer<typeof ConvergeProposeSchema>;
 
@@ -127,6 +134,17 @@ export type SessionInputValidation<T> =
 
 /** Boundary treatment for the session task text (FR-025). */
 export function validateSessionReady(input: unknown): SessionInputValidation<SessionReady> {
+  // Size is judged before the schema so an over-long task reports its true
+  // reason rather than the shape-is-not-valid one the schema would give
+  // (the validatePost rule, applied here).
+  const rawTask = (input as { task?: unknown } | null)?.task;
+  if (typeof rawTask === "string" && rawTask.length > MAX_SESSION_TASK_LENGTH) {
+    return {
+      ok: false,
+      reason: "payload_too_large",
+      summary: `task over ${MAX_SESSION_TASK_LENGTH} chars`
+    };
+  }
   const parsed = SessionReadySchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, reason: "not_json", summary: "readiness payload shape is not valid" };
@@ -144,6 +162,14 @@ export function validateSessionReady(input: unknown): SessionInputValidation<Ses
 export function validateConvergePropose(
   input: unknown
 ): SessionInputValidation<ConvergePropose> {
+  const rawSummary = (input as { summary?: unknown } | null)?.summary;
+  if (typeof rawSummary === "string" && rawSummary.length > MAX_CONVERGENCE_SUMMARY_LENGTH) {
+    return {
+      ok: false,
+      reason: "payload_too_large",
+      summary: `summary over ${MAX_CONVERGENCE_SUMMARY_LENGTH} chars`
+    };
+  }
   const parsed = ConvergeProposeSchema.safeParse(input);
   if (!parsed.success) {
     const refIssue = parsed.error.issues.find((i) => i.path[0] === "refs");
@@ -171,6 +197,15 @@ export interface WakeQuestion {
   /** Does the recipient have auto mode on for this thread? */
   recipient_auto_on: boolean;
   /**
+   * Is the recipient paused? Pause wins over every wake, own messages
+   * included (FR-051, and the pause definition: it freezes the agent
+   * instantly). A paused member's own typing does NOT wake their agent —
+   * typing is not the resume control, and guessing otherwise would make
+   * three callers guess differently. The surface tells a paused member
+   * their agent will not wake until they resume.
+   */
+  recipient_paused: boolean;
+  /**
    * The thread's session, when one exists and the message belongs to it.
    * `live_participants` are the members who are ready with auto mode on.
    */
@@ -191,10 +226,13 @@ export type WakeVerdict =
  *    handshake, and budgets bound it (enforced by the caller, FR-051).
  * 3. Nothing else wakes anybody. Not the other member's messages, not any
  *    agent's message outside a session, not a member's own agent's message.
+ * 0. Above all of it: a paused member's agent never wakes, whatever the
+ *    message and whoever sent it. Pause ends only by the resume control.
  *
  * Pure on purpose: relay, daemon, and tests all call this same function.
  */
 export function wakeEligible(q: WakeQuestion): WakeVerdict {
+  if (q.recipient_paused) return { wake: false };
   if (q.sender_kind === "human" && q.sender === q.recipient) {
     return { wake: true, reason: "own_message" };
   }
