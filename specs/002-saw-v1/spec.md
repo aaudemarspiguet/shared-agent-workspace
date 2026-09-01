@@ -920,7 +920,13 @@ tool is closed.
 
 - **FR-028**: Handoff MUST carry the current tip ref. Each agent MUST keep
   working on its own branch (constitution Principle VI preserved). SAW
-  SHOULD automate a per-thread worktree on the member's machine.
+  MUST give each of a member's active threads its own working copy — a
+  worktree per (member, thread) — before that member runs more than one
+  thread at once. Until worktrees land, auto mode MUST cap at one active
+  thread per member per machine. (Raised in review of #178: the human
+  used to be the serializer — one keyboard, one live thread. Auto mode
+  removes that, and two threads sharing one checkout and one HEAD corrupt
+  each other in ways that read as agent bugs.)
 - **FR-029**: SAW MUST warn both agents, on their next turn, when two
   members' work on one thread modifies the same file within a configurable
   window (default 60 minutes), detected from pushed refs and the members'
@@ -1161,6 +1167,11 @@ tool is closed.
   effect at the next tool call, the surface MUST show the member that
   access changed, and the documentation MUST state how to revert the
   agent's work through git (branch-per-agent makes the diff reversible).
+  Next-tool-call is deliberate and stronger than the founder's literal
+  "let it finish its current job": Principle III already rules that a
+  pause which waits for the run is not a pause, and the same holds for a
+  narrowing of access. Recorded so the literal wording is not restored
+  later.
 
 ### Key Entities
 
