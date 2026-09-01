@@ -8,7 +8,6 @@ import type {
   PresenceFrame,
   StoredMessage,
   StoredThread,
-  StoredThreadMode,
   ThreadRefBinding,
   ThreadSnapshotFrame
 } from "@saw/shared";
