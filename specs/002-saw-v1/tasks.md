@@ -40,6 +40,38 @@ review (his to reclaim on request), and owns the CLI, web, and
 integration-test tasks. T141 is a joint live run. Any line is open to
 dispute in the room.
 
+**Amended 2026-09-01 (reopened by shreyk2 in the room, seq 47; claimed by
+aaudemarspiguet).** The original split gave shreyk2 the CLI and web tasks
+for one reason: aaudemarspiguet could not run the CLI package on his own
+machine. PR #179 fixed that — `saw up` now starts an npm-installed
+Claude Code on Windows, and the suite is green on both machines — so the
+reason is gone and shreyk2 reopened the split. The surface and
+spec-integrity tasks move:
+
+| Owner | Tasks |
+|---|---|
+| aaudemarspiguet | T145, T146, T147 (phase 4b surfaces), T154 (session controls), T138 (the seven unanswered checklist questions), T161 (worktrees), T160 (readability check) |
+| shreyk2 | T148–T153, T155–T159 |
+
+The cuts fall there for three reasons rather than by halving the list:
+
+- **T145, T146, T147 and T154 are the same file.** All four rewrite
+  `packages/cli/src/web/static/` — 92 lines of HTML and 584 of JS. Split
+  between two people they are merge conflicts; split across two phases
+  they are rework, because T154 hangs session controls on the navigation
+  T145 replaces. Phase 4b therefore lands *before* T154, not after it.
+- **T138 and T160 are better done by the other side of the table.** T160
+  measures the readability of the posting rules T156 rewrites, and T138
+  answers questions raised in review. An author grading their own output
+  is the weaker arrangement in both cases.
+- **T161 is where the two machines differ.** Git worktrees are the most
+  platform-sensitive work left in this spec, and the Windows half has no
+  coverage. It belongs on the Windows machine.
+
+Unchanged: the frozen-package rule. `packages/shared` still needs
+aaudemarspiguet's explicit approval, which is why the phase 6 schema is a
+second joint gate and not an ordinary PR.
+
 ## Tests
 
 Test tasks are included rather than optional. The constitution's Development
@@ -172,9 +204,14 @@ Added after the founders locked the interface identity: thread-based
 navigation as the primary structure, chat inside a thread, the ticket link
 as one use case. These bind the surface tasks above to that identity.
 
-- [ ] T145 [P] Make the web app's primary navigation the thread list with visible states and claims-as-assignees, per FR-045; the flat feed becomes a view over threads (extends T113) (issue TBD)
-- [ ] T146 [P] Inside a thread, render the message pane newest-last with presence and addressed messages as mentions, per FR-045 (extends T113) (issue TBD)
-- [ ] T147 Frame the web app's non-thread pages as the developer console per FR-047: connection and tunnel state, hook and integration health per repository, modes, member directory (issue TBD)
+- [ ] T145 [P] Make the web app's primary navigation the thread list with visible states and claims-as-assignees, per FR-045; the flat feed becomes a view over threads (extends T113) (issue #201)
+- [ ] T146 [P] Inside a thread, render the message pane newest-last with presence and addressed messages as mentions, per FR-045 (extends T113) (issue #202)
+- [ ] T147 Frame the web app's non-thread pages as the developer console per FR-047: connection and tunnel state, hook and integration health per repository, modes, member directory (issue #203)
+
+> Sequencing (2026-09-01): phase 4b runs before T154. T154 attaches the
+> auto-mode toggle, readiness control, budget box and approve control to
+> a thread surface; building them on the navigation T145 replaces would
+> mean building them twice.
 
 > FR-046 (bound-ticket deep links) belongs to the connector slice with
 > FR-030 and is not in this task set. SC-023's first-use loop is measured
@@ -230,7 +267,13 @@ Phase 3 US7 Threads      ◀── first shippable slice; no identity work neede
 Phase 4 US8 Modes        ◀── needs Phase 3 only
       │
       ▼
+Phase 4b Interface identity ◀── FR-045, FR-047; gates T154
+      │
+      ▼
 Phase 5 Polish
+      │
+      ▼
+Phase 6 US9 auto mode    ◀── SECOND JOINT PR GATE on packages/shared
 
 Later, not in this file: US1 identity and FR-008 scopes, then US2 journals,
 then US3–US6 in their stated priority.
