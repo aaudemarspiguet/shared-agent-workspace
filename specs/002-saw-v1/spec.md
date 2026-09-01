@@ -25,7 +25,10 @@ without weakening FR-008 or SC-006. All clarifications from the session are
 recorded below and no `[NEEDS CLARIFICATION]` marker remains.
 
 Continuous mode and the three-rung authority ladder are both out of v1
-(FR-042), so the collaboration modes need no constitution change. One
+(FR-042), so the collaboration modes need no constitution change.
+(Continuous mode was brought into v1 as auto mode by the 2026-08-31
+session; the ladder stays deferred. The no-amendment conclusion still
+holds — see that session's record and FR-042.) One
 companion amendment does follow from this session, and it is a separate PR
 against `main`: Principle IV gains a pending-assignment clause so that the
 `unassigned` run record of FR-015 is named in the constitution (2.0.0 to
@@ -110,6 +113,9 @@ parallel. Local-first; prefer off-the-shelf; open source."
 - Q: May an agent start its own run when thread activity arrives? → A: Not in
   v1. In every v1 mode the member starts every run. Continuous mode is
   deferred, with its design recorded (FR-042).
+  **Superseded by the 2026-08-31 session**: auto mode ships in v1 under the
+  member's own standing consent (US9, FR-049 to FR-052). Kept as the record
+  of what was decided on the day.
 - Q: Is a `decision` a capability the mode ladder unlocks? → A: No. Capability
   and authority are two separate things. The mode says what a member's agent
   may *do*. Authority says whose word *settles* a matter. A decision is not a
@@ -858,8 +864,16 @@ tool is closed.
   member, and compose an answer into the thread during that run. SAW MUST
   NOT trigger another member's agent, run anything unattended on their
   machine, or spend their compute or budget. Answering while the member's
-  human is absent — unattended runs, or live talk-to-their-agent — is out
-  of v1 scope (enableable later, per the founder).
+  human is absent — unattended runs, or live talk-to-their-agent — does not
+  happen, **outside a consented session**.
+  Inside a consented session (FR-050) the rule is satisfied rather than
+  waived. The authority is that member's own standing consent, granted for
+  their own agent alone (FR-042a) and declared through their own auto-mode
+  control and readiness. Every run still stays on its own member's machine
+  and budget, pause still wins at once, and either human still ends the
+  session (FR-051). The property this requirement protects is unchanged and
+  absolute: no path exists by which a member who has not given that consent
+  has their agent started, their machine used, or their budget spent.
 - **FR-020**: Redaction MUST exist as a tombstone and MUST apply to any
   message, journal entries included, and to the shared run record of the
   same run: the author (unshare) or an owner participating in the thread
@@ -1037,16 +1051,20 @@ tool is closed.
 - **FR-041**: The mode MUST be readable and settable with parity on the CLI and
   the web app (FR-033), and every member's mode on a thread MUST be visible to
   the members of that thread's scope.
-- **FR-042**: Two extensions of this ladder are out of v1 scope. Their designs
-  are recorded so v1 does not foreclose them, and no v1 requirement depends on
-  either.
-  (a) **Continuous mode**, a fourth rung in which an agent starts its own run
-  when thread activity arrives. In every v1 mode the member starts every run.
-  The deferred authority is standing consent, which a member grants to their
-  own agent alone; it is bounded and revocable, it starts a new run and never
-  forces content into a run already in progress, and pause revokes it. v1 MUST
-  NOT ship any path by which one member's action starts another member's agent
-  (FR-019).
+- **FR-042**: Two extensions of this ladder were recorded here as deferred.
+  (a) has since shipped in v1; (b) stays out of v1 scope, its design recorded
+  so v1 does not foreclose it and no v1 requirement depends on it.
+  (a) **Continuous mode** — a rung in which an agent starts its own run when
+  thread activity arrives — is **no longer deferred**. It ships in v1 as auto
+  mode (US9, FR-049 to FR-052). The authority is exactly the standing consent
+  this requirement always named: a member grants it to their own agent alone,
+  it is bounded and revocable, it starts a new run and never forces content
+  into a run already in progress, and pause revokes it. What US9 adds is the
+  session — with both members' consent declared on a thread, each agent's
+  session messages may wake the other, every run staying on its own member's
+  machine and budget. v1 MUST NOT ship any path by which a member's agent is
+  started, their machine used, or their compute or budget spent, without that
+  member's own consent (FR-019).
   (b) **The authority ladder**, in which the source of binding force (FR-043)
   widens from the owner role to a three-rung project role — contributor, lead,
   owner — and, later, to per-thread authority overrides. v1 keeps FR-005's two
@@ -1129,9 +1147,13 @@ tool is closed.
 - **FR-049**: A member's own message on any SAW surface MUST count as that
   member's own prompt: it wakes their own agent with the thread's context.
   Outside a session, nothing else wakes an agent — not the other member's
-  messages, not any agent's messages. (This reads SC-019's "the member's
-  own prompt" as surface-agnostic; the safety half — no run starts from
-  another member's action — stands unchanged.)
+  messages, not any agent's messages. (This reads "the member's own prompt"
+  as surface-agnostic: a message they type into SAW is their prompt as much
+  as one typed into their terminal. The safety property is unchanged — no
+  run starts without that member's own consent — and FR-019 and SC-019 now
+  state it that way, rather than as "no run starts from another member's
+  action", which described the mechanism instead of the authority and did
+  not survive sessions.)
 - **FR-050**: Auto mode MUST be a per-member, per-thread control. A
   session MUST start only from an agreed task and an explicit readiness
   declaration from each participating member, in either order, visible on
@@ -1268,8 +1290,13 @@ tool is closed.
 - **SC-018**: An agent's readable set never exceeds its member's: for every
   thread, message, and journal entry an agent can read, its member can read
   the same item on their own surfaces.
-- **SC-019**: In v1, zero runs of any member's agent start from another
-  member's action, and zero runs start without that member's own prompt.
+- **SC-019**: In v1, zero runs of any member's agent start without that
+  member's own consent. Outside a session, zero runs start from another
+  member's action or from any agent's action, and zero start without that
+  member's own prompt on one of their own surfaces (FR-049; measured by
+  SC-025). Inside a session, zero runs start on the machine of a member who
+  has not turned auto mode on and declared ready, and zero runs exceed that
+  member's budget (measured by SC-026 and SC-027).
 - **SC-020**: In adversarial tests, zero `binding` messages from members
   without authority are accepted, and zero are silently downgraded — every
   refusal names the reason and is recorded.
