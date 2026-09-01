@@ -264,7 +264,12 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 .empty { color: var(--muted); text-align: center; padding: 24px; }
 
 /* ---- Threads sidebar (spec 002 T113, FR-045) ---- */
-.room-layout { display: grid; grid-template-columns: 220px 1fr; gap: 12px; min-height: 0; }
+/* flex: 1 and the flex column on .room-main are what let the feed scroll.
+   The grid arrived without them, so .feed's own overflow-y: auto had no
+   bounded height to work in: the page grew past the viewport inside an
+   overflow: hidden panel, and nothing scrolled at all. */
+.room-layout { display: grid; grid-template-columns: 220px 1fr; gap: 12px; flex: 1; min-height: 0; }
+.room-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 #threads { border-right: 1px solid var(--line, #ddd); padding-right: 10px; overflow-y: auto; }
 .threads-head { display: flex; justify-content: space-between; align-items: center;
   font-weight: 600; margin-bottom: 6px; }
@@ -284,9 +289,10 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 .thread-meta .assignee { font-size: 10px; padding: 1px 5px; border-radius: 8px;
   background: rgba(90, 200, 120, 0.22); }
 .thread-meta .count { font-size: 10px; opacity: 0.7; margin-left: auto; }
-@media (max-width: 700px) { .room-layout { grid-template-columns: 1fr; }
+@media (max-width: 700px) { .room-layout { grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr); }
   #threads { border-right: none; border-bottom: 1px solid var(--line, #ddd);
-    padding-bottom: 8px; } }
+    padding-bottom: 8px; max-height: 35vh; } }
 
 /* ---- Modes + handoffs (spec 002 US8) ---- */
 .mode-select { font-size: 10px; margin-left: auto; }
