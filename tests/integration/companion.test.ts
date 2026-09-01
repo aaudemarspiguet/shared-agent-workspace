@@ -3,7 +3,14 @@
 // nothing privileged. T157/T158 additions: one-sided auto mode and the full
 // session round trip through the daemons.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Daemon, joinWorkspace, mintInvite, registerWorkspace, writeMemberFiles } from "@saw/cli";
+import {
+  Daemon,
+  joinWorkspace,
+  mintInvite,
+  registerWorkspace,
+  startWebServer,
+  writeMemberFiles
+} from "@saw/cli";
 import type { WakeAdapter, WakeRun } from "@saw/cli";
 import { startRelay, type RelayServer } from "@saw/relay";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -169,27 +176,91 @@ describe("the companion (T153, T159, SC-028)", () => {
     const threadId = opened.thread.id;
     await waitFor(() => bob.threads().some((t) => t.id === threadId), "mirror");
 
-    // The companion's run posts through the daemon the way the MCP layer
-    // would with SAW_COMPANION=1: the identity is the payload's.
-    const posted = await bob.post(
-      {
-        type: "status",
-        body: "from the record: auth is claimed and one branch is bound",
-        refs: [],
-        thread_id: threadId
-      },
-      "companion"
-    );
-    expect(posted.ok).toBe(true);
-    await waitFor(
-      () => alice.messages(0, 100).messages.some((m) => m.sender_kind === "companion"),
-      "the companion post to arrive typed"
-    );
+    // Over HTTP, because that is the real path: the MCP layer reads
+    // SAW_COMPANION from the run's environment and POSTs /api/post. The
+    // first version of this test called daemon.post directly — and reached
+    // past the one hop that erased the identity (#205 review): local-api
+    // coerced "companion" to "agent", so every relay-side companion rule
+    // was unreachable from a real companion run.
+    const web = await startWebServer(bob, 0);
+    try {
+      const res = await fetch(`http://127.0.0.1:${web.port}/api/post`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${web.token}`
+        },
+        body: JSON.stringify({
+          type: "status",
+          body: "from the record: auth is claimed and one branch is bound",
+          refs: [],
+          thread_id: threadId,
+          sender_kind: "companion"
+        })
+      });
+      expect(res.status).toBe(200);
+      await waitFor(
+        () => alice.messages(0, 100).messages.some((m) => m.sender_kind === "companion"),
+        "the companion post to arrive typed"
+      );
+    } finally {
+      await web.close();
+    }
     const msg = alice.messages(0, 100).messages.find((m) => m.sender_kind === "companion");
     expect(msg?.sender).toBe("bob");
     // And a companion message wakes nobody, even inside a live session.
     expect(aliceAdapter.runs.every((r) => r.companionPrompt === undefined)).toBe(true);
     expect(aliceAdapter.runs.filter((r) => r.reason === "session_turn").length).toBe(0);
+  });
+
+  it("a paused member's companion is refused at the boundary: pause is total", async () => {
+    const aliceAdapter = new FakeAdapter();
+    const bobAdapter = new FakeAdapter();
+    const { alice, bob } = await pair(aliceAdapter, bobAdapter);
+    const opened = await alice.threadOpen({ type: "work_item", title: "paused companion" });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    const threadId = opened.thread.id;
+    await waitFor(() => bob.threads().some((t) => t.id === threadId), "mirror");
+
+    // Decided at the #205 review: pause silences every automated voice,
+    // the companion included, and only the member's own human words pass.
+    // Enforced at /api/post rather than left to the spawn-side check, so a
+    // run already going when the pause lands is still refused.
+    const web = await startWebServer(bob, 0);
+    try {
+      const post = (kind: "agent" | "human" | "companion") =>
+        fetch(`http://127.0.0.1:${web.port}/api/post`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${web.token}`
+          },
+          body: JSON.stringify({
+            type: "status",
+            body: `${kind} speaking while paused`,
+            refs: [],
+            thread_id: threadId,
+            sender_kind: kind
+          })
+        });
+      const pausing = await fetch(`http://127.0.0.1:${web.port}/api/pause`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${web.token}`
+        },
+        body: JSON.stringify({ paused: true })
+      });
+      expect(pausing.status).toBe(200);
+      await waitFor(() => bob.pauseMirror.ownPaused, "the pause to land");
+
+      expect((await post("companion")).status).toBe(423);
+      expect((await post("agent")).status).toBe(423);
+      expect((await post("human")).status).toBe(200);
+    } finally {
+      await web.close();
+    }
   });
 });
 

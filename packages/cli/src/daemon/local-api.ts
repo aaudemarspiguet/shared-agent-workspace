@@ -109,16 +109,29 @@ export async function handleApiRequest(
 
     if (req.method === "POST" && path === "/api/post") {
       const body = (await readJsonBody(req)) as {
-        sender_kind?: "agent" | "human";
+        sender_kind?: "agent" | "human" | "companion";
       } & Record<string, unknown>;
-      const senderKind = body.sender_kind === "human" ? "human" : "agent";
+      // The companion identity survives this hop or nowhere (FR-053). The
+      // MCP layer reads SAW_COMPANION from the spawned run's environment,
+      // sets sender_kind, and POSTs here — and this line used to coerce
+      // "companion" to "agent", erasing the identity one hop after it was
+      // established. Every relay-side companion rule was unreachable on
+      // the real path as a result (#205 review).
+      const senderKind =
+        body.sender_kind === "human" || body.sender_kind === "companion"
+          ? body.sender_kind
+          : "agent";
       const post: Record<string, unknown> = { ...body };
       delete post.sender_kind;
       if (!daemon.connected) {
         respond(res, 503, errorBody("not_connected", "the relay is not connected"));
         return true;
       }
-      if (senderKind === "agent" && daemon.pauseMirror.ownPaused) {
+      // Pause silences every automated voice, the companion included: only
+      // the member's own human words pass while paused. Decided at the #205
+      // review and stated here, rather than falling out of an === "agent"
+      // comparison that a third kind would quietly slip past.
+      if (senderKind !== "human" && daemon.pauseMirror.ownPaused) {
         respond(
           res,
           423,
