@@ -188,6 +188,26 @@ describe("the readiness handshake and wakes (T149, T150)", () => {
     bob.close();
   });
 
+  it("a paused member's agent never wakes, their own typing included (FR-051)", async () => {
+    const alice = await connect(aliceToken);
+    await alice.waitFor(is("thread_snapshot"));
+    const threadId = await openThread(alice, "paused wake");
+    alice.send({ kind: "pause_set", paused: true });
+    await alice.waitFor(is("pause_state", (f) => f.member === "alice" && f.paused));
+    const wakesBefore = alice.frames.filter((f) => f.kind === "wake").length;
+    alice.send({
+      kind: "post",
+      post: { type: "status", body: "typing while paused", thread_id: threadId },
+      sender_kind: "human"
+    });
+    await alice.waitFor(is("post_ok", () => true));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(alice.frames.filter((f) => f.kind === "wake").length).toBe(wakesBefore);
+    alice.send({ kind: "pause_set", paused: false });
+    await alice.waitFor(is("pause_state", (f) => f.member === "alice" && !f.paused));
+    alice.close();
+  });
+
   it("turning auto mode off ends a live session, recorded by who did it", async () => {
     const alice = await connect(aliceToken);
     const bob = await connect(bobToken);

@@ -211,7 +211,7 @@ export function routeWakes(
       const sender = store
         .members(workspaceId)
         .find((m) => m.github_username === message.sender);
-      if (sender) {
+      if (sender && !store.isPaused(sender.id)) {
         registry.sendTo(sender.id, {
           kind: "wake",
           thread_id: "",
@@ -239,6 +239,7 @@ export function routeWakes(
       sender_kind: message.sender_kind,
       recipient: member.github_username,
       recipient_auto_on: store.autoModeEnabled(message.thread_id, member.github_username),
+      recipient_paused: store.isPaused(member.id),
       session: session ? { state: session.state, live_participants: liveParticipants } : null
     });
     if (!verdict.wake) continue;
