@@ -236,6 +236,41 @@ describe("the readiness handshake and wakes (T149, T150)", () => {
   });
 });
 
+describe("a companion has no capability (FR-053, SC-028, issue #206)", () => {
+  it("refuses binding force, moves no claims, binds no refs", async () => {
+    const alice = await connect(aliceToken);
+    await alice.waitFor(is("thread_snapshot"));
+    const threadId = await openThread(alice, "companion limits");
+
+    // Binding force from a companion is refused even for the owner.
+    alice.send({
+      kind: "post",
+      post: { type: "decision", body: "i decree as companion", thread_id: threadId, force: "binding" },
+      sender_kind: "companion"
+    });
+    await alice.waitFor(is("error", (f) => f.code === "no_authority"));
+
+    // A companion intent moves no claim; its refs bind nothing.
+    alice.send({
+      kind: "post",
+      post: {
+        type: "intent",
+        body: "claiming as companion",
+        thread_id: threadId,
+        refs: [{ kind: "branch", value: "alice/companion-try" }]
+      },
+      sender_kind: "companion"
+    });
+    await alice.waitFor(is("post_ok", () => true));
+    await untilStore(() => true, "settle", 200);
+    expect(relay.store.threadClaim(threadId)).toBeUndefined();
+    expect(
+      relay.store.threadRefs(workspaceId).filter((b) => b.thread_id === threadId).length
+    ).toBe(0);
+    alice.close();
+  });
+});
+
 describe("convergence and done-ness by author (T149, T155)", () => {
   it("an agent proposes, only its own member approves, and the session concludes", async () => {
     const alice = await connect(aliceToken);
