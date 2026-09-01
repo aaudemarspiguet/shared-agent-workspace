@@ -1,7 +1,7 @@
 // WebSocket frame schemas for the relay protocol.
 // Every frame is JSON. The relay rejects every frame that does not match.
 import { z } from "zod";
-import type { RejectionReason, StoredMessage } from "./messages.js";
+import type { GitRef, RejectionReason, StoredMessage } from "./messages.js";
 import {
   LogQuerySchema,
   RunLogEntryWireSchema,
@@ -164,10 +164,26 @@ export interface MessageFrame {
   kind: "message";
   message: StoredMessage;
 }
+/**
+ * One ref a post carried that did not bind to its thread, and why.
+ *
+ * The message still carries the ref; only the binding was refused. The
+ * sender is told so the refusal is not silent (FR-014, FR-040).
+ */
+export interface UnboundRef {
+  ref: GitRef;
+  reason: RejectionReason;
+  summary: string;
+}
 export interface PostOkFrame {
   kind: "post_ok";
   seq: number;
   sent_at: string;
+  /**
+   * Refs that did not bind to the thread. Absent when every ref bound, so
+   * a pre-002 client that never reads it behaves exactly as before.
+   */
+  unbound_refs?: UnboundRef[];
 }
 export interface PostRejectedFrame {
   kind: "post_rejected";

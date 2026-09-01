@@ -2,7 +2,7 @@
 // broadcast. Spec 002 T104: messages route by thread; a null thread_id is a
 // project broadcast; a v0-era work_item tag resolves to its thread, so an
 // old client keeps working through the migration window.
-import type { MessagePost, StoredThread } from "@saw/shared";
+import type { MessagePost, StoredThread, UnboundRef } from "@saw/shared";
 import { applyClaimTransition } from "./claims.js";
 import type { ConnectionRegistry } from "./presence.js";
 import type { MemberRow, RelayStore } from "./store.js";
@@ -60,6 +60,10 @@ export function handlePost(
 
   const message = store.insertMessage(workspaceId, sender, senderKind, post, thread?.id ?? null);
 
+  // Refs the post carried that did not bind. Reported to the sender below so
+  // the refusal is not silent; the rejection log records it either way.
+  const unbound: UnboundRef[] = [];
+
   if (thread) {
     // Posting into a thread makes the sender a participant (FR-012), and
     // the refs a post carries bind to the thread (FR-014, T115). A branch
@@ -71,12 +75,13 @@ export function handlePost(
     store.addParticipant(thread.id, sender.github_username);
     for (const ref of post.refs) {
       if (ref.kind === "branch" && !ref.value.startsWith(`${sender.github_username}/`)) {
-        store.appendRejectionLog(
-          workspaceId,
-          sender.id,
-          "invalid_ref",
-          "branch not under the member's own prefix; not bound to the thread"
-        );
+        const summary =
+          `branch "${ref.value}" is not under your own prefix ` +
+          `"${sender.github_username}/", so it did not bind to the thread. ` +
+          `The message posted and still carries the ref. Rename the branch ` +
+          `under your prefix and post it again to bind it.`;
+        store.appendRejectionLog(workspaceId, sender.id, "invalid_ref", summary);
+        unbound.push({ ref, reason: "invalid_ref", summary });
         continue;
       }
       const binding = store.bindThreadRef(thread.id, workspaceId, ref, sender.github_username);
@@ -87,7 +92,8 @@ export function handlePost(
   registry.sendTo(sender.id, {
     kind: "post_ok",
     seq: message.seq,
-    sent_at: message.sent_at
+    sent_at: message.sent_at,
+    ...(unbound.length > 0 ? { unbound_refs: unbound } : {})
   });
 
   // Deliver to the other members. Paused members catch up through sync.

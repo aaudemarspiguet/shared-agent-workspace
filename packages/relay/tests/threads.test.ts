@@ -420,7 +420,70 @@ describe("modes, authority, handoffs over the wire (spec 002 US8)", () => {
     const all = relay.store.threadRefs(workspaceId).filter((b) => b.thread_id === t.id);
     expect(all.map((b) => b.ref.value)).toEqual(["alice/mine"]);
 
+    // The refusal reaches the sender, not only the rejection log. The post
+    // succeeded and still carries both refs; only the binding was refused,
+    // and saying so is what keeps "nothing drops silently" true.
+    const ok = await alice.waitFor(is("post_ok"));
+    expect(ok.unbound_refs?.map((u) => u.ref.value)).toEqual(["bob/not-mine"]);
+    expect(ok.unbound_refs?.[0]?.reason).toBe("invalid_ref");
+    // The message names the branch and the prefix that would have worked.
+    expect(ok.unbound_refs?.[0]?.summary).toContain("bob/not-mine");
+    expect(ok.unbound_refs?.[0]?.summary).toContain("alice/");
+
     alice.close();
     bob.close();
+  });
+
+  it("says nothing about unbound refs when every ref bound", async () => {
+    const alice = await connect(aliceToken);
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "all mine", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "all mine"))).thread;
+
+    alice.send({
+      kind: "post",
+      post: {
+        type: "status",
+        body: "only my own branch",
+        thread_id: t.id,
+        refs: [{ kind: "branch", value: "alice/fine" }]
+      },
+      sender_kind: "agent"
+    });
+
+    const ok = await alice.waitFor(is("post_ok"));
+    expect(ok.unbound_refs).toBeUndefined();
+
+    alice.close();
+  });
+
+  it("binds a commit sha whoever posts it, and reports nothing unbound", async () => {
+    const alice = await connect(aliceToken);
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "sha thread", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "sha thread"))).thread;
+
+    // A commit has no owner, so the prefix rule does not apply to it.
+    alice.send({
+      kind: "post",
+      post: {
+        type: "status",
+        body: "a sha",
+        thread_id: t.id,
+        refs: [{ kind: "commit", value: "a42c95c" }]
+      },
+      sender_kind: "agent"
+    });
+
+    const ok = await alice.waitFor(is("post_ok"));
+    expect(ok.unbound_refs).toBeUndefined();
+    const bound = relay.store.threadRefs(workspaceId).filter((b) => b.thread_id === t.id);
+    expect(bound.map((b) => b.ref.value)).toEqual(["a42c95c"]);
+
+    alice.close();
   });
 });

@@ -143,7 +143,13 @@ export async function handleApiRequest(
         respond(res, status, errorBody(outcome.code, outcome.message));
         return true;
       }
-      respond(res, 200, { seq: outcome.seq, sent_at: outcome.sent_at });
+      // Carry the unbound refs through: a post whose branch did not bind must
+      // say so to whoever sent it, not only to the rejection log.
+      respond(res, 200, {
+        seq: outcome.seq,
+        sent_at: outcome.sent_at,
+        ...(outcome.unbound_refs?.length ? { unbound_refs: outcome.unbound_refs } : {})
+      });
       return true;
     }
 
