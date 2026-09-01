@@ -10,6 +10,7 @@ import {
 } from "./log.js";
 import { UlidSchema } from "./messages.js";
 import type { StoredHandoff, StoredThread, ThreadRefBinding } from "./threads.js";
+import type { StoredSession } from "./sessions.js";
 import { HANDOFF_STATES } from "./threads.js";
 import type { StoredThreadMode } from "./modes.js";
 
@@ -127,6 +128,39 @@ export const HandoffProposeFrameSchema = z.object({
   propose: z.unknown()
 });
 
+export const AutoModeSetFrameSchema = z.object({
+  kind: z.literal("auto_mode_set"),
+  // Opaque; AutoModeSetSchema judges it. Self-directed: no member field.
+  set: z.unknown()
+});
+
+export const SessionReadyFrameSchema = z.object({
+  kind: z.literal("session_ready"),
+  // Opaque; validateSessionReady judges it (the task is free text).
+  ready: z.unknown()
+});
+
+export const SessionEndFrameSchema = z.object({
+  kind: z.literal("session_end"),
+  session_id: UlidSchema
+});
+
+export const ConvergeProposeFrameSchema = z.object({
+  kind: z.literal("converge_propose"),
+  // Opaque; validateConvergePropose judges it (the summary is free text).
+  propose: z.unknown()
+});
+
+export const ConvergeApproveFrameSchema = z.object({
+  kind: z.literal("converge_approve"),
+  session_id: UlidSchema
+});
+
+export const ClaimApproveFrameSchema = z.object({
+  kind: z.literal("claim_approve"),
+  thread_id: UlidSchema
+});
+
 export const HandoffResolveFrameSchema = z.object({
   kind: z.literal("handoff_resolve"),
   handoff_id: UlidSchema,
@@ -146,7 +180,13 @@ export const ClientFrameSchema = z.discriminatedUnion("kind", [
   ThreadModeSetFrameSchema,
   ThreadRefBindFrameSchema,
   HandoffProposeFrameSchema,
-  HandoffResolveFrameSchema
+  HandoffResolveFrameSchema,
+  AutoModeSetFrameSchema,
+  SessionReadyFrameSchema,
+  SessionEndFrameSchema,
+  ConvergeProposeFrameSchema,
+  ConvergeApproveFrameSchema,
+  ClaimApproveFrameSchema
 ]);
 export type ClientFrame = z.infer<typeof ClientFrameSchema>;
 
@@ -238,6 +278,9 @@ export interface ThreadSnapshotFrame {
   modes: StoredThreadMode[];
   handoffs: StoredHandoff[];
   refs: ThreadRefBinding[];
+  /** Sessions and auto-mode settings (spec 002 US9). Absent pre-phase-6. */
+  sessions?: StoredSession[];
+  auto_modes?: { thread_id: string; member: string; enabled: boolean }[];
 }
 export interface ThreadFrame {
   kind: "thread";
@@ -254,6 +297,31 @@ export interface ThreadRefFrame {
 export interface HandoffFrame {
   kind: "handoff";
   handoff: StoredHandoff;
+}
+/** A session transition. Broadcast on every change (spec 002 US9). */
+export interface SessionFrame {
+  kind: "session";
+  session: StoredSession;
+}
+/** One member's auto-mode setting on a thread. */
+export interface AutoModeFrame {
+  kind: "auto_mode";
+  thread_id: string;
+  member: string;
+  enabled: boolean;
+}
+/**
+ * A wake: the relay telling ONE member's daemon that the wake rule fired
+ * for them (sessions.ts wakeEligible). Never broadcast — sent only to the
+ * member it wakes. The daemon hands it to the coding tool through the
+ * wake adapter (FR-054).
+ */
+export interface WakeFrame {
+  kind: "wake";
+  thread_id: string;
+  session_id: string | null;
+  reason: "own_message" | "session_turn";
+  message_seq: number;
 }
 export interface ErrorFrame {
   kind: "error";
@@ -277,5 +345,8 @@ export type ServerFrame =
   | ThreadModeFrame
   | ThreadRefFrame
   | HandoffFrame
+  | SessionFrame
+  | AutoModeFrame
+  | WakeFrame
   | PongFrame
   | ErrorFrame;
