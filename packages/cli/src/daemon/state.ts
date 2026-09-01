@@ -5,6 +5,7 @@ import type {
   ClaimResultFrame,
   Mode,
   StoredHandoff,
+  StoredSession,
   PresenceFrame,
   StoredMessage,
   StoredThread,
@@ -21,7 +22,7 @@ export interface MemberView {
 
 export interface ThreadView extends StoredThread {
   /** Claim state mirrored from the stream, v0-style, keyed by thread. */
-  claim_state: "open" | "claimed" | "handed_off" | "done";
+  claim_state: "open" | "claimed" | "handed_off" | "done_proposed" | "done";
   claimed_by?: string;
   /** This member's mode on the thread. Default comment (FR-038). */
   my_mode: Mode;
@@ -31,7 +32,7 @@ export interface ThreadView extends StoredThread {
 
 export interface WorkItemView {
   feature_tag: string;
-  state: "open" | "claimed" | "handed_off" | "done";
+  state: "open" | "claimed" | "handed_off" | "done_proposed" | "done";
   claimed_by?: string;
 }
 
@@ -51,6 +52,8 @@ export class RoomState {
   private threadModes = new Map<string, Mode>();
   private threadRefs = new Map<string, ThreadRefBinding[]>();
   private handoffsById = new Map<string, StoredHandoff>();
+  private sessionsById = new Map<string, StoredSession>();
+  private myAutoModes = new Map<string, boolean>();
   private threadClaims = new Map<
     string,
     { state: WorkItemView["state"]; claimed_by?: string }
@@ -185,7 +188,9 @@ export class RoomState {
       }
     } else if (message.type === "decision") {
       if (item.state === "claimed" && item.claimed_by === sender) {
-        item.state = "done";
+        // FR-052 (T155): who authored it decides. A human's decision
+        // concludes; an agent's proposes and waits for its member.
+        item.state = message.sender_kind === "human" ? "done" : "done_proposed";
       }
     }
     this.items.set(tag, item);
@@ -219,7 +224,7 @@ export class RoomState {
       }
     } else if (message.type === "decision") {
       if (claim.state === "claimed" && claim.claimed_by === sender) {
-        claim.state = "done";
+        claim.state = message.sender_kind === "human" ? "done" : "done_proposed";
       }
     }
     this.threadClaims.set(threadId, claim);
@@ -270,6 +275,10 @@ export class RoomState {
   applyThreadSnapshot(frame: ThreadSnapshotFrame): void {
     for (const thread of frame.threads) this.threadsById.set(thread.id, thread);
     for (const handoff of frame.handoffs) this.handoffsById.set(handoff.id, handoff);
+    for (const session of frame.sessions ?? []) this.sessionsById.set(session.id, session);
+    for (const am of frame.auto_modes ?? []) {
+      if (am.member === this.me) this.myAutoModes.set(am.thread_id, am.enabled);
+    }
     for (const mode of frame.modes) {
       if (mode.member === this.me) this.threadModes.set(mode.thread_id, mode.mode);
     }
@@ -301,6 +310,34 @@ export class RoomState {
 
   addHandoff(handoff: StoredHandoff): void {
     this.handoffsById.set(handoff.id, handoff);
+  }
+
+  addSession(session: StoredSession): void {
+    this.sessionsById.set(session.id, session);
+  }
+
+  setMyAutoMode(threadId: string, enabled: boolean): void {
+    this.myAutoModes.set(threadId, enabled);
+  }
+
+  myAutoMode(threadId: string): boolean {
+    return this.myAutoModes.get(threadId) ?? false;
+  }
+
+  sessions(): StoredSession[] {
+    return [...this.sessionsById.values()].sort((a, b) =>
+      a.created_at.localeCompare(b.created_at)
+    );
+  }
+
+  /** The thread's session that is not concluded or ended, if any. */
+  activeSessionForThread(threadId: string): StoredSession | undefined {
+    return this.sessions()
+      .reverse()
+      .find(
+        (s) =>
+          s.thread_id === threadId && s.state !== "concluded" && s.state !== "ended"
+      );
   }
 
   handoffs(): StoredHandoff[] {
@@ -374,7 +411,12 @@ export class RoomState {
     if (frame.thread_id) {
       const claim = this.threadClaims.get(frame.thread_id) ?? { state: "open" as const };
       claim.claimed_by = frame.claimed_by;
-      if (claim.state === "open") claim.state = "claimed";
+      if (frame.state) {
+        // The verdict is authoritative when it names the state (T155).
+        claim.state = frame.state;
+      } else if (claim.state === "open") {
+        claim.state = "claimed";
+      }
       this.threadClaims.set(frame.thread_id, claim);
     }
   }

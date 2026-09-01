@@ -255,6 +255,85 @@ export async function handleApiRequest(
       return true;
     }
 
+    if (req.method === "GET" && path === "/api/sessions") {
+      respond(res, 200, { sessions: daemon.sessions() });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/auto-mode") {
+      const body = (await readJsonBody(req)) as { thread_id?: string; enabled?: boolean };
+      if (!body.thread_id || typeof body.enabled !== "boolean") {
+        respond(res, 400, errorBody("invalid_input", "thread_id and enabled are required"));
+        return true;
+      }
+      daemon.autoModeSet(body.thread_id, body.enabled);
+      respond(res, 200, { ok: true });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/session/ready") {
+      const body = (await readJsonBody(req)) as {
+        thread_id?: string;
+        task?: string;
+        max_turns?: number;
+      };
+      if (!body.thread_id) {
+        respond(res, 400, errorBody("invalid_input", "thread_id is required"));
+        return true;
+      }
+      daemon.sessionReady(body.thread_id, body.task, body.max_turns);
+      respond(res, 200, { ok: true });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/session/end") {
+      const body = (await readJsonBody(req)) as { session_id?: string };
+      if (!body.session_id) {
+        respond(res, 400, errorBody("invalid_input", "session_id is required"));
+        return true;
+      }
+      daemon.sessionEnd(body.session_id);
+      respond(res, 200, { ok: true });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/session/propose") {
+      const body = (await readJsonBody(req)) as {
+        session_id?: string;
+        summary?: string;
+        refs?: { kind: "branch" | "commit"; value: string }[];
+      };
+      if (!body.session_id || !body.summary) {
+        respond(res, 400, errorBody("invalid_input", "session_id and summary are required"));
+        return true;
+      }
+      daemon.convergePropose(body.session_id, body.summary, body.refs ?? []);
+      respond(res, 200, { ok: true });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/session/approve") {
+      const body = (await readJsonBody(req)) as { session_id?: string };
+      if (!body.session_id) {
+        respond(res, 400, errorBody("invalid_input", "session_id is required"));
+        return true;
+      }
+      daemon.convergeApprove(body.session_id);
+      respond(res, 200, { ok: true });
+      return true;
+    }
+
+    if (req.method === "POST" && path === "/api/claim/approve") {
+      const body = (await readJsonBody(req)) as { thread_id?: string };
+      if (!body.thread_id) {
+        respond(res, 400, errorBody("invalid_input", "thread_id is required"));
+        return true;
+      }
+      daemon.claimApprove(body.thread_id);
+      respond(res, 200, { ok: true });
+      return true;
+    }
+
     if (req.method === "GET" && path === "/api/handoffs") {
       respond(res, 200, { handoffs: daemon.handoffs() });
       return true;

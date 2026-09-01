@@ -36,19 +36,19 @@ export function applyClaimTransition(
     if (type === "intent") {
       if (claim.state === "open") {
         store.setThreadClaim(thread.id, "claimed", senderName);
-        return result(thread, true, senderName);
+        return result(thread, true, senderName, "claimed");
       }
       if (claim.state === "handed_off" && claim.claimed_by === senderName) {
         store.setThreadClaim(thread.id, "claimed", senderName);
-        return result(thread, true, senderName);
+        return result(thread, true, senderName, "claimed");
       }
       if (claim.state === "done_proposed" && claim.claimed_by === senderName) {
         // The holder's agent kept going, so the proposal no longer stands.
         store.setThreadClaim(thread.id, "claimed", senderName);
-        return result(thread, true, senderName);
+        return result(thread, true, senderName, "claimed");
       }
       // The thread is already taken. First claim wins. Reject visibly.
-      return result(thread, false, claim.claimed_by ?? senderName);
+      return result(thread, false, claim.claimed_by ?? senderName, claim.state);
     }
 
     if (type === "handoff" && claim.state === "claimed" && claim.claimed_by === senderName) {
@@ -57,7 +57,7 @@ export function applyClaimTransition(
         .find((m) => m.github_username !== senderName);
       if (other) {
         store.setThreadClaim(thread.id, "handed_off", other.github_username);
-        return result(thread, true, other.github_username);
+        return result(thread, true, other.github_username, "handed_off");
       }
     }
 
@@ -69,10 +69,10 @@ export function applyClaimTransition(
       // an agent could close its own member's claim with nobody involved.
       if (senderKind === "human") {
         store.setThreadClaim(thread.id, "done", senderName);
-        return result(thread, true, senderName);
+        return result(thread, true, senderName, "done");
       }
       store.setThreadClaim(thread.id, "done_proposed", senderName);
-      return result(thread, true, senderName);
+      return result(thread, true, senderName, "done_proposed");
     }
 
     return null;
@@ -104,7 +104,7 @@ export function applyClaimApprove(
     };
   }
   store.setThreadClaim(threadId, "done", member.github_username);
-  return { ok: true, frame: result(thread, true, member.github_username) };
+  return { ok: true, frame: result(thread, true, member.github_username, "done") };
 }
 
 /**
@@ -112,12 +112,18 @@ export function applyClaimApprove(
  * for v1 clients, `work_item` (the tag the thread came from, or its title)
  * for a client that still thinks in tags (PR #173, wire decision 2).
  */
-function result(thread: StoredThread, granted: boolean, claimedBy: string): ClaimResultFrame {
+function result(
+  thread: StoredThread,
+  granted: boolean,
+  claimedBy: string,
+  state?: ClaimResultFrame["state"]
+): ClaimResultFrame {
   return {
     kind: "claim_result",
     work_item: thread.migrated_from_tag ?? thread.title,
     thread_id: thread.id,
     granted,
-    claimed_by: claimedBy
+    claimed_by: claimedBy,
+    ...(state ? { state } : {})
   };
 }

@@ -14,9 +14,12 @@ import type {
   PauseStateFrame,
   RunLogEntryInput,
   ServerFrame,
+  AutoModeFrame,
   StoredHandoff,
   StoredMessage,
+  StoredSession,
   StoredThread,
+  WakeFrame,
   StoredThreadMode,
   ThreadOpen,
   ThreadRefBinding,
@@ -46,6 +49,9 @@ export interface RelayClientHandlers {
   onThreadMode?: (mode: StoredThreadMode) => void;
   onThreadRef?: (binding: ThreadRefBinding) => void;
   onHandoff?: (handoff: StoredHandoff) => void;
+  onSession?: (session: StoredSession) => void;
+  onAutoMode?: (frame: AutoModeFrame) => void;
+  onWake?: (frame: WakeFrame) => void;
 }
 
 export type ThreadOpenOutcome =
@@ -180,6 +186,40 @@ export class RelayClient {
   handoffResolve(handoffId: string, toState: "accepted" | "declined" | "withdrawn"): void {
     if (!this.connected) return;
     this.send({ kind: "handoff_resolve", handoff_id: handoffId, to_state: toState });
+  }
+
+  /** Auto mode and sessions (spec 002 US9). All writes are self-directed. */
+  autoModeSet(threadId: string, enabled: boolean): void {
+    if (!this.connected) return;
+    this.send({ kind: "auto_mode_set", set: { thread_id: threadId, enabled } });
+  }
+
+  sessionReady(threadId: string, task?: string, maxTurns?: number): void {
+    if (!this.connected) return;
+    this.send({
+      kind: "session_ready",
+      ready: { thread_id: threadId, ...(task ? { task } : {}), ...(maxTurns ? { max_turns: maxTurns } : {}) }
+    });
+  }
+
+  sessionEnd(sessionId: string): void {
+    if (!this.connected) return;
+    this.send({ kind: "session_end", session_id: sessionId });
+  }
+
+  convergePropose(sessionId: string, summary: string, refs: { kind: "branch" | "commit"; value: string }[]): void {
+    if (!this.connected) return;
+    this.send({ kind: "converge_propose", propose: { session_id: sessionId, summary, refs } });
+  }
+
+  convergeApprove(sessionId: string): void {
+    if (!this.connected) return;
+    this.send({ kind: "converge_approve", session_id: sessionId });
+  }
+
+  claimApprove(threadId: string): void {
+    if (!this.connected) return;
+    this.send({ kind: "claim_approve", thread_id: threadId });
   }
 
   /** Open a thread. Resolves with the thread the relay made (spec 002). */
@@ -326,6 +366,15 @@ export class RelayClient {
         return;
       case "handoff":
         this.handlers.onHandoff?.(frame.handoff);
+        return;
+      case "session":
+        this.handlers.onSession?.(frame.session);
+        return;
+      case "auto_mode":
+        this.handlers.onAutoMode?.(frame);
+        return;
+      case "wake":
+        this.handlers.onWake?.(frame);
         return;
       case "thread_ref":
         this.handlers.onThreadRef?.(frame.binding);
