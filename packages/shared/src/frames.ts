@@ -278,6 +278,9 @@ export interface ThreadSnapshotFrame {
   modes: StoredThreadMode[];
   handoffs: StoredHandoff[];
   refs: ThreadRefBinding[];
+  /** Sessions and auto-mode settings (spec 002 US9). Absent pre-phase-6. */
+  sessions?: StoredSession[];
+  auto_modes?: { thread_id: string; member: string; enabled: boolean }[];
 }
 export interface ThreadFrame {
   kind: "thread";
