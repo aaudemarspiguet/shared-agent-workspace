@@ -4,9 +4,12 @@ import { createHash, randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import { ulid } from "ulid";
 import {
+  DEFAULT_MAX_TURNS,
   MIGRATED_THREAD_MODE,
   type HandoffState,
+  type SessionState,
   type StoredHandoff,
+  type StoredSession,
   type GitRef,
   type LogSource,
   type MessagePost,
@@ -40,7 +43,11 @@ export interface MemberRow {
 
 export interface ThreadClaimRow {
   thread_id: string;
-  state: "open" | "claimed" | "handed_off" | "done";
+  /**
+   * done_proposed is spec 002 FR-052: an agent's decision proposes done;
+   * only the holder's own member concludes it (claim_approve).
+   */
+  state: "open" | "claimed" | "handed_off" | "done_proposed" | "done";
   claimed_by: string | null;
   updated_at: string;
 }
@@ -147,6 +154,40 @@ CREATE TABLE IF NOT EXISTS handoffs (
   directed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   resolved_at TEXT
+);
+CREATE TABLE IF NOT EXISTS auto_modes (
+  thread_id TEXT NOT NULL REFERENCES threads(id),
+  member_username TEXT NOT NULL,
+  enabled INTEGER NOT NULL,
+  set_at TEXT NOT NULL,
+  PRIMARY KEY (thread_id, member_username)
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL REFERENCES threads(id),
+  task TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  ended_at TEXT,
+  ended_by TEXT
+);
+CREATE TABLE IF NOT EXISTS session_members (
+  session_id TEXT NOT NULL REFERENCES sessions(id),
+  member_username TEXT NOT NULL,
+  ready_at TEXT,
+  max_turns INTEGER NOT NULL,
+  turns_used INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (session_id, member_username)
+);
+CREATE TABLE IF NOT EXISTS session_convergence (
+  session_id TEXT PRIMARY KEY REFERENCES sessions(id),
+  proposed_by TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  refs TEXT NOT NULL,
+  proposed_at TEXT NOT NULL,
+  approved_by TEXT,
+  approved_at TEXT
 );
 CREATE TABLE IF NOT EXISTS thread_tag_merges (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -728,6 +769,218 @@ export class RelayStore {
       mode: r.mode,
       set_at: r.set_at
     }));
+  }
+
+  // ---- Auto mode and sessions (spec 002 US9, T149) ----
+
+  setAutoMode(threadId: string, member: string, enabled: boolean): void {
+    this.db
+      .prepare(
+        `INSERT INTO auto_modes (thread_id, member_username, enabled, set_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(thread_id, member_username) DO UPDATE SET
+           enabled = excluded.enabled, set_at = excluded.set_at`
+      )
+      .run(threadId, member, enabled ? 1 : 0, now());
+  }
+
+  autoModeEnabled(threadId: string, member: string): boolean {
+    const row = this.db
+      .prepare(
+        "SELECT enabled FROM auto_modes WHERE thread_id = ? AND member_username = ?"
+      )
+      .get(threadId, member) as { enabled: number } | undefined;
+    return row ? row.enabled === 1 : false;
+  }
+
+  autoModes(workspaceId: string): { thread_id: string; member: string; enabled: boolean }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT am.thread_id, am.member_username, am.enabled
+         FROM auto_modes am JOIN threads t ON t.id = am.thread_id
+         WHERE t.workspace_id = ?`
+      )
+      .all(workspaceId) as Array<{ thread_id: string; member_username: string; enabled: number }>;
+    return rows.map((r) => ({
+      thread_id: r.thread_id,
+      member: r.member_username,
+      enabled: r.enabled === 1
+    }));
+  }
+
+  private rowToSession(r: {
+    id: string;
+    thread_id: string;
+    task: string;
+    state: string;
+    created_at: string;
+    started_at: string | null;
+    ended_at: string | null;
+    ended_by: string | null;
+  }): StoredSession {
+    const members = this.db
+      .prepare("SELECT * FROM session_members WHERE session_id = ?")
+      .all(r.id) as Array<{
+      member_username: string;
+      ready_at: string | null;
+      max_turns: number;
+      turns_used: number;
+    }>;
+    const conv = this.db
+      .prepare("SELECT * FROM session_convergence WHERE session_id = ?")
+      .get(r.id) as
+      | {
+          proposed_by: string;
+          summary: string;
+          refs: string;
+          proposed_at: string;
+          approved_by: string | null;
+          approved_at: string | null;
+        }
+      | undefined;
+    return {
+      id: r.id,
+      thread_id: r.thread_id,
+      task: r.task,
+      state: r.state as SessionState,
+      members: members.map((m) => ({
+        member: m.member_username,
+        ready_at: m.ready_at,
+        max_turns: m.max_turns,
+        turns_used: m.turns_used
+      })),
+      convergence: conv
+        ? {
+            proposed_by: conv.proposed_by,
+            summary: conv.summary,
+            refs: JSON.parse(conv.refs) as GitRef[],
+            proposed_at: conv.proposed_at,
+            approved_by: conv.approved_by,
+            approved_at: conv.approved_at
+          }
+        : null,
+      created_at: r.created_at,
+      started_at: r.started_at,
+      ended_at: r.ended_at,
+      ended_by: r.ended_by
+    };
+  }
+
+  createSession(
+    threadId: string,
+    task: string,
+    firstMember: string,
+    maxTurns: number = DEFAULT_MAX_TURNS
+  ): StoredSession {
+    const id = ulid();
+    this.db
+      .prepare(
+        `INSERT INTO sessions (id, thread_id, task, state, created_at, started_at, ended_at, ended_by)
+         VALUES (?, ?, ?, 'forming', ?, NULL, NULL, NULL)`
+      )
+      .run(id, threadId, task, now());
+    this.db
+      .prepare(
+        `INSERT INTO session_members (session_id, member_username, ready_at, max_turns, turns_used)
+         VALUES (?, ?, ?, ?, 0)`
+      )
+      .run(id, firstMember, now(), maxTurns);
+    const made = this.sessionById(id);
+    if (!made) throw new Error("session insert failed");
+    return made;
+  }
+
+  sessionById(id: string): StoredSession | undefined {
+    const r = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
+      | Parameters<RelayStore["rowToSession"]>[0]
+      | undefined;
+    return r ? this.rowToSession(r) : undefined;
+  }
+
+  /** The thread's session that is not yet concluded or ended. */
+  activeSessionForThread(threadId: string): StoredSession | undefined {
+    const r = this.db
+      .prepare(
+        `SELECT * FROM sessions WHERE thread_id = ?
+         AND state IN ('forming', 'live', 'suspended', 'converged')
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(threadId) as Parameters<RelayStore["rowToSession"]>[0] | undefined;
+    return r ? this.rowToSession(r) : undefined;
+  }
+
+  sessions(workspaceId: string): StoredSession[] {
+    const rows = this.db
+      .prepare(
+        `SELECT s.* FROM sessions s JOIN threads t ON t.id = s.thread_id
+         WHERE t.workspace_id = ? ORDER BY s.created_at`
+      )
+      .all(workspaceId) as Array<Parameters<RelayStore["rowToSession"]>[0]>;
+    return rows.map((r) => this.rowToSession(r));
+  }
+
+  setSessionReady(sessionId: string, member: string, maxTurns: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO session_members (session_id, member_username, ready_at, max_turns, turns_used)
+         VALUES (?, ?, ?, ?, 0)
+         ON CONFLICT(session_id, member_username) DO UPDATE SET
+           ready_at = excluded.ready_at, max_turns = excluded.max_turns`
+      )
+      .run(sessionId, member, now(), maxTurns);
+  }
+
+  setSessionState(sessionId: string, state: SessionState, endedBy: string | null = null): void {
+    if (state === "live") {
+      this.db
+        .prepare("UPDATE sessions SET state = ?, started_at = ? WHERE id = ?")
+        .run(state, now(), sessionId);
+      return;
+    }
+    if (state === "concluded" || state === "ended" || state === "suspended") {
+      this.db
+        .prepare("UPDATE sessions SET state = ?, ended_at = ?, ended_by = ? WHERE id = ?")
+        .run(state, now(), endedBy, sessionId);
+      return;
+    }
+    this.db.prepare("UPDATE sessions SET state = ? WHERE id = ?").run(state, sessionId);
+  }
+
+  /** Count one autonomous turn. Returns the member's new count. */
+  bumpSessionTurns(sessionId: string, member: string): number {
+    this.db
+      .prepare(
+        `UPDATE session_members SET turns_used = turns_used + 1
+         WHERE session_id = ? AND member_username = ?`
+      )
+      .run(sessionId, member);
+    const row = this.db
+      .prepare(
+        "SELECT turns_used FROM session_members WHERE session_id = ? AND member_username = ?"
+      )
+      .get(sessionId, member) as { turns_used: number } | undefined;
+    return row?.turns_used ?? 0;
+  }
+
+  setConvergence(sessionId: string, proposedBy: string, summary: string, refs: GitRef[]): void {
+    this.db
+      .prepare(
+        `INSERT INTO session_convergence
+         (session_id, proposed_by, summary, refs, proposed_at, approved_by, approved_at)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL)
+         ON CONFLICT(session_id) DO UPDATE SET proposed_by = excluded.proposed_by,
+           summary = excluded.summary, refs = excluded.refs,
+           proposed_at = excluded.proposed_at, approved_by = NULL, approved_at = NULL`
+      )
+      .run(sessionId, proposedBy, summary, JSON.stringify(refs), now());
+  }
+
+  approveConvergence(sessionId: string, approvedBy: string): void {
+    this.db
+      .prepare(
+        "UPDATE session_convergence SET approved_by = ?, approved_at = ? WHERE session_id = ?"
+      )
+      .run(approvedBy, now(), sessionId);
   }
 
   // ---- Handoffs (spec 002 US8, T132) ----

@@ -2,12 +2,15 @@
 // Every inbound frame passes through here before any processing.
 // A rejected payload is logged. Its body is never stored or echoed.
 import {
+  AutoModeSetSchema,
   ClientFrameSchema,
   GitRefSchema,
   ThreadModeSetSchema,
+  validateConvergePropose,
   validateHandoffPropose,
   validateLogEntry,
   validatePost,
+  validateSessionReady,
   validateThreadOpen,
   type ClientFrame,
   type GitRef,
@@ -31,7 +34,13 @@ const CLIENT_FRAME_KINDS = [
   "thread_mode_set",
   "thread_ref_bind",
   "handoff_propose",
-  "handoff_resolve"
+  "handoff_resolve",
+  "auto_mode_set",
+  "session_ready",
+  "session_end",
+  "converge_propose",
+  "converge_approve",
+  "claim_approve"
 ] as const;
 
 /**
@@ -74,6 +83,12 @@ export type FrameParse =
       propose?: import("@saw/shared").HandoffPropose;
       /** The validated `thread_mode_set` payload. Never `frame.set`. */
       modeSet?: import("@saw/shared").ThreadModeSet;
+      /** The validated `auto_mode_set` payload. Never `frame.set`. */
+      autoMode?: import("@saw/shared").AutoModeSet;
+      /** The validated `session_ready` payload. Never `frame.ready`. */
+      ready?: import("@saw/shared").SessionReady;
+      /** The validated `converge_propose` payload. Never `frame.propose`. */
+      converge?: import("@saw/shared").ConvergePropose;
     }
   | { ok: false; reason: RejectionReason; summary: string };
 
@@ -130,6 +145,27 @@ export function parseClientFrame(raw: string): FrameParse {
       return { ok: false, reason: "not_json", summary: "mode payload shape is not valid" };
     }
     return { ok: true, frame, modeSet: check.data };
+  }
+  if (frame.kind === "auto_mode_set") {
+    const check = AutoModeSetSchema.safeParse(frame.set);
+    if (!check.success) {
+      return { ok: false, reason: "not_json", summary: "auto mode payload shape is not valid" };
+    }
+    return { ok: true, frame, autoMode: check.data };
+  }
+  if (frame.kind === "session_ready") {
+    const check = validateSessionReady(frame.ready);
+    if (!check.ok) {
+      return { ok: false, reason: check.reason, summary: check.summary };
+    }
+    return { ok: true, frame, ready: check.value };
+  }
+  if (frame.kind === "converge_propose") {
+    const check = validateConvergePropose(frame.propose);
+    if (!check.ok) {
+      return { ok: false, reason: check.reason, summary: check.summary };
+    }
+    return { ok: true, frame, converge: check.value };
   }
   if (frame.kind === "thread_ref_bind") {
     const check = GitRefSchema.safeParse(frame.ref);
