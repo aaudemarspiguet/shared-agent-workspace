@@ -5,6 +5,7 @@
 // support still gets the full companion (FR-054) — the conversation floor
 // never depends on this file.
 import { execFileSync, spawn } from "node:child_process";
+import { launchFor } from "../launch.js";
 
 /** What a wake run is asked to do. The prompt is plain speech (FR-048). */
 export interface WakeRun {
