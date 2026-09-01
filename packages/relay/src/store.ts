@@ -4,13 +4,20 @@ import { createHash, randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import { ulid } from "ulid";
 import {
+  MIGRATED_THREAD_MODE,
   type GitRef,
   type LogSource,
   type MessagePost,
+  type Mode,
   type RejectionReason,
   type RunLogEntryInput,
   type StoredLogEntry,
-  type StoredMessage
+  type StoredMessage,
+  type StoredThread,
+  type StoredThreadMode,
+  type ThreadOpen,
+  type ThreadRefBinding,
+  type ThreadState
 } from "@saw/shared";
 
 export interface WorkspaceRow {
@@ -27,6 +34,13 @@ export interface MemberRow {
   github_username: string;
   role: "creator" | "joined";
   joined_at: string;
+}
+
+export interface ThreadClaimRow {
+  thread_id: string;
+  state: "open" | "claimed" | "handed_off" | "done";
+  claimed_by: string | null;
+  updated_at: string;
 }
 
 export interface WorkItemRow {
@@ -74,8 +88,71 @@ CREATE TABLE IF NOT EXISTS messages (
   refs TEXT NOT NULL,
   target TEXT,
   work_item TEXT,
+  thread_id TEXT,
+  force TEXT,
+  thread_seq INTEGER,
   sent_at TEXT NOT NULL,
   UNIQUE(workspace_id, seq)
+);
+CREATE TABLE IF NOT EXISTS threads (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  migrated_from_tag TEXT
+);
+CREATE TABLE IF NOT EXISTS thread_participants (
+  thread_id TEXT NOT NULL REFERENCES threads(id),
+  member_username TEXT NOT NULL,
+  joined_at TEXT NOT NULL,
+  muted INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (thread_id, member_username)
+);
+CREATE TABLE IF NOT EXISTS thread_refs (
+  thread_id TEXT NOT NULL REFERENCES threads(id),
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  ref_kind TEXT NOT NULL,
+  ref_value TEXT NOT NULL,
+  bound_by TEXT NOT NULL,
+  bound_at TEXT NOT NULL,
+  PRIMARY KEY (thread_id, workspace_id, ref_kind, ref_value)
+);
+CREATE TABLE IF NOT EXISTS thread_claims (
+  thread_id TEXT PRIMARY KEY REFERENCES threads(id),
+  state TEXT NOT NULL,
+  claimed_by TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS thread_modes (
+  thread_id TEXT NOT NULL REFERENCES threads(id),
+  member_username TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  set_at TEXT NOT NULL,
+  PRIMARY KEY (thread_id, member_username)
+);
+CREATE TABLE IF NOT EXISTS handoffs (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL REFERENCES threads(id),
+  from_member TEXT NOT NULL,
+  to_member TEXT NOT NULL,
+  state TEXT NOT NULL,
+  tip_ref_kind TEXT NOT NULL,
+  tip_ref_value TEXT NOT NULL,
+  directed INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE TABLE IF NOT EXISTS thread_tag_merges (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  thread_id TEXT NOT NULL REFERENCES threads(id),
+  variant_tag TEXT NOT NULL,
+  canonical_tag TEXT NOT NULL,
+  merged_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, variant_tag)
 );
 CREATE TABLE IF NOT EXISTS work_items (
   id TEXT PRIMARY KEY,
@@ -96,6 +173,7 @@ CREATE TABLE IF NOT EXISTS run_log (
   what TEXT NOT NULL,
   why_trigger TEXT NOT NULL,
   work_item TEXT NOT NULL,
+  thread_id TEXT,
   source TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS pause_state (
@@ -104,8 +182,23 @@ CREATE TABLE IF NOT EXISTS pause_state (
   changed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_ws_seq ON messages(workspace_id, seq);
+CREATE INDEX IF NOT EXISTS idx_threads_ws ON threads(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_log_ws ON run_log(workspace_id, ended_at);
 `;
+
+/**
+ * The schema data version. Version 1 is spec 002 phase 3: threads exist,
+ * every historic work-item tag is a thread, and untagged history lives in
+ * a general thread. The migration runs exactly once (T099, T103): the
+ * version stamp is read and written inside the same transaction as the
+ * data changes.
+ */
+const DATA_VERSION = 1;
+
+/** Tags that differ only by case or surrounding space fold together (T100). */
+function foldTag(tag: string): string {
+  return tag.trim().toLowerCase();
+}
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -123,6 +216,161 @@ export class RelayStore {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /**
+   * Bring a store from any earlier shape to the current one (FR-009a).
+   *
+   * Two halves. The column adds are idempotent: they run only when the
+   * column is missing, so a fresh store (whose CREATE TABLE already has the
+   * full shape) skips them. The data migration is exactly-once: the version
+   * stamp turns inside the same transaction as the data changes, so a crash
+   * either leaves the old store or the fully migrated one, and a second
+   * invocation finds the stamp and does nothing (T103).
+   */
+  private migrate(): void {
+    const messageCols = (
+      this.db.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    if (!messageCols.includes("thread_id")) {
+      this.db.exec("ALTER TABLE messages ADD COLUMN thread_id TEXT");
+      this.db.exec("ALTER TABLE messages ADD COLUMN force TEXT");
+      this.db.exec("ALTER TABLE messages ADD COLUMN thread_seq INTEGER");
+    }
+    const logCols = (
+      this.db.prepare("PRAGMA table_info(run_log)").all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    if (!logCols.includes("thread_id")) {
+      this.db.exec("ALTER TABLE run_log ADD COLUMN thread_id TEXT");
+    }
+    // The thread index waits for the columns above: on a v0 store they do
+    // not exist when SCHEMA runs, so creating it there failed the open.
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id, thread_seq)"
+    );
+
+    const version = (this.db.pragma("user_version", { simple: true }) as number) ?? 0;
+    if (version >= DATA_VERSION) return;
+    const tx = this.db.transaction(() => {
+      const workspaces = this.db.prepare("SELECT id FROM workspaces").all() as Array<{
+        id: string;
+      }>;
+      for (const ws of workspaces) this.migrateWorkspace(ws.id);
+      this.db.pragma(`user_version = ${DATA_VERSION}`);
+    });
+    tx();
+  }
+
+  /** One workspace's v0 history becomes threads (T099, T100, T101). */
+  private migrateWorkspace(workspaceId: string): void {
+    const memberRows = this.members(workspaceId);
+    const creator = memberRows.find((m) => m.role === "creator") ?? memberRows[0];
+    const createdBy = creator?.github_username ?? "system";
+
+    // Every place a tag appears: messages, the claim registry, the run log.
+    const tagRows = this.db
+      .prepare(
+        `SELECT work_item AS tag FROM messages WHERE workspace_id = ? AND work_item IS NOT NULL
+         UNION SELECT feature_tag AS tag FROM work_items WHERE workspace_id = ?
+         UNION SELECT work_item AS tag FROM run_log WHERE workspace_id = ? AND work_item != 'unassigned'`
+      )
+      .all(workspaceId, workspaceId, workspaceId) as Array<{ tag: string }>;
+
+    // Fold variants; the first-seen spelling is the canonical title (T100).
+    const canonicalByFold = new Map<string, string>();
+    for (const { tag } of tagRows) {
+      const fold = foldTag(tag);
+      if (fold.length === 0) continue;
+      if (!canonicalByFold.has(fold)) canonicalByFold.set(fold, tag.trim());
+    }
+
+    const threadByFold = new Map<string, string>();
+    for (const [fold, canonical] of canonicalByFold) {
+      const thread = this.createThread(
+        workspaceId,
+        { type: "work_item", title: canonical, workspace_id: workspaceId },
+        createdBy,
+        canonical
+      );
+      threadByFold.set(fold, thread.id);
+      // Record every variant spelling that folded into this thread.
+      for (const { tag } of tagRows) {
+        if (foldTag(tag) === fold && tag.trim() !== canonical) {
+          this.db
+            .prepare(
+              `INSERT OR IGNORE INTO thread_tag_merges
+               (workspace_id, thread_id, variant_tag, canonical_tag, merged_at)
+               VALUES (?, ?, ?, ?, ?)`
+            )
+            .run(workspaceId, thread.id, tag.trim(), canonical, now());
+        }
+      }
+    }
+
+    // Untagged history lands in the general thread, so nothing is orphaned.
+    const general = this.generalThread(workspaceId, createdBy);
+
+    // Backfill thread ids and per-thread positions in seq order.
+    const messages = this.db
+      .prepare(
+        "SELECT id, work_item FROM messages WHERE workspace_id = ? ORDER BY seq"
+      )
+      .all(workspaceId) as Array<{ id: string; work_item: string | null }>;
+    const nextSeq = new Map<string, number>();
+    const update = this.db.prepare(
+      "UPDATE messages SET thread_id = ?, thread_seq = ?, force = 'advisory' WHERE id = ?"
+    );
+    for (const m of messages) {
+      const threadId =
+        (m.work_item ? threadByFold.get(foldTag(m.work_item)) : undefined) ?? general.id;
+      const seq = (nextSeq.get(threadId) ?? 0) + 1;
+      nextSeq.set(threadId, seq);
+      update.run(threadId, seq, m.id);
+    }
+
+    // Claim state carries over onto the thread the tag became.
+    const items = this.workItems(workspaceId);
+    for (const item of items) {
+      const threadId = threadByFold.get(foldTag(item.feature_tag));
+      if (!threadId) continue;
+      this.db
+        .prepare(
+          `INSERT INTO thread_claims (thread_id, state, claimed_by, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(thread_id) DO UPDATE SET state = excluded.state,
+             claimed_by = excluded.claimed_by, updated_at = excluded.updated_at`
+        )
+        .run(threadId, item.state, item.claimed_by, item.updated_at);
+    }
+
+    // Run log entries follow their tag's thread.
+    for (const [fold, threadId] of threadByFold) {
+      const variants = [...canonicalByFold.entries()]
+        .filter(([f]) => f === fold)
+        .map(([, c]) => c);
+      for (const { tag } of tagRows) {
+        if (foldTag(tag) === fold && !variants.includes(tag.trim())) variants.push(tag.trim());
+      }
+      for (const v of variants) {
+        this.db
+          .prepare(
+            "UPDATE run_log SET thread_id = ? WHERE workspace_id = ? AND work_item = ?"
+          )
+          .run(threadId, workspaceId, v);
+      }
+    }
+
+    // Every member starts at edit on every migrated thread, and joins it:
+    // v0 agents could already claim, so the comment default would silently
+    // remove a capability from every existing member (research R3, T101).
+    const allThreads = [...threadByFold.values(), general.id];
+    for (const threadId of allThreads) {
+      for (const member of memberRows) {
+        this.setThreadMode(threadId, member.github_username, MIGRATED_THREAD_MODE);
+        this.addParticipant(threadId, member.github_username);
+      }
+    }
   }
 
   close(): void {
@@ -247,6 +495,239 @@ export class RelayStore {
     return { ok: true, member, token };
   }
 
+  // ---- Threads (spec 002 US7) ----
+
+  private rowToThread(r: {
+    id: string;
+    workspace_id: string;
+    type: string;
+    title: string;
+    scope: string;
+    state: string;
+    created_by: string;
+    created_at: string;
+    migrated_from_tag: string | null;
+  }): StoredThread {
+    return {
+      id: r.id,
+      workspace_id: r.workspace_id,
+      type: r.type as StoredThread["type"],
+      title: r.title,
+      scope: r.scope as StoredThread["scope"],
+      state: r.state as StoredThread["state"],
+      created_by: r.created_by,
+      created_at: r.created_at,
+      migrated_from_tag: r.migrated_from_tag
+    };
+  }
+
+  createThread(
+    workspaceId: string,
+    open: ThreadOpen,
+    createdBy: string,
+    migratedFromTag: string | null = null
+  ): StoredThread {
+    const thread: StoredThread = {
+      id: ulid(),
+      workspace_id: workspaceId,
+      type: open.type,
+      title: open.title,
+      scope: "project",
+      state: "open",
+      created_by: createdBy,
+      created_at: now(),
+      migrated_from_tag: migratedFromTag
+    };
+    this.db
+      .prepare(
+        `INSERT INTO threads
+         (id, workspace_id, type, title, scope, state, created_by, created_at, migrated_from_tag)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        thread.id,
+        workspaceId,
+        thread.type,
+        thread.title,
+        thread.scope,
+        thread.state,
+        createdBy,
+        thread.created_at,
+        migratedFromTag
+      );
+    this.addParticipant(thread.id, createdBy);
+    return thread;
+  }
+
+  threadById(id: string): StoredThread | undefined {
+    const r = this.db.prepare("SELECT * FROM threads WHERE id = ?").get(id) as
+      | Parameters<RelayStore["rowToThread"]>[0]
+      | undefined;
+    return r ? this.rowToThread(r) : undefined;
+  }
+
+  threads(workspaceId: string): StoredThread[] {
+    const rows = this.db
+      .prepare("SELECT * FROM threads WHERE workspace_id = ? ORDER BY created_at")
+      .all(workspaceId) as Array<Parameters<RelayStore["rowToThread"]>[0]>;
+    return rows.map((r) => this.rowToThread(r));
+  }
+
+  setThreadState(threadId: string, state: ThreadState): void {
+    this.db.prepare("UPDATE threads SET state = ? WHERE id = ?").run(state, threadId);
+  }
+
+  /** The workspace's general thread. Created on first need (T099). */
+  generalThread(workspaceId: string, createdBy: string): StoredThread {
+    const existing = this.db
+      .prepare(
+        "SELECT * FROM threads WHERE workspace_id = ? AND type = 'general' AND title = 'general'"
+      )
+      .get(workspaceId) as Parameters<RelayStore["rowToThread"]>[0] | undefined;
+    if (existing) return this.rowToThread(existing);
+    return this.createThread(
+      workspaceId,
+      { type: "general", title: "general", workspace_id: workspaceId },
+      createdBy
+    );
+  }
+
+  /**
+   * The thread a v0-style work-item tag names, creating it when it is new.
+   * Folding keeps case and whitespace variants on one thread (T100), during
+   * migration and for every tag a v0-era client still sends afterwards.
+   */
+  resolveThreadForTag(workspaceId: string, tag: string, createdBy: string): StoredThread {
+    const fold = foldTag(tag);
+    const merged = this.db
+      .prepare(
+        "SELECT thread_id FROM thread_tag_merges WHERE workspace_id = ? AND variant_tag = ?"
+      )
+      .get(workspaceId, tag.trim()) as { thread_id: string } | undefined;
+    if (merged) {
+      const t = this.threadById(merged.thread_id);
+      if (t) return t;
+    }
+    const rows = this.db
+      .prepare(
+        "SELECT * FROM threads WHERE workspace_id = ? AND migrated_from_tag IS NOT NULL"
+      )
+      .all(workspaceId) as Array<Parameters<RelayStore["rowToThread"]>[0]>;
+    const hit = rows.find((r) => foldTag(r.migrated_from_tag ?? "") === fold);
+    if (hit) {
+      if (hit.migrated_from_tag !== tag.trim()) {
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO thread_tag_merges
+             (workspace_id, thread_id, variant_tag, canonical_tag, merged_at)
+             VALUES (?, ?, ?, ?, ?)`
+          )
+          .run(workspaceId, hit.id, tag.trim(), hit.migrated_from_tag, now());
+      }
+      return this.rowToThread(hit);
+    }
+    return this.createThread(
+      workspaceId,
+      { type: "work_item", title: tag.trim(), workspace_id: workspaceId },
+      createdBy,
+      tag.trim()
+    );
+  }
+
+  addParticipant(threadId: string, username: string): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO thread_participants (thread_id, member_username, joined_at, muted)
+         VALUES (?, ?, ?, 0)`
+      )
+      .run(threadId, username, now());
+  }
+
+  bindThreadRef(
+    threadId: string,
+    workspaceId: string,
+    ref: GitRef,
+    boundBy: string
+  ): ThreadRefBinding {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO thread_refs
+         (thread_id, workspace_id, ref_kind, ref_value, bound_by, bound_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(threadId, workspaceId, ref.kind, ref.value, boundBy, now());
+    return { thread_id: threadId, workspace_id: workspaceId, ref };
+  }
+
+  threadRefs(workspaceId: string): ThreadRefBinding[] {
+    const rows = this.db
+      .prepare("SELECT * FROM thread_refs WHERE workspace_id = ? ORDER BY bound_at")
+      .all(workspaceId) as Array<{
+      thread_id: string;
+      workspace_id: string;
+      ref_kind: GitRef["kind"];
+      ref_value: string;
+    }>;
+    return rows.map((r) => ({
+      thread_id: r.thread_id,
+      workspace_id: r.workspace_id,
+      ref: { kind: r.ref_kind, value: r.ref_value }
+    }));
+  }
+
+  threadClaim(threadId: string): ThreadClaimRow | undefined {
+    return this.db.prepare("SELECT * FROM thread_claims WHERE thread_id = ?").get(threadId) as
+      | ThreadClaimRow
+      | undefined;
+  }
+
+  setThreadClaim(
+    threadId: string,
+    state: ThreadClaimRow["state"],
+    claimedBy: string | null
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO thread_claims (thread_id, state, claimed_by, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(thread_id) DO UPDATE SET state = excluded.state,
+           claimed_by = excluded.claimed_by, updated_at = excluded.updated_at`
+      )
+      .run(threadId, state, claimedBy, now());
+  }
+
+  setThreadMode(threadId: string, username: string, mode: Mode): void {
+    this.db
+      .prepare(
+        `INSERT INTO thread_modes (thread_id, member_username, mode, set_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(thread_id, member_username) DO UPDATE SET mode = excluded.mode,
+           set_at = excluded.set_at`
+      )
+      .run(threadId, username, mode, now());
+  }
+
+  threadModes(workspaceId: string): StoredThreadMode[] {
+    const rows = this.db
+      .prepare(
+        `SELECT tm.thread_id, tm.member_username, tm.mode, tm.set_at
+         FROM thread_modes tm JOIN threads t ON t.id = tm.thread_id
+         WHERE t.workspace_id = ?`
+      )
+      .all(workspaceId) as Array<{
+      thread_id: string;
+      member_username: string;
+      mode: Mode;
+      set_at: string;
+    }>;
+    return rows.map((r) => ({
+      thread_id: r.thread_id,
+      member: r.member_username,
+      mode: r.mode,
+      set_at: r.set_at
+    }));
+  }
+
   // ---- Messages ----
 
   latestSeq(workspaceId: string): number {
@@ -256,33 +737,50 @@ export class RelayStore {
     return row.s;
   }
 
-  /** Insert one message. The transaction makes the per-workspace seq gapless. */
+  /**
+   * Insert one message. The transaction makes the per-workspace seq gapless
+   * and the per-thread position dense (spec 002, contracts 2.2). A null
+   * `threadId` is a project broadcast.
+   */
   insertMessage(
     workspaceId: string,
     sender: MemberRow,
     senderKind: "agent" | "human",
-    post: MessagePost
+    post: MessagePost,
+    threadId: string | null = null
   ): StoredMessage {
     let stored: StoredMessage | undefined;
     const tx = this.db.transaction(() => {
       const seq = this.latestSeq(workspaceId) + 1;
+      let threadSeq: number | undefined;
+      if (threadId) {
+        const row = this.db
+          .prepare(
+            "SELECT COALESCE(MAX(thread_seq), 0) AS s FROM messages WHERE thread_id = ?"
+          )
+          .get(threadId) as { s: number };
+        threadSeq = row.s + 1;
+      }
       const msg: StoredMessage = {
         id: ulid(),
         seq,
+        thread_seq: threadSeq,
         sender: sender.github_username,
         sender_kind: senderKind,
         type: post.type,
         body: post.body,
         refs: post.refs,
         target: post.target,
+        thread_id: threadId,
+        force: post.force ?? "advisory",
         work_item: post.work_item,
         sent_at: now()
       };
       this.db
         .prepare(
           `INSERT INTO messages
-           (id, workspace_id, seq, sender_member_id, sender_kind, type, body, refs, target, work_item, sent_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           (id, workspace_id, seq, sender_member_id, sender_kind, type, body, refs, target, work_item, thread_id, force, thread_seq, sent_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           msg.id,
@@ -295,6 +793,9 @@ export class RelayStore {
           JSON.stringify(msg.refs),
           msg.target ?? null,
           msg.work_item ?? null,
+          threadId,
+          msg.force ?? "advisory",
+          threadSeq ?? null,
           msg.sent_at
         );
       stored = msg;
@@ -319,17 +820,23 @@ export class RelayStore {
       refs: string;
       target: string | null;
       work_item: string | null;
+      thread_id: string | null;
+      force: string | null;
+      thread_seq: number | null;
       sent_at: string;
     }>;
     return rows.map((r) => ({
       id: r.id,
       seq: r.seq,
+      thread_seq: r.thread_seq ?? undefined,
       sender: this.memberById(r.sender_member_id)?.github_username ?? "unknown",
       sender_kind: r.sender_kind,
       type: r.type,
       body: r.body,
       refs: JSON.parse(r.refs) as GitRef[],
       target: r.target ?? undefined,
+      thread_id: r.thread_id,
+      force: (r.force ?? "advisory") as StoredMessage["force"],
       work_item: r.work_item ?? undefined,
       sent_at: r.sent_at
     }));
@@ -410,8 +917,8 @@ export class RelayStore {
     this.db
       .prepare(
         `INSERT INTO run_log
-         (id, workspace_id, member_id, started_at, ended_at, what, why_trigger, work_item, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, workspace_id, member_id, started_at, ended_at, what, why_trigger, work_item, thread_id, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -422,6 +929,7 @@ export class RelayStore {
         JSON.stringify(entry.what),
         entry.why_trigger,
         entry.work_item ?? "unassigned",
+        entry.thread_id ?? null,
         source
       );
     return id;
@@ -467,7 +975,13 @@ export class RelayStore {
    */
   queryLog(
     workspaceId: string,
-    filter: { memberId?: string; workItem?: string; since?: string; limit: number }
+    filter: {
+      memberId?: string;
+      workItem?: string;
+      threadId?: string;
+      since?: string;
+      limit: number;
+    }
   ): StoredLogEntry[] {
     // `rowid` is not a column of a subquery result, so name it in the inner
     // select for the outer ORDER BY to reach. The extra field is ignored below.
@@ -480,6 +994,10 @@ export class RelayStore {
     if (filter.workItem) {
       inner += " AND work_item = ?";
       args.push(filter.workItem);
+    }
+    if (filter.threadId) {
+      inner += " AND thread_id = ?";
+      args.push(filter.threadId);
     }
     if (filter.since) {
       inner += " AND ended_at >= ?";
@@ -496,6 +1014,7 @@ export class RelayStore {
       what: string;
       why_trigger: string;
       work_item: string;
+      thread_id: string | null;
       source: LogSource;
     }>;
     return rows.map((r) => ({
@@ -506,6 +1025,7 @@ export class RelayStore {
       what: JSON.parse(r.what) as StoredLogEntry["what"],
       why_trigger: r.why_trigger,
       work_item: r.work_item,
+      thread_id: r.thread_id,
       source: r.source
     }));
   }

@@ -9,7 +9,7 @@ import {
   type StoredLogEntry
 } from "./log.js";
 import { UlidSchema } from "./messages.js";
-import type { StoredHandoff, StoredThread } from "./threads.js";
+import type { StoredHandoff, StoredThread, ThreadRefBinding } from "./threads.js";
 import { HANDOFF_STATES } from "./threads.js";
 import type { StoredThreadMode } from "./modes.js";
 
@@ -221,6 +221,7 @@ export interface ThreadSnapshotFrame {
   threads: StoredThread[];
   modes: StoredThreadMode[];
   handoffs: StoredHandoff[];
+  refs: ThreadRefBinding[];
 }
 export interface ThreadFrame {
   kind: "thread";
@@ -229,6 +230,10 @@ export interface ThreadFrame {
 export interface ThreadModeFrame {
   kind: "thread_mode";
   mode: StoredThreadMode;
+}
+export interface ThreadRefFrame {
+  kind: "thread_ref";
+  binding: ThreadRefBinding;
 }
 export interface HandoffFrame {
   kind: "handoff";
@@ -254,6 +259,7 @@ export type ServerFrame =
   | ThreadSnapshotFrame
   | ThreadFrame
   | ThreadModeFrame
+  | ThreadRefFrame
   | HandoffFrame
   | PongFrame
   | ErrorFrame;

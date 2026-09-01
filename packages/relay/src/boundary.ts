@@ -3,13 +3,17 @@
 // A rejected payload is logged. Its body is never stored or echoed.
 import {
   ClientFrameSchema,
+  GitRefSchema,
   validateLogEntry,
   validatePost,
+  validateThreadOpen,
   type ClientFrame,
+  type GitRef,
   type LogRedaction,
   type MessagePost,
   type RejectionReason,
-  type RunLogEntryInput
+  type RunLogEntryInput,
+  type ThreadOpen
 } from "@saw/shared";
 
 const CLIENT_FRAME_KINDS = [
@@ -19,7 +23,13 @@ const CLIENT_FRAME_KINDS = [
   "log_append",
   "log_query",
   "pause_set",
-  "ping"
+  "ping",
+  "thread_open",
+  "thread_state_set",
+  "thread_mode_set",
+  "thread_ref_bind",
+  "handoff_propose",
+  "handoff_resolve"
 ] as const;
 
 export type FrameParse =
@@ -31,6 +41,10 @@ export type FrameParse =
       entry?: RunLogEntryInput;
       /** Fields the boundary removed from a `log_append` entry. */
       redactions?: LogRedaction[];
+      /** The validated `thread_open` payload. Use this, never `frame.open`. */
+      open?: ThreadOpen;
+      /** The validated `thread_ref_bind` ref. Use this, never `frame.ref`. */
+      ref?: GitRef;
     }
   | { ok: false; reason: RejectionReason; summary: string };
 
@@ -66,6 +80,20 @@ export function parseClientFrame(raw: string): FrameParse {
       return { ok: false, reason: check.reason, summary: check.summary };
     }
     return { ok: true, frame, post: check.post };
+  }
+  if (frame.kind === "thread_open") {
+    const check = validateThreadOpen(frame.open);
+    if (!check.ok) {
+      return { ok: false, reason: check.reason, summary: check.summary };
+    }
+    return { ok: true, frame, open: check.open };
+  }
+  if (frame.kind === "thread_ref_bind") {
+    const check = GitRefSchema.safeParse(frame.ref);
+    if (!check.success) {
+      return { ok: false, reason: "invalid_ref", summary: "the ref is not valid" };
+    }
+    return { ok: true, frame, ref: check.data };
   }
   if (frame.kind === "log_append") {
     // A log entry crosses to the peer through `peer_activity`, so every free
