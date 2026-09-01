@@ -21,7 +21,7 @@ export function handleSync(
 /**
  * The whole thread state of the member's workspace in one frame: threads,
  * modes, handoffs, and ref bindings (spec 002 contracts 2.2). Sent after
- * hello_ok and after every sync replay. Handoffs are empty until phase 4.
+ * hello_ok and after every sync replay.
  */
 export function sendThreadSnapshot(
   store: RelayStore,
@@ -32,7 +32,7 @@ export function sendThreadSnapshot(
     kind: "thread_snapshot",
     threads: store.threads(member.workspace_id),
     modes: store.threadModes(member.workspace_id),
-    handoffs: [],
+    handoffs: store.handoffs(member.workspace_id),
     refs: store.threadRefs(member.workspace_id)
   });
 }

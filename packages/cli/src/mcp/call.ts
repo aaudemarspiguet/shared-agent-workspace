@@ -73,7 +73,27 @@ export function repoRoot(): string | undefined {
  * Gate for agent tools other than workspace_status.
  * While the member is paused, every one of them answers "paused".
  */
-export async function agentGate(root: string): Promise<ToolResult | undefined> {
+/** What a thread action needs of this member's own mode (contracts §3). */
+const ACTION_NEEDS: Record<string, "comment" | "edit"> = {
+  post: "comment",
+  claim: "edit",
+  bind_ref: "edit",
+  accept_handoff: "edit"
+};
+const MODE_ORDER = ["view", "comment", "edit"] as const;
+
+/**
+ * The ordered agent gate (spec 002 T119, contracts §3):
+ *   1. paused?            -> "paused"       (pause outranks mode)
+ *   2. action above mode?  -> "mode_denied"  (names the mode, recorded)
+ * The mode restrains only this member's own agent; the relay never
+ * duplicates the check (research R1). Every denial is recorded through the
+ * daemon (T120).
+ */
+export async function agentGate(
+  root: string,
+  gate?: { threadId?: string; action?: keyof typeof ACTION_NEEDS }
+): Promise<ToolResult | undefined> {
   const health = await daemonCall(root, "/api/health", undefined, 2000);
   if (!health) return errorResult("not_connected", NOT_RUNNING);
   // A refused call means the daemon cannot be used from here. Report the
@@ -85,6 +105,24 @@ export async function agentGate(root: string): Promise<ToolResult | undefined> {
       "paused",
       "your workspace member state is paused. Your human resumes you from the SAW web page."
     );
+  }
+  if (gate?.threadId && gate.action) {
+    const res = await daemonCall(root, `/api/mode?thread_id=${gate.threadId}`, undefined, 2000);
+    if (res && res.status === 200) {
+      const { mode } = res.json as { mode: "view" | "comment" | "edit" };
+      const needed = ACTION_NEEDS[gate.action];
+      if (needed && MODE_ORDER.indexOf(mode) < MODE_ORDER.indexOf(needed)) {
+        void daemonCall(root, "/api/mode-denial", {
+          method: "POST",
+          body: { thread_id: gate.threadId, action: gate.action, mode }
+        });
+        return errorResult(
+          "mode_denied",
+          `your mode on this thread is ${mode}, and ${gate.action} needs ${needed}. ` +
+            "Your member raises your mode from the SAW page or with: saw thread mode"
+        );
+      }
+    }
   }
   return undefined;
 }

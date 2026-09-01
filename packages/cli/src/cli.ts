@@ -69,6 +69,27 @@ thread
     await runThreadOpen(opts);
   });
 
+thread
+  .command("mode")
+  .description("Set YOUR OWN mode on a thread: view, comment, or edit.")
+  .option("--id <thread-id>", "the thread")
+  .option("--mode <mode>", "view | comment | edit")
+  .action(async (opts: { id?: string; mode?: string }) => {
+    const { runThreadMode } = await import("./commands/thread.js");
+    await runThreadMode(opts);
+  });
+thread
+  .command("handoff <action>")
+  .description("propose | accept | decline | withdraw a claim handoff.")
+  .option("--id <thread-id>", "for propose: the thread")
+  .option("--to <member>", "for propose: the recipient")
+  .option("--ref <branch>", "for propose: your tip branch")
+  .option("--handoff <handoff-id>", "for accept/decline/withdraw")
+  .action(async (action: string, opts: Record<string, string>) => {
+    const { runThreadHandoff } = await import("./commands/thread.js");
+    await runThreadHandoff({ action, ...opts });
+  });
+
 program
   .command("share-relay")
   .description("Share this machine's relay: members reach it with no VPN and no port forwarding.")

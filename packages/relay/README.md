@@ -82,3 +82,15 @@ it.
 - The boundary rules run on every frame. A payload that carries code, file
   contents, or smuggled content is rejected or scrubbed, and each removal
   is logged as a boundary rejection.
+
+## The threads migration (spec 002)
+
+The store migrates at open, one time. Every historic work-item tag becomes
+a thread. Tags that differ only by case or space fold into one thread, and
+each variant is recorded. Untagged history lands in a general thread. Every
+member starts at mode edit on migrated threads, because v0 agents could
+claim. A second open changes nothing: the version stamp guards it.
+
+The relay speaks protocol 1. A hello without a version is a v0 client, and
+it is served through the migration window. A newer client is refused with a
+plain upgrade instruction.

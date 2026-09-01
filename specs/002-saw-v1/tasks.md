@@ -132,37 +132,37 @@ cannot bind; a member with authority in `comment` can bind but cannot claim.
 
 ### Capability
 
-- [ ] T116 [US8] Add the `thread_modes` table in `packages/relay/src/store.ts`, absent row meaning `comment` (issue #140)
-- [ ] T117 [US8] Enforce in `packages/relay/src/messages.ts` that a mode write's author equals the member it names, refusing otherwise and recording it (SC-016) (issue #141)
-- [ ] T118 [US8] Add the `thread_mode` MCP tool in `packages/cli/src/mcp/tools/` with **no input field for another member's id**, so the authorisation is structural (contracts §1.3) (issue #142)
-- [ ] T119 [US8] Extend `agentGate()` in `packages/cli/src/mcp/call.ts` from a pause check to an ordered pause-then-mode check, adding the `mode_denied` code (issue #143)
-- [ ] T120 [US8] Make every denial name the mode and be recorded, per FR-039 (issue #144)
-- [ ] T121 [US8] Show every member's mode on a thread, and let a member set their own, on the CLI and the web app at parity (FR-041) (issue #145)
-- [ ] T122 [P] [US8] Integration test asserting an agent performs zero actions above its mode through the supported client, and that `view` still receives delivery (SC-015) (issue #146)
-- [ ] T123 [P] [US8] **Adversarial** integration test asserting no member can set another member's mode by any route, including a hand-crafted relay frame (SC-016) (issue #147)
-- [ ] T124 [P] [US8] Integration test asserting pause outranks mode (issue #148)
+- [x] T116 [US8] Add the `thread_modes` table in `packages/relay/src/store.ts`, absent row meaning `comment` (issue #140)
+- [x] T117 [US8] Enforce in `packages/relay/src/messages.ts` that a mode write's author equals the member it names, refusing otherwise and recording it (SC-016) (issue #141)
+- [x] T118 [US8] Add the `thread_mode` MCP tool in `packages/cli/src/mcp/tools/` with **no input field for another member's id**, so the authorisation is structural (contracts §1.3) (issue #142)
+- [x] T119 [US8] Extend `agentGate()` in `packages/cli/src/mcp/call.ts` from a pause check to an ordered pause-then-mode check, adding the `mode_denied` code (issue #143)
+- [x] T120 [US8] Make every denial name the mode and be recorded, per FR-039 (issue #144)
+- [x] T121 [US8] Show every member's mode on a thread, and let a member set their own, on the CLI and the web app at parity (FR-041) (issue #145)
+- [x] T122 [P] [US8] Integration test asserting an agent performs zero actions above its mode through the supported client, and that `view` still receives delivery (SC-015) (issue #146)
+- [x] T123 [P] [US8] **Adversarial** integration test asserting no member can set another member's mode by any route, including a hand-crafted relay frame (SC-016) (issue #147)
+- [x] T124 [P] [US8] Integration test asserting pause outranks mode (issue #148)
 
 ### Authority
 
-- [ ] T125 [US8] Check authority where a `binding` message is accepted in `packages/relay/src/messages.ts`, with the owner role as the v1 source (issue #149)
-- [ ] T126 [US8] Reject a `binding` message from a member without authority with a plain reason, recorded, and never silently downgraded (issue #150)
-- [ ] T127 [US8] Make a `binding` message settle the matter on the thread record, attributable and visible to the scope (issue #151)
-- [ ] T128 [US8] Surface a binding decision in `packages/cli/src/hooks/inject.ts`, stating plainly that it settles the record and does not direct this agent (issue #152)
-- [ ] T129 [US8] Persist an unanswered binding decision across cursor advance until the member's agent posts into that thread (research R6) (issue #153)
-- [ ] T130 [P] [US8] **Adversarial** integration test asserting zero binding messages from unauthorised members are accepted and zero are downgraded (SC-020) (issue #154)
-- [ ] T131 [P] [US8] Integration test asserting a binding decision causes zero runs and zero course changes on the receiving machine (SC-021) (issue #155)
+- [x] T125 [US8] Check authority where a `binding` message is accepted in `packages/relay/src/messages.ts`, with the owner role as the v1 source (issue #149)
+- [x] T126 [US8] Reject a `binding` message from a member without authority with a plain reason, recorded, and never silently downgraded (issue #150)
+- [x] T127 [US8] Make a `binding` message settle the matter on the thread record, attributable and visible to the scope (issue #151)
+- [x] T128 [US8] Surface a binding decision in `packages/cli/src/hooks/inject.ts`, stating plainly that it settles the record and does not direct this agent (issue #152)
+- [x] T129 [US8] Persist an unanswered binding decision across cursor advance until the member's agent posts into that thread (research R6) (issue #153)
+- [x] T130 [P] [US8] **Adversarial** integration test asserting zero binding messages from unauthorised members are accepted and zero are downgraded (SC-020) (issue #154)
+- [x] T131 [P] [US8] Integration test asserting a binding decision causes zero runs and zero course changes on the receiving machine (SC-021) (issue #155)
 
 ### Handoff
 
-- [ ] T132 [US8] Implement the handoff lifecycle in `packages/relay/src/claims.ts`, with the claim moving only on accept (issue #156)
-- [ ] T133 [US8] Add `thread_handoff`, accept, decline, and withdraw to the MCP tools and both surfaces (issue #157)
-- [ ] T134 [US8] Refuse acceptance by a recipient whose mode is `view` or `comment`, and by a recipient outside the thread's scope (issue #158)
-- [ ] T135 [P] [US8] Integration test covering all four handoff states and asserting every transition is attributable and visible (SC-022) (issue #159)
+- [x] T132 [US8] Implement the handoff lifecycle in `packages/relay/src/claims.ts`, with the claim moving only on accept (issue #156)
+- [x] T133 [US8] Add `thread_handoff`, accept, decline, and withdraw to the MCP tools and both surfaces (issue #157)
+- [x] T134 [US8] Refuse acceptance by a recipient whose mode is `view` or `comment`, and by a recipient outside the thread's scope (issue #158)
+- [x] T135 [P] [US8] Integration test covering all four handoff states and asserting every transition is attributable and visible (SC-022) (issue #159)
 
 ### Integration topology
 
-- [ ] T143 [US8] Enforce in `packages/relay/src/boundary.ts` that a ref bound to a thread names a branch under its author's own member prefix, per FR-040 (issue #160)
-- [ ] T144 [P] [US8] Integration test asserting two members in `edit` on one thread land two pushed refs bound to that thread, and that **zero** bytes of code, file content, or diff crossed the relay (FR-040, SC-017) (issue #161)
+- [x] T143 [US8] Enforce in `packages/relay/src/boundary.ts` that a ref bound to a thread names a branch under its author's own member prefix, per FR-040 (issue #160)
+- [x] T144 [P] [US8] Integration test asserting two members in `edit` on one thread land two pushed refs bound to that thread, and that **zero** bytes of code, file content, or diff crossed the relay (FR-040, SC-017) (issue #161)
 
 ---
 
@@ -186,9 +186,9 @@ as one use case. These bind the surface tasks above to that identity.
 - [x] T137 Assert the v1 boundary in `tests/integration/`: zero runs start from another member's action, and zero start without the member's own prompt (SC-019) (issue #163)
 - [ ] T138 [P] Resolve the open questions the checklist recorded: thread state transitions (CHK005), broadcast permission (CHK006), ref-binding permission (CHK007), default force (CHK008), force on journal entries (CHK009), handoff expiry (CHK010), and mode change mid-run (CHK011) (issue #164)
 - [x] T139 [P] Refresh `.saw/AGENT.md` from its template on `saw up` in `packages/cli/src/commands/up.ts` — it is written only by init and join today, so new room rules never reach an already-joined member (issue #165)
-- [ ] T140 [P] Document threads and modes in `README.md` and `packages/*/README.md`, in ASD-STE (issue #166)
+- [x] T140 [P] Document threads and modes in `README.md` and `packages/*/README.md`, in ASD-STE (issue #166)
 - [ ] T141 Run the eight quickstart scenarios on two machines and record the outcome in `specs/002-saw-v1/quickstart-results.md` (issue #167)
-- [ ] T142 Confirm `npm test` has not moved from its recorded baseline (issue #168)
+- [x] T142 Confirm `npm test` has not moved from its recorded baseline (issue #168)
 
 ---
 

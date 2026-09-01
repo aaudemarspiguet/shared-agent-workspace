@@ -135,7 +135,13 @@ export function canTransitionHandoff(
 export const HandoffProposeSchema = z.object({
   thread_id: ThreadIdSchema,
   to: z.string().min(1).max(MAX_LABEL_LENGTH),
-  tip_ref: GitRefSchema
+  tip_ref: GitRefSchema,
+  /**
+   * True makes this a directed handoff: delegation with binding force,
+   * owner only (FR-044). The claim moves on the record at once; the
+   * recipient's human still decides whether their agent acts.
+   */
+  directed: z.boolean().default(false)
 });
 export type HandoffPropose = z.infer<typeof HandoffProposeSchema>;
 

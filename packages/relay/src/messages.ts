@@ -9,7 +9,7 @@ import type { MemberRow, RelayStore } from "./store.js";
 
 export type PostOutcome =
   | { ok: true }
-  | { ok: false; code: "unknown_thread"; message: string };
+  | { ok: false; code: "unknown_thread" | "no_authority"; message: string };
 
 /**
  * Handle one boundary-validated post from an authenticated member.
@@ -23,6 +23,24 @@ export function handlePost(
   senderKind: "agent" | "human"
 ): PostOutcome {
   const workspaceId = sender.workspace_id;
+
+  // Authority gates a binding message before anything is stored (T125,
+  // FR-043). The v1 authority source is the owner role. The refusal is
+  // plain, recorded, and never a silent downgrade to advisory (SC-020).
+  if (post.force === "binding" && sender.role !== "creator") {
+    store.appendRejectionLog(
+      workspaceId,
+      sender.id,
+      "no_authority",
+      "binding message from a member without authority"
+    );
+    return {
+      ok: false,
+      code: "no_authority",
+      message:
+        "a binding message needs authority (the owner role in v1). Post it as advisory, or ask the owner to settle it."
+    };
+  }
 
   // Resolve the container before anything is stored (T104):
   // an explicit thread_id must name a real thread of this workspace; a
@@ -44,9 +62,23 @@ export function handlePost(
 
   if (thread) {
     // Posting into a thread makes the sender a participant (FR-012), and
-    // the refs a post carries bind to the thread (FR-014, T115).
+    // the refs a post carries bind to the thread (FR-014, T115). A branch
+    // binds only under its author's own member prefix (FR-040, T143):
+    // branch-per-agent is how git-only sync stays true when two members
+    // edit on one thread. A commit SHA has no owner and always binds. The
+    // message itself still carries the ref; only the binding is refused,
+    // and the refusal is recorded.
     store.addParticipant(thread.id, sender.github_username);
     for (const ref of post.refs) {
+      if (ref.kind === "branch" && !ref.value.startsWith(`${sender.github_username}/`)) {
+        store.appendRejectionLog(
+          workspaceId,
+          sender.id,
+          "invalid_ref",
+          "branch not under the member's own prefix; not bound to the thread"
+        );
+        continue;
+      }
       const binding = store.bindThreadRef(thread.id, workspaceId, ref, sender.github_username);
       registry.broadcast(store, workspaceId, { kind: "thread_ref", binding });
     }

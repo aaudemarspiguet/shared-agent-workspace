@@ -16,6 +16,7 @@ import { handlePauseSet } from "./pause.js";
 import { ConnectionRegistry } from "./presence.js";
 import { RelayStore, type MemberRow } from "./store.js";
 import { handleSync, sendThreadSnapshot } from "./sync.js";
+import { canTransitionHandoff } from "@saw/shared";
 
 export interface RelayServer {
   store: RelayStore;
@@ -127,6 +128,9 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
         return;
       }
       registry.touch(member.id);
+      // Closures below (transact callbacks, finds) defeat the narrowing on
+      // the mutable `member`; `me` is the same row, immutably.
+      const me = member;
 
       switch (frame.kind) {
         case "post":
@@ -185,17 +189,167 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           registry.broadcast(store, member.workspace_id, { kind: "thread_ref", binding });
           break;
         }
-        case "thread_mode_set":
-        case "handoff_propose":
-        case "handoff_resolve":
-          // Phase 4 (US8) implements these. Answering plainly beats a silent
-          // drop: the caller's tool run must not hang on a missing reply.
-          send(ws, {
-            kind: "error",
-            code: "not_implemented",
-            message: "modes and handoff lifecycle arrive with the next relay release (spec 002 phase 4)"
-          });
+        case "thread_mode_set": {
+          // T116/T117 and SC-016. The payload carries NO member field: the
+          // write applies to the authenticated sender and nobody else. Even
+          // a hand-crafted frame with a member field injected is stripped
+          // by the schema before this line runs.
+          if (!parsed.modeSet) break;
+          const thread = store.threadById(parsed.modeSet.thread_id);
+          if (!thread || thread.workspace_id !== me.workspace_id) {
+            send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          if (parsed.modeSet.mode === undefined) {
+            // A read: answer with the sender's current row (or the default).
+            const current = store
+              .threadModes(me.workspace_id)
+              .find(
+                (m) =>
+                  m.thread_id === parsed.modeSet?.thread_id &&
+                  m.member === me.github_username
+              );
+            send(ws, {
+              kind: "thread_mode",
+              mode:
+                current ?? {
+                  thread_id: parsed.modeSet.thread_id,
+                  member: me.github_username,
+                  mode: "comment",
+                  set_at: new Date(0).toISOString()
+                }
+            });
+            break;
+          }
+          store.setThreadMode(
+            parsed.modeSet.thread_id,
+            me.github_username,
+            parsed.modeSet.mode
+          );
+          const row = store
+            .threadModes(me.workspace_id)
+            .find(
+              (m) =>
+                m.thread_id === parsed.modeSet?.thread_id && m.member === me.github_username
+            );
+          if (row) registry.broadcast(store, me.workspace_id, { kind: "thread_mode", mode: row });
           break;
+        }
+        case "handoff_propose": {
+          // T132/FR-044. The proposer must hold the thread's claim. A
+          // directed handoff is owner-only delegation: the claim moves on
+          // the record at once; the recipient's human still decides what
+          // their agent does (surfaced client-side, T128).
+          if (!parsed.propose) break;
+          const thread = store.threadById(parsed.propose.thread_id);
+          if (!thread || thread.workspace_id !== me.workspace_id) {
+            send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          const recipient = store
+            .members(me.workspace_id)
+            .find((m) => m.github_username === parsed.propose?.to);
+          if (!recipient) {
+            send(ws, { kind: "error", code: "invalid_input", message: "recipient is not a member" });
+            break;
+          }
+          const claim = store.threadClaim(thread.id);
+          if (claim?.claimed_by !== me.github_username || claim.state !== "claimed") {
+            send(ws, {
+              kind: "error",
+              code: "invalid_input",
+              message: "only the member holding the claim can hand it off"
+            });
+            break;
+          }
+          if (parsed.propose.directed && me.role !== "creator") {
+            store.appendRejectionLog(
+              me.workspace_id,
+              me.id,
+              "no_authority",
+              "directed handoff from a member without authority"
+            );
+            send(ws, {
+              kind: "error",
+              code: "no_authority",
+              message: "a directed handoff needs authority (the owner role in v1). Propose it instead."
+            });
+            break;
+          }
+          const handoff = store.transact(() => {
+            const made = store.createHandoff(
+              thread.id,
+              me.github_username,
+              parsed.propose?.to ?? "",
+              parsed.propose?.tip_ref ?? { kind: "branch", value: "unknown" },
+              parsed.propose?.directed ?? false
+            );
+            if (made.state === "accepted") {
+              // Directed: the claim moves now, visibly.
+              store.setThreadClaim(thread.id, "claimed", made.to_member);
+            }
+            return made;
+          });
+          registry.sendTo(me.id, { kind: "handoff", handoff });
+          registry.broadcast(
+            store,
+            me.workspace_id,
+            { kind: "handoff", handoff },
+            { excludeMemberId: me.id }
+          );
+          break;
+        }
+        case "handoff_resolve": {
+          // The transition table is the law (shared canTransitionHandoff):
+          // only the recipient accepts or declines; only the sender
+          // withdraws; terminal states stay terminal. Acceptance needs the
+          // recipient's own mode at edit (T134, FR-044).
+          const row = store.handoffById(frame.handoff_id);
+          const threadOfRow = row ? store.threadById(row.thread_id) : undefined;
+          if (!row || threadOfRow?.workspace_id !== me.workspace_id) {
+            send(ws, { kind: "error", code: "invalid_input", message: "handoff not found" });
+            break;
+          }
+          const actor =
+            me.github_username === row.to_member
+              ? ("to_member" as const)
+              : me.github_username === row.from_member
+                ? ("from_member" as const)
+                : undefined;
+          if (!actor || !canTransitionHandoff(row.state, frame.to_state, actor)) {
+            send(ws, {
+              kind: "error",
+              code: "invalid_input",
+              message: `this handoff cannot move from ${row.state} to ${frame.to_state} by you`
+            });
+            break;
+          }
+          if (frame.to_state === "accepted") {
+            const myMode = store
+              .threadModes(me.workspace_id)
+              .find((m) => m.thread_id === row.thread_id && m.member === me.github_username);
+            if (!myMode || myMode.mode !== "edit") {
+              send(ws, {
+                kind: "error",
+                code: "mode_denied",
+                message:
+                  "accepting a handoff needs your mode on the thread at edit. Raise your own mode first, or decline."
+              });
+              break;
+            }
+          }
+          const updated = store.transact(() => {
+            const after = store.setHandoffState(row.id, frame.to_state);
+            if (frame.to_state === "accepted") {
+              store.setThreadClaim(row.thread_id, "claimed", row.to_member);
+            }
+            return after;
+          });
+          if (updated) {
+            registry.broadcast(store, me.workspace_id, { kind: "handoff", handoff: updated });
+          }
+          break;
+        }
         case "sync":
           handleSync(store, registry, member, frame.since_seq);
           break;

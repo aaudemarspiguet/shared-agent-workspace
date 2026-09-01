@@ -4,6 +4,8 @@
 import {
   ClientFrameSchema,
   GitRefSchema,
+  ThreadModeSetSchema,
+  validateHandoffPropose,
   validateLogEntry,
   validatePost,
   validateThreadOpen,
@@ -45,6 +47,10 @@ export type FrameParse =
       open?: ThreadOpen;
       /** The validated `thread_ref_bind` ref. Use this, never `frame.ref`. */
       ref?: GitRef;
+      /** The validated `handoff_propose` payload. Never `frame.propose`. */
+      propose?: import("@saw/shared").HandoffPropose;
+      /** The validated `thread_mode_set` payload. Never `frame.set`. */
+      modeSet?: import("@saw/shared").ThreadModeSet;
     }
   | { ok: false; reason: RejectionReason; summary: string };
 
@@ -87,6 +93,20 @@ export function parseClientFrame(raw: string): FrameParse {
       return { ok: false, reason: check.reason, summary: check.summary };
     }
     return { ok: true, frame, open: check.open };
+  }
+  if (frame.kind === "handoff_propose") {
+    const check = validateHandoffPropose(frame.propose);
+    if (!check.ok) {
+      return { ok: false, reason: check.reason, summary: check.summary };
+    }
+    return { ok: true, frame, propose: check.propose };
+  }
+  if (frame.kind === "thread_mode_set") {
+    const check = ThreadModeSetSchema.safeParse(frame.set);
+    if (!check.success) {
+      return { ok: false, reason: "not_json", summary: "mode payload shape is not valid" };
+    }
+    return { ok: true, frame, modeSet: check.data };
   }
   if (frame.kind === "thread_ref_bind") {
     const check = GitRefSchema.safeParse(frame.ref);

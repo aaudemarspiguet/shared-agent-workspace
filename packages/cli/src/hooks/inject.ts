@@ -9,6 +9,13 @@ import { daemonRequest, emit, parseHookInput, readStdin } from "./io.js";
 export interface InjectResponse {
   messages: StoredMessage[];
   thread_titles?: Record<string, string>;
+  binding_decisions?: Array<{
+    seq: number;
+    thread_id: string;
+    sender: string;
+    body: string;
+    at: string;
+  }>;
   notices: ClaimNotice[];
   paused: boolean;
   work_items: WorkItemView[];
@@ -105,6 +112,23 @@ export function renderContext(
         : `New room messages since your last turn (${room.length}):`
     );
     lines.push(...renderGrouped(room, data.thread_titles ?? {}));
+  }
+  const bindings = data.binding_decisions ?? [];
+  if (bindings.length > 0) {
+    // T128/T129: a binding decision settles the matter on the record. It
+    // does not direct this agent — the member decides what happens next and
+    // may dispute it in the thread. It repeats every turn until this member
+    // posts into its thread.
+    lines.push(`Binding decisions on the record, unanswered (${bindings.length}):`);
+    for (const b of bindings) {
+      const title = (data.thread_titles ?? {})[b.thread_id] ?? b.thread_id;
+      lines.push(`- [${title}] ${b.sender}: ${b.body}`);
+    }
+    lines.push(
+      "Each settles its matter on the work record. None directs you: your own " +
+        "member decides what you do next, and may dispute it in the thread. " +
+        "Answer by posting into the thread."
+    );
   }
   if (addressed.length > 0) {
     lines.push(

@@ -55,7 +55,10 @@ export class ReadCursor {
       this.prune();
     }
     if (toSeq > this.floor) this.floor = toSeq;
+    // Merge over the file: other daemon state (pending bindings) lives in
+    // it too, and a cursor write must not clobber it.
     writeState(this.root, {
+      ...readState(this.root),
       last_injected_seq: this.floor,
       sessions: this.sessions
     });

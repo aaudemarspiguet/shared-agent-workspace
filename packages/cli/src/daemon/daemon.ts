@@ -13,7 +13,10 @@ import type {
   StoredLogEntry,
   StoredMessage
 } from "@saw/shared";
-import { readConfig, readCredential, type SawConfig } from "../config.js";
+import { readConfig, readCredential, type SawConfig,
+  readState,
+  writeState
+} from "../config.js";
 import { relayUrls } from "../relay-http.js";
 import { RelayClient, type PostOutcome } from "./client.js";
 import { ReadCursor } from "./cursor.js";
@@ -24,17 +27,36 @@ import { RunContext } from "./run-context.js";
 import { RoomState, type ClaimNotice, type WorkItemView } from "./state.js";
 
 export interface DaemonEvent {
-  kind: "message" | "presence" | "pause_state" | "claim_result" | "connection" | "threads";
+  kind:
+    | "message"
+    | "presence"
+    | "pause_state"
+    | "claim_result"
+    | "connection"
+    | "threads"
+    | "handoff";
   message?: StoredMessage;
   presence?: PresenceFrame;
   pause?: PauseStateFrame;
   claim?: ClaimResultFrame;
   connected?: boolean;
+  handoff?: import("@saw/shared").StoredHandoff;
+}
+
+/** A binding decision waiting for this member's answer (T129). */
+export interface PendingBinding {
+  seq: number;
+  thread_id: string;
+  sender: string;
+  body: string;
+  at: string;
 }
 
 export interface InjectResult {
   /** Titles of the threads the unread messages live in (T114). */
   thread_titles: Record<string, string>;
+  /** Unanswered binding decisions. Shown every turn until answered (T129). */
+  binding_decisions: PendingBinding[];
   messages: StoredMessage[];
   notices: ClaimNotice[];
   paused: boolean;
@@ -109,6 +131,7 @@ export class Daemon {
   private client: RelayClient;
   private subscribers = new Set<(event: DaemonEvent) => void>();
   private pendingNotices: ClaimNotice[] = [];
+  private pendingBindings: PendingBinding[] = [];
   /** The last error frame from the relay. It names a refused connection. */
   private lastRelayError: ErrorFrame | undefined;
   /** Set by `start` while it waits. A refused credential ends the wait. */
@@ -127,6 +150,7 @@ export class Daemon {
     this.pauseMirror = new PauseMirror(config.github_username);
     this.runContext = new RunContext(config.github_username);
     this.logSpool = new LogSpool(options.root, options.logSpoolCapacity);
+    this.pendingBindings = readState(options.root).pending_bindings ?? [];
 
     this.client = new RelayClient(
       {
@@ -144,6 +168,24 @@ export class Daemon {
         },
         onMessage: (message) => {
           if (this.state.addMessage(message)) {
+            // A binding decision addressed at this workspace settles the
+            // record and must reach this member's agent until answered
+            // (T128, T129): it survives cursor advance and daemon restarts,
+            // and clears when this member posts into its thread.
+            if (
+              message.force === "binding" &&
+              message.sender !== this.config.github_username &&
+              message.thread_id
+            ) {
+              this.pendingBindings.push({
+                seq: message.seq,
+                thread_id: message.thread_id,
+                sender: message.sender,
+                body: message.body,
+                at: message.sent_at
+              });
+              this.persistBindings();
+            }
             this.emit({ kind: "message", message });
           }
         },
@@ -158,6 +200,10 @@ export class Daemon {
         onThreadRef: (binding) => {
           this.state.addThreadRef(binding);
           this.emit({ kind: "threads" });
+        },
+        onHandoff: (handoff) => {
+          this.state.addHandoff(handoff);
+          this.emit({ kind: "handoff", handoff });
         },
         onThreadMode: (mode) => {
           if (mode.member === this.config.github_username) {
@@ -277,6 +323,43 @@ export class Daemon {
   // ---- Operations ----
 
   /** Post one message. Agent posts are blocked while this member is paused. */
+  private persistBindings(): void {
+    const state = readState(this.root);
+    writeState(this.root, { ...state, pending_bindings: this.pendingBindings });
+  }
+
+  /** This member's own answer into a thread clears its pending bindings. */
+  private clearBindingsFor(threadId: string): void {
+    const before = this.pendingBindings.length;
+    this.pendingBindings = this.pendingBindings.filter((b) => b.thread_id !== threadId);
+    if (this.pendingBindings.length !== before) this.persistBindings();
+  }
+
+  /** Set this member's own mode on a thread (spec 002 T118/T121). */
+  setThreadMode(threadId: string, mode: "view" | "comment" | "edit"): void {
+    this.client.threadModeSet(threadId, mode);
+    // Optimistic: the broadcast confirms it, but local reads answer now.
+    this.state.setMyThreadMode(threadId, mode);
+  }
+
+  /** Propose, direct, accept, decline, or withdraw a handoff (T133). */
+  handoffPropose(propose: {
+    thread_id: string;
+    to: string;
+    tip_ref: { kind: "branch" | "commit"; value: string };
+    directed?: boolean;
+  }): void {
+    this.client.handoffPropose(propose);
+  }
+
+  handoffResolve(handoffId: string, toState: "accepted" | "declined" | "withdrawn"): void {
+    this.client.handoffResolve(handoffId, toState);
+  }
+
+  handoffs(): import("@saw/shared").StoredHandoff[] {
+    return this.state.handoffs();
+  }
+
   /** Open a thread on the relay (spec 002 T110). */
   async threadOpen(open: {
     type: "work_item" | "brainstorm" | "general";
@@ -302,6 +385,7 @@ export class Daemon {
   }
 
   async post(post: MessagePost, senderKind: "agent" | "human"): Promise<PostOutcome> {
+    const targetThread = post.thread_id ?? null;
     if (senderKind === "agent" && this.pauseMirror.ownPaused) {
       return {
         ok: false,
@@ -323,6 +407,8 @@ export class Daemon {
         body: post.body,
         refs: post.refs ?? [],
         target: post.target,
+        thread_id: targetThread,
+        force: post.force ?? "advisory",
         work_item: post.work_item,
         sent_at: outcome.sent_at
       };
@@ -330,6 +416,9 @@ export class Daemon {
       if (this.state.addMessage(message)) {
         this.emit({ kind: "message", message });
       }
+      // Answering into a thread settles its pending binding decisions for
+      // this member (T129): they stop appearing every turn.
+      if (targetThread) this.clearBindingsFor(targetThread);
     }
     return outcome;
   }
@@ -385,12 +474,13 @@ export class Daemon {
     // Titles for the threads the unread messages live in, so the hook can
     // group by thread without a second call (T114).
     const threadTitles: Record<string, string> = {};
-    for (const m of unread) {
-      if (m.thread_id && !(m.thread_id in threadTitles)) {
-        const view = this.state.threadById(m.thread_id);
-        if (view) threadTitles[m.thread_id] = view.title;
-      }
-    }
+    const wantTitle = (threadId: string | null | undefined): void => {
+      if (!threadId || threadId in threadTitles) return;
+      const view = this.state.threadById(threadId);
+      if (view) threadTitles[threadId] = view.title;
+    };
+    for (const m of unread) wantTitle(m.thread_id);
+    for (const b of this.pendingBindings) wantTitle(b.thread_id);
     this.runContext.recordInjection(source, { prompt, injected: unread });
     const last = raw[raw.length - 1];
     return {
@@ -401,6 +491,7 @@ export class Daemon {
       me: this.config.github_username,
       latest_seq: this.state.latestSeq(),
       thread_titles: threadTitles,
+      binding_decisions: [...this.pendingBindings],
       ack_seq: last ? last.seq : this.cursor.valueFor(sessionId),
       ack_notices: notices.length
     };
@@ -478,6 +569,18 @@ export class Daemon {
    * (FR-015). The entry goes to the local spool instead, and the next
    * reconnect sends it with the timestamps it has now (T055).
    */
+  /** Append one system-source entry (mode denials, T120). Spools like runs. */
+  async runStopSystem(entry: import("@saw/shared").RunLogEntryInput): Promise<void> {
+    const outcome = await this.client.logAppend(entry);
+    if (!outcome.ok) {
+      try {
+        this.logSpool.add(entry);
+      } catch {
+        // Best effort, like runStop.
+      }
+    }
+  }
+
   async runStop(what: RunWhat): Promise<RunStopOutcome> {
     const entry = this.runContext.compose(what, this.state.myActiveWorkItem());
     const outcome = await this.client.logAppend(entry);
