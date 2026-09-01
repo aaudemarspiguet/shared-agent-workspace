@@ -34,6 +34,29 @@ const CLIENT_FRAME_KINDS = [
   "handoff_resolve"
 ] as const;
 
+/**
+ * FR-040 (T143): a branch ref binds to a thread only under its author's own
+ * member prefix. Branch-per-agent is how git-only sync stays true when two
+ * members edit on one thread, so a member may not bind the other's branch
+ * namespace. A commit SHA has no owner and always binds.
+ *
+ * This lives here, at the boundary, because there are two ways to bind a
+ * ref — riding along on a post, and the `thread_ref_bind` frame — and the
+ * rule held on only one of them while it was written inline in the post
+ * path. One function, both callers, no drift.
+ *
+ * Returns the refusal summary, or null when the ref may bind.
+ */
+export function branchPrefixRefusal(ref: GitRef, member: string): string | null {
+  if (ref.kind !== "branch") return null;
+  if (ref.value.startsWith(`${member}/`)) return null;
+  return (
+    `branch "${ref.value}" is not under your own prefix ` +
+    `"${member}/", so it did not bind to the thread. ` +
+    `Rename the branch under your prefix and bind it again.`
+  );
+}
+
 export type FrameParse =
   | {
       ok: true;
