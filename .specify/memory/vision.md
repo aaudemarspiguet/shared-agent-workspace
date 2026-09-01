@@ -289,7 +289,21 @@ The ten open questions were answered on 2026-08-24; verbatim record in
    building in parallel to iterate fast; process debt is picked up later.
 10. **Redaction**: tombstones in v1; retention policies deferred.
 
-**Re-scope (same date)**: cross-repo access levels are a v1 must. Projects
+**Session 2026-08-31 (both founders, live)**: the seven T138 questions
+answered (spec Clarifications). Two additions to v1, queued as Phase 6:
+plain speech — agent posts must read like a teammate wrote them; and AUTO
+MODE — a member's own message on any SAW surface wakes their own agent;
+with an agreed task and both members declaring ready, the two agents
+trigger each other within per-member turn budgets (default 50,
+configurable), pause always winning, and work concludes only on a human's
+manual approval at a convergence point. One-sided auto mode runs one agent
+autonomously with no cross-triggering. Each member gains a companion — a
+thread-scoped responder outside the mode ladder with read-only reach that
+answers questions and monitors sessions without interfering, for any
+coding tool. Humans are the source of authority and the point of
+judgment, never the transport (Amogh's framing, adopted).
+
+**Re-scope (2026-08-24)**: cross-repo access levels are a v1 must. Projects
 span multiple repos; project/group/one-on-one scopes are in; roughly double
 the schema work, accepted.
 
