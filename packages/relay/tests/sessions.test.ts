@@ -124,11 +124,14 @@ describe("the readiness handshake and wakes (T149, T150)", () => {
     const threadId = await openThread(alice, "auto session");
     await bob.waitFor(is("thread", (f) => f.thread.id === threadId));
 
-    // First readiness without a task is refused plainly.
+    // First readiness without a task is refused plainly - and leaves no
+    // trace: the consent flag stays off (review of #199 proved the old
+    // code set it before validating).
     alice.send({ kind: "session_ready", ready: { thread_id: threadId } });
     await alice.waitFor(
       is("error", (f) => f.message.includes("names the task"))
     );
+    expect(relay.store.autoModeEnabled(threadId, "alice")).toBe(false);
 
     // Alice: ready with the task and a tight budget of 2.
     alice.send({

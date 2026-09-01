@@ -75,6 +75,19 @@ export function handleSessionReady(
   if (!thread || thread.workspace_id !== member.workspace_id) {
     return { ok: false, message: "thread not found" };
   }
+
+  // Validate BEFORE any consent is recorded: a refused readiness must
+  // leave no trace. Auto mode is a consent flag, and an operation that
+  // failed set it anyway - found by review of #199, proved with a probe.
+  let session = store.activeSessionForThread(ready.thread_id);
+  const task = ready.task?.trim() ?? "";
+  if (!session && task.length === 0) {
+    return {
+      ok: false,
+      message: "the first readiness names the task the session is for"
+    };
+  }
+
   store.setAutoMode(ready.thread_id, member.github_username, true);
   registry.broadcast(store, member.workspace_id, {
     kind: "auto_mode",
@@ -83,17 +96,10 @@ export function handleSessionReady(
     enabled: true
   });
 
-  let session = store.activeSessionForThread(ready.thread_id);
   if (!session) {
-    if (!ready.task || ready.task.trim().length === 0) {
-      return {
-        ok: false,
-        message: "the first readiness names the task the session is for"
-      };
-    }
     session = store.createSession(
       ready.thread_id,
-      ready.task.trim(),
+      task,
       member.github_username,
       ready.max_turns ?? DEFAULT_MAX_TURNS
     );
