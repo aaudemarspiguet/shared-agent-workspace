@@ -4,6 +4,7 @@
 // old client keeps working through the migration window.
 import type { MessagePost, StoredThread, UnboundRef } from "@saw/shared";
 import { applyClaimTransition } from "./claims.js";
+import { routeWakes } from "./sessions.js";
 import type { ConnectionRegistry } from "./presence.js";
 import type { MemberRow, RelayStore } from "./store.js";
 
@@ -106,8 +107,12 @@ export function handlePost(
 
   // Claims resolve in the same order the messages were recorded.
   if (thread) {
-    const claim = applyClaimTransition(store, workspaceId, sender, post.type, thread);
+    const claim = applyClaimTransition(store, workspaceId, sender, post.type, thread, senderKind);
     if (claim) registry.broadcast(store, workspaceId, claim);
   }
+
+  // The wake rule runs last, over the stored message (T150). Delivery of
+  // the message itself never depends on it.
+  routeWakes(store, registry, workspaceId, message);
   return { ok: true };
 }

@@ -33,6 +33,8 @@ export function sendThreadSnapshot(
     threads: store.threads(member.workspace_id),
     modes: store.threadModes(member.workspace_id),
     handoffs: store.handoffs(member.workspace_id),
-    refs: store.threadRefs(member.workspace_id)
+    refs: store.threadRefs(member.workspace_id),
+    sessions: store.sessions(member.workspace_id),
+    auto_modes: store.autoModes(member.workspace_id)
   });
 }

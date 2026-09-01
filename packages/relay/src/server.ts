@@ -17,6 +17,14 @@ import { ConnectionRegistry } from "./presence.js";
 import { RelayStore, type MemberRow } from "./store.js";
 import { handleSync, sendThreadSnapshot } from "./sync.js";
 import { canTransitionHandoff } from "@saw/shared";
+import {
+  handleAutoModeSet,
+  handleConvergeApprove,
+  handleConvergePropose,
+  handleSessionEnd,
+  handleSessionReady
+} from "./sessions.js";
+import { applyClaimApprove } from "./claims.js";
 
 export interface RelayServer {
   store: RelayStore;
@@ -187,6 +195,62 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
             member.github_username
           );
           registry.broadcast(store, member.workspace_id, { kind: "thread_ref", binding });
+          break;
+        }
+        case "auto_mode_set": {
+          if (!parsed.autoMode) break;
+          const outcome = handleAutoModeSet(
+            store,
+            registry,
+            me,
+            parsed.autoMode.thread_id,
+            parsed.autoMode.enabled
+          );
+          if (!outcome.ok) {
+            send(ws, { kind: "error", code: "invalid_input", message: outcome.message });
+          }
+          break;
+        }
+        case "session_ready": {
+          if (!parsed.ready) break;
+          const outcome = handleSessionReady(store, registry, me, parsed.ready);
+          if (!outcome.ok) {
+            send(ws, { kind: "error", code: "invalid_input", message: outcome.message });
+          }
+          break;
+        }
+        case "session_end": {
+          const outcome = handleSessionEnd(store, registry, me, frame.session_id);
+          if (!outcome.ok) {
+            send(ws, { kind: "error", code: "invalid_input", message: outcome.message });
+          }
+          break;
+        }
+        case "converge_propose": {
+          if (!parsed.converge) break;
+          const outcome = handleConvergePropose(store, registry, me, parsed.converge);
+          if (!outcome.ok) {
+            send(ws, { kind: "error", code: "invalid_input", message: outcome.message });
+          }
+          break;
+        }
+        case "converge_approve": {
+          const outcome = handleConvergeApprove(store, registry, me, frame.session_id);
+          if (!outcome.ok) {
+            send(ws, { kind: "error", code: "invalid_input", message: outcome.message });
+          }
+          break;
+        }
+        case "claim_approve": {
+          // FR-052/T155: the holder's own member concludes an agent-proposed
+          // done. sender_kind is not on this frame; the approval is the
+          // member's act by definition - their surface sent it.
+          const outcome = applyClaimApprove(store, me, frame.thread_id);
+          if (!outcome.ok) {
+            send(ws, { kind: "error", code: "invalid_input", message: outcome.message });
+            break;
+          }
+          registry.broadcast(store, me.workspace_id, outcome.frame);
           break;
         }
         case "thread_mode_set": {
