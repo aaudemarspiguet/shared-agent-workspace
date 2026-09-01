@@ -65,6 +65,19 @@ export const PostFrameSchema = z.object({
    * companion is spec 002 FR-053: the member's thread responder posting as
    * its own identity, attributed to the member. Only "agent" messages can
    * take session turns in the wake rule, so a companion wakes nobody.
+   *
+   * This widening does NOT move the protocol version, on purpose (#205
+   * review). Sending is safe: the default makes an old client's posts
+   * "agent". Receiving is safe because everything that DECIDES on the third
+   * value runs at the relay, which is the host's and always current: the
+   * wake rule, the capability gates, the claim transitions. No client
+   * validates inbound frames, so nothing crashes; surfaces render the word
+   * "companion" as text. The one residual: a pre-companion client's claim
+   * MIRROR applies type-based claim rules to every message, so a companion
+   * post of a claim-moving type would drift that mirror until its next
+   * snapshot rebuilds it from the relay's truth — bounded by the companion
+   * prompt posting only answers, and by both members running from one repo.
+   * The day a client-side BEHAVIOR hangs on this field, the version moves.
    */
   sender_kind: z.enum(["agent", "human", "companion"]).default("agent")
 });
