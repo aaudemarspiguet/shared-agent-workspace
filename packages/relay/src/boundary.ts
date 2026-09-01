@@ -58,7 +58,6 @@ export function branchPrefixRefusal(ref: GitRef, member: string): string | null 
 }
 
 export type FrameParse =
-
   | {
       ok: true;
       frame: ClientFrame;
