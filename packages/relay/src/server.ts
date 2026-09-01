@@ -9,6 +9,7 @@ import {
   needsUpgradeMessage,
   PROTOCOL_VERSION } from "@saw/shared";
 import { branchPrefixRefusal, parseClientFrame } from "./boundary.js";
+import { threadStateRefusal } from "./thread-state.js";
 import { joinWorkspace, mintWorkspaceInvite, registerWorkspace } from "./join.js";
 import { handleLogAppend, handleLogQuery } from "./log.js";
 import { handlePost } from "./messages.js";
@@ -160,12 +161,29 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           break;
         }
         case "thread_state_set": {
-          // CHK005 (who may move a thread between states) is an open task
-          // (T138). Until it is decided, any member of the project scope may,
-          // and the change is attributable: the new state broadcasts to all.
+          // FR-010 (CHK005, T138). The claim holder concludes, the owner
+          // archives, anybody reopens, and archived stays read-only. This
+          // path used to allow every member every move, which meant either
+          // member could close the other's work.
           const thread = store.threadById(frame.thread_id);
           if (!thread || thread.workspace_id !== member.workspace_id) {
             send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          const stateRefusal = threadStateRefusal(
+            thread,
+            store.threadClaim(thread.id),
+            member,
+            frame.state
+          );
+          if (stateRefusal) {
+            store.appendRejectionLog(
+              member.workspace_id,
+              member.id,
+              "no_authority",
+              stateRefusal
+            );
+            send(ws, { kind: "error", code: "no_authority", message: stateRefusal });
             break;
           }
           store.setThreadState(frame.thread_id, frame.state);

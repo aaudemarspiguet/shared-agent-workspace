@@ -2,6 +2,7 @@
 // Every tool talks only to the member's own daemon over localhost HTTP.
 // Error shape (contracts/mcp-tools.md):
 //   { "error": { "code": "paused|not_connected|invalid_input|rejected", "message": "..." } }
+import { ACTION_MODES, modeAllows, type Mode, type ModeGatedAction } from "@saw/shared";
 import { readDaemonInfo, resolveRepoRoot } from "../config.js";
 
 export interface ToolResult {
@@ -73,14 +74,11 @@ export function repoRoot(): string | undefined {
  * Gate for agent tools other than workspace_status.
  * While the member is paused, every one of them answers "paused".
  */
-/** What a thread action needs of this member's own mode (contracts §3). */
-const ACTION_NEEDS: Record<string, "comment" | "edit"> = {
-  post: "comment",
-  claim: "edit",
-  bind_ref: "edit",
-  accept_handoff: "edit"
-};
-const MODE_ORDER = ["view", "comment", "edit"] as const;
+// What a thread action needs of this member's own mode is defined once, in
+// `@saw/shared` (ACTION_MODES, contracts §3, §1.1). This file used to keep a
+// second copy written by hand, so the ladder had two definitions that nothing
+// held together — CHK007's mode half was in the shared law and absent from
+// the gate that actually runs. One definition, imported (T138).
 
 /**
  * The ordered agent gate (spec 002 T119, contracts §3):
@@ -92,7 +90,7 @@ const MODE_ORDER = ["view", "comment", "edit"] as const;
  */
 export async function agentGate(
   root: string,
-  gate?: { threadId?: string; action?: keyof typeof ACTION_NEEDS }
+  gate?: { threadId?: string; action?: ModeGatedAction }
 ): Promise<ToolResult | undefined> {
   const health = await daemonCall(root, "/api/health", undefined, 2000);
   if (!health) return errorResult("not_connected", NOT_RUNNING);
@@ -109,9 +107,9 @@ export async function agentGate(
   if (gate?.threadId && gate.action) {
     const res = await daemonCall(root, `/api/mode?thread_id=${gate.threadId}`, undefined, 2000);
     if (res && res.status === 200) {
-      const { mode } = res.json as { mode: "view" | "comment" | "edit" };
-      const needed = ACTION_NEEDS[gate.action];
-      if (needed && MODE_ORDER.indexOf(mode) < MODE_ORDER.indexOf(needed)) {
+      const { mode } = res.json as { mode: Mode };
+      const needed = ACTION_MODES[gate.action];
+      if (!modeAllows(mode, gate.action)) {
         void daemonCall(root, "/api/mode-denial", {
           method: "POST",
           body: { thread_id: gate.threadId, action: gate.action, mode }
