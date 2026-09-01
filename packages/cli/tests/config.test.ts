@@ -49,19 +49,32 @@ const CONFIG: SawConfig = {
   web_port: 7420
 };
 
+/**
+ * True where the file system carries POSIX permission bits.
+ *
+ * Windows has none to read: statSync reports 0o666 whatever chmod was handed,
+ * because NTFS expresses access through ACLs instead. The token round-trip is
+ * asserted everywhere; the mode only where it means something. Restricting
+ * the credential file on Windows needs an ACL and is open as issue #60 - the
+ * guarantee is genuinely missing there, so do not read this skip as coverage.
+ */
+const HAS_MODE_BITS = process.platform !== "win32";
+
 describe("credential", () => {
   it("writes the file with mode 0600 and reads the token back", () => {
     writeCredential(root, "tok_secret");
-    const mode = statSync(credentialPath(root)).mode & 0o777;
-    expect(mode).toBe(0o600);
+    if (HAS_MODE_BITS) {
+      expect(statSync(credentialPath(root)).mode & 0o777).toBe(0o600);
+    }
     expect(readCredential(root)).toBe("tok_secret");
   });
 
   it("keeps mode 0600 when the file is written again", () => {
     writeCredential(root, "tok_one");
     writeCredential(root, "tok_two");
-    const mode = statSync(credentialPath(root)).mode & 0o777;
-    expect(mode).toBe(0o600);
+    if (HAS_MODE_BITS) {
+      expect(statSync(credentialPath(root)).mode & 0o777).toBe(0o600);
+    }
     expect(readCredential(root)).toBe("tok_two");
   });
 });

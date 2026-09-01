@@ -14,7 +14,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -27,8 +27,22 @@ import { parseMcpListStatus, registerMcp } from "../src/commands/up.js";
 
 const SAW_BIN = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "saw.js");
 
-/** PATH entries that hold git and which, but never saw and never claude. */
-const SAFE_PATH = "/usr/bin:/bin";
+/**
+ * PATH entries that hold the platform's own tools, but never saw and never
+ * claude. The separator and the directories both differ by platform: on
+ * Windows the POSIX pair does not exist and ":" is not the separator, which
+ * leaves a PATH in which even the stub directory cannot be found.
+ */
+const SYSTEM_ROOT = process.env.SystemRoot ?? "C:/Windows";
+const SAFE_PATH =
+  process.platform === "win32"
+    ? [join(SYSTEM_ROOT, "System32"), SYSTEM_ROOT].join(delimiter)
+    : ["/usr/bin", "/bin"].join(delimiter);
+
+/** The stub directory ahead of the platform's own tools. */
+function stubPath(): string {
+  return [stubBin, SAFE_PATH].join(delimiter);
+}
 
 interface StubState {
   /** The argv of the registered MCP server, or null when there is none. */
@@ -98,9 +112,30 @@ if (args[1] === "remove") {
 save();
 process.exit(0);
 `;
-  const path = join(stubBin, "claude");
-  writeFileSync(path, script);
-  chmodSync(path, 0o755);
+  writeStubProgram("claude", script);
+}
+
+/**
+ * Write a stub program the running platform can actually start.
+ *
+ * POSIX runs the shebang file directly. Windows starts real executables and
+ * shims only, so the script goes beside a .cmd that hands it to node - the
+ * same shape npm gives its own bin shims, which is the form saw meets in the
+ * field on Windows.
+ */
+function writeStubProgram(name: string, script: string): void {
+  if (process.platform !== "win32") {
+    const file = join(stubBin, name);
+    writeFileSync(file, script);
+    chmodSync(file, 0o755);
+    return;
+  }
+  const scriptFile = join(stubBin, `${name}-stub.js`);
+  writeFileSync(scriptFile, script);
+  writeFileSync(
+    join(stubBin, `${name}.cmd`),
+    `@echo off\r\n"${process.execPath}" "${scriptFile}" %*\r\n`
+  );
 }
 
 function writeState(state: StubState): void {
@@ -155,7 +190,7 @@ beforeEach(() => {
   writeClaudeStub();
   writeState({ server: null, calls: [] });
   process.env.SAW_STUB_STATE = statePath;
-  process.env.PATH = `${stubBin}:${SAFE_PATH}`;
+  process.env.PATH = stubPath();
 });
 
 afterEach(() => {
@@ -168,8 +203,7 @@ afterEach(() => {
 
 describe("resolveSawCommand", () => {
   it("uses the plain name when saw is on PATH", () => {
-    writeFileSync(join(stubBin, "saw"), "#!/bin/sh\nexit 0\n");
-    chmodSync(join(stubBin, "saw"), 0o755);
+    writeStubProgram("saw", `#!${process.execPath}\nprocess.exit(0);\n`);
 
     const command = resolveSawCommand();
     expect(command).toEqual({ file: "saw", args: [], onPath: true });
@@ -271,33 +305,58 @@ describe("registerMcp", () => {
   });
 });
 
+/**
+ * True where the harness can deliver a real SIGINT and see the clean exit.
+ *
+ * Windows has no signal delivery: Node maps kill() to TerminateProcess
+ * whatever name it is given, so saw's own Ctrl-C handler never runs and the
+ * exit code comes back null. A real Ctrl-C in a real console does reach the
+ * product as a console control event, so this is the harness's limit, not
+ * the product's. Everything except the exit code is asserted on both.
+ */
+const SIGNALS_DELIVER = process.platform !== "win32";
+
 /** One running `saw up`, with everything the assertions need. */
 interface UpRun {
   out(): string;
   err(): string;
   exitCode(): number | null;
+  /** True once the process has ended, whatever code it ended with. */
+  hasExited(): boolean;
   /** Wait until the command has printed its last line, or the wait ends. */
   ready(): Promise<void>;
   stop(): Promise<number | null>;
 }
 
+/** Stop a run and assert it ended, with the exit code where that is real. */
+async function stopCleanly(run: UpRun): Promise<void> {
+  const code = await run.stop();
+  expect(run.hasExited(), "saw up did not stop").toBe(true);
+  if (SIGNALS_DELIVER) expect(code).toBe(0);
+}
+
 function runUp(root: string): UpRun {
   const child = spawn(process.execPath, [SAW_BIN, "up", "--port", "0"], {
     cwd: root,
-    env: { ...process.env, PATH: `${stubBin}:${SAFE_PATH}`, SAW_STUB_STATE: statePath },
+    env: { ...process.env, PATH: stubPath(), SAW_STUB_STATE: statePath },
     stdio: ["ignore", "pipe", "pipe"]
   });
   let out = "";
   let err = "";
   let exited: number | null = null;
+  let ended = false;
   child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()));
   child.stderr.on("data", (chunk: Buffer) => (err += chunk.toString()));
-  child.on("exit", (code) => (exited = code));
+  child.on("exit", (code) => {
+    exited = code;
+    ended = true;
+  });
 
   return {
     out: () => out,
     err: () => err,
     exitCode: () => exited,
+    hasExited: () => ended,
     ready: async () => {
       const deadline = Date.now() + 25_000;
       while (!out.includes("Press Ctrl-C to stop.") && exited === null) {
@@ -341,7 +400,7 @@ describe("saw up without a relay", () => {
       expect(state.server?.[1] ?? "").toMatch(/saw\.js$/);
       expect(state.server?.[2]).toBe("mcp");
     } finally {
-      expect(await run.stop()).toBe(0);
+      await stopCleanly(run);
     }
   }, 40_000);
 
@@ -366,7 +425,7 @@ describe("saw up without a relay", () => {
       expect(run.out()).toContain("refused the credential");
       expect(run.out()).toContain("saw join");
     } finally {
-      expect(await run.stop()).toBe(0);
+      await stopCleanly(run);
       await new Promise<void>((resolve) => relay.close(() => resolve()));
     }
   }, 40_000);

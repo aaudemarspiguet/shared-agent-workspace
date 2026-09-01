@@ -59,14 +59,58 @@ interface ClaudeRun {
   missing: boolean;
 }
 
+/** Quote one part for cmd.exe, which reads "" as a literal quote. */
+function quoteForCmd(part: string): string {
+  return `"${part.replace(/"/g, '""')}"`;
+}
+
+/** How to start a PATH command on this platform. */
+interface Launch {
+  file: string;
+  args: string[];
+  shell: boolean;
+}
+
+/**
+ * Find the runnable form of a command that lives on PATH.
+ *
+ * On Windows a CLI installed through npm is a .cmd shim. CreateProcess starts
+ * real executables only, so execFile raises ENOENT for the bare name and
+ * EINVAL for the full path, and saw reports a missing CLI that is in fact
+ * installed. `where` applies PATHEXT and finds the shim; a shim runs only
+ * through cmd.exe, so quote every part and hand it to the shell. POSIX
+ * resolves the bare name itself and needs none of this.
+ */
+function launchFor(name: string, args: string[]): Launch {
+  if (process.platform !== "win32") return { file: name, args, shell: false };
+  let target = name;
+  try {
+    const found = execFileSync("where", [name], {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8"
+    });
+    const first = found
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line !== "");
+    if (first) target = first;
+  } catch {
+    // Not on PATH. Keep the bare name so the spawn reports ENOENT as before.
+  }
+  if (!/\.(cmd|bat)$/i.test(target)) return { file: target, args, shell: false };
+  return { file: quoteForCmd(target), args: args.map(quoteForCmd), shell: true };
+}
+
 /** Run one claude CLI command. Never throws. */
 function runClaude(root: string, args: string[]): ClaudeRun {
+  const launch = launchFor("claude", args);
   try {
-    const out = execFileSync("claude", args, {
+    const out = execFileSync(launch.file, launch.args, {
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
-      timeout: CLAUDE_TIMEOUT_MS
+      timeout: CLAUDE_TIMEOUT_MS,
+      shell: launch.shell
     });
     return { ok: true, out, missing: false };
   } catch (error) {
