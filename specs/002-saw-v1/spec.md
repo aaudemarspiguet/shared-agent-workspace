@@ -229,6 +229,38 @@ Both founders synced live, then answered together (room seq 29 and chat).
   prevented is the same in both: an agent judged its own work finished and
   nobody checked. Recorded as FR-052 and SC-029; T155 implements it.
 
+#### The seven checklist questions, tied to their answers (T138)
+
+The answers were given on 2026-08-31 and are recorded above. What was never
+done is say which answer belongs to which recorded question, so the spec
+read as though the questions were still open while the checklist read as
+though nothing had been decided. The mapping, written down once:
+
+| Question | Answer | Now stated in |
+|---|---|---|
+| CHK005 thread state transitions | claim holder's human marks done; any member reopens by posting; owner archives; archived is read-only | FR-010 |
+| CHK006 broadcast permission | any member, human or agent | FR-011 |
+| CHK007 ref-binding permission | own mode at `edit`, own-prefix branches only | FR-014 |
+| CHK008 default force | `advisory` for everyone, owners included | FR-043 |
+| CHK009 force on journal entries | journals are always advisory | FR-043 |
+| CHK010 handoff expiry | none in v1; the sender withdraws, the surface shows age | FR-044 |
+| CHK011 mode change mid-run | takes effect at the next tool call | FR-055 |
+
+Two answers were being contradicted by the code at the time they were
+written down, which is why this pass changes behaviour and not only prose:
+
+- CHK005 was unenforced. Any member could move any thread to any state, and
+  the relay carried a comment saying the question was open. Enforced now,
+  with the tests that frame never had.
+- CHK007's mode half was unenforced. The rule existed in
+  `packages/shared/src/modes.ts` and the CLI kept a second hand-written copy
+  instead of importing it. One law, one definition, now.
+
+CHK010's answer also turned out to be untrue on one of the two handoff
+paths — the sender cannot withdraw on the message path. Filed against T132
+(#156) rather than fixed here, because that file is under edit by the open
+phase 6 stack.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### Implementation order
@@ -826,9 +858,23 @@ tool is closed.
   brainstorm, general), title, scope, participants, state (open, done,
   archived), claim state, bound workspaces and refs, and optional ticket
   bindings.
+
+  The state transitions are (CHK005): `open` to `done` on the claim
+  holder's own decision, which by FR-052 means the claim holder's human —
+  an agent's decision is a proposal and does not conclude the thread.
+  `done` to `open` when any member of the scope posts into the thread, so
+  reopening needs no separate control and no permission. `open` or `done`
+  to `archived` by an owner only, because archiving manages the container
+  and is therefore administration (FR-005) rather than work authority.
+  `archived` is read-only until an owner unarchives it. A member outside
+  these rules MUST be refused with a plain reason rather than silently
+  ignored.
 - **FR-011**: Messages MUST be posted into a thread or to the project
   (broadcast, project scope). Reading a thread MUST NOT require filtering a
-  global feed client-side.
+  global feed client-side. Any member of the project MAY post a broadcast,
+  human or agent (CHK006): a broadcast is a status ping to the project and
+  carries no authority of its own. What a message can settle is governed by
+  its force (FR-043), never by the fact that it reached everybody.
 - **FR-012**: Participation MUST be defined: every member in a thread's
   scope may read it; a member becomes a participant (delivery recipient) by
   creating, joining, claiming, or being addressed in the thread —
@@ -841,6 +887,14 @@ tool is closed.
   preserved.
 - **FR-014**: Thread-to-workspace and thread-to-ref bindings MUST be
   many-to-many; every bound ref MUST state its workspace.
+
+  Binding and unbinding a ref is a work-authority power exercised inside
+  the thread, not an administrative one (CHK007). A member whose own mode
+  on the thread is `edit` may bind and unbind. A bound branch MUST name a
+  branch under its author's own member prefix (FR-040), so a member cannot
+  attach the other member's branch namespace to a thread; a commit SHA has
+  no owner and always binds. Both halves MUST hold on every path that can
+  bind, not only on the one a client happens to use.
 
 **Journals (shared context)**
 
@@ -1096,6 +1150,25 @@ tool is closed.
   without authority MUST be rejected with a plain reason and recorded; it MUST
   NOT be silently downgraded.
 
+  **`advisory` is the default for everyone, owners included** (CHK008). A
+  message whose author states no force is advisory. Binding is always a
+  deliberate act, never a consequence of who is posting, which is what
+  makes an owner's ordinary comment an ordinary comment.
+
+  **Force applies to messages only. Journal entries are always advisory**
+  (CHK009). A journal entry is a distilled record of a run (FR-015), and an
+  agent-generated record never settles a matter; settling it takes a human
+  posting a `binding` message deliberately. No journal entry may carry
+  `binding` force, and none may be read as carrying it.
+
+  Authority alone is not enough: a member exercising a work-authority power
+  MUST also be a participant in the thread, exactly as FR-005 requires of
+  every such power (CHK021). Posting with `binding` force is a
+  work-authority power, so the owner role supplies the authority and
+  participation supplies the standing, and both are needed. Stated here
+  rather than left to be inferred from reading FR-005 alongside this
+  requirement.
+
   A `decision` is a comment made with authority: the same content carries
   decision force as `binding` and reads as a proposal as `advisory`.
 
@@ -1118,6 +1191,15 @@ tool is closed.
   accepts. On accept the claim moves and the thread records the transfer; on
   decline or withdraw the claim returns to the sender; every transition is
   attributable and visible to the thread's scope.
+
+  **A handoff has no expiry in v1** (CHK010). An unanswered handoff stays
+  `proposed` until somebody acts: the sender withdraws it, or the recipient
+  accepts or declines. The surfaces MUST show a proposed handoff's age so
+  an unanswered one is visible rather than forgotten. A clock that moved
+  the claim on its own would decide ownership at a moment neither member
+  chose, which is the dispute the lifecycle exists to prevent. Because
+  nothing expires, withdraw MUST be available to the sender on every path
+  that can propose a handoff.
 
   A recipient whose mode on the thread is `view` or `comment` MUST NOT have a
   handoff accepted on their behalf: their agent surfaces it, and the member
@@ -1212,8 +1294,8 @@ tool is closed.
   in the member's coding tool. Each tool integration declares at setup
   whether it supports waking. A tool without wake support still gets the
   full companion (FR-053) — the conversation floor is tool-independent.
-- **FR-055**: When a member changes their agent's mode mid-run, it takes
-  effect at the next tool call, the surface MUST show the member that
+- **FR-055** (answers CHK011): When a member changes their agent's mode
+  mid-run, it takes effect at the next tool call, the surface MUST show the member that
   access changed, and the documentation MUST state how to revert the
   agent's work through git (branch-per-agent makes the diff reversible).
   Next-tool-call is deliberate and stronger than the founder's literal

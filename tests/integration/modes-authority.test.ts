@@ -46,6 +46,17 @@ describe("the ordered agent gate (T119, T122, T124)", () => {
     expect(JSON.stringify(claimDenied)).toContain("mode_denied");
     expect(JSON.stringify(claimDenied)).toContain("comment");
 
+    // Binding a ref needs `edit` too (FR-014, CHK007). This action was
+    // defined in the shared ladder and passed by no caller, so a member in
+    // `comment` bound refs by hanging them on a post, which needs one rung
+    // less. Now the same rung as claiming.
+    const bindDenied = await agentGate(ws.bob.root, { threadId, action: "bind_ref" });
+    expect(JSON.stringify(bindDenied)).toContain("mode_denied");
+    expect(JSON.stringify(bindDenied)).toContain("bind_ref");
+    ws.bob.daemon.setThreadMode(threadId, "edit");
+    expect(await agentGate(ws.bob.root, { threadId, action: "bind_ref" })).toBeUndefined();
+    ws.bob.daemon.setThreadMode(threadId, "comment");
+
     // view: even posting is denied, and the denial is recorded (T120).
     ws.bob.daemon.setThreadMode(threadId, "view");
     const postDenied = await agentGate(ws.bob.root, { threadId, action: "post" });

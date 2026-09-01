@@ -59,7 +59,29 @@ export function handlePost(
     thread = store.resolveThreadForTag(workspaceId, post.work_item, sender.github_username);
   }
 
+  // FR-010 (CHK005, T138). Archived is read-only: a post into an archived
+  // thread is refused rather than silently accepted into a closed record.
+  if (thread && thread.state === "archived") {
+    const summary =
+      `thread "${thread.title}" is archived and takes no new messages. ` +
+      `Ask the owner to unarchive it first.`;
+    store.appendRejectionLog(workspaceId, sender.id, "no_authority", summary);
+    return { ok: false, code: "no_authority", message: summary };
+  }
+
   const message = store.insertMessage(workspaceId, sender, senderKind, post, thread?.id ?? null);
+
+  // A post into a done thread reopens it (FR-010, CHK005). This is the
+  // reopen path the answer names: any member of the scope, by saying
+  // something, with no separate control and no permission to ask for.
+  if (thread && thread.state === "done") {
+    store.setThreadState(thread.id, "open");
+    const reopened = store.threadById(thread.id);
+    if (reopened) {
+      thread = reopened;
+      registry.broadcast(store, workspaceId, { kind: "thread", thread: reopened });
+    }
+  }
 
   // Refs the post carried that did not bind. Reported to the sender below so
   // the refusal is not silent; the rejection log records it either way.
