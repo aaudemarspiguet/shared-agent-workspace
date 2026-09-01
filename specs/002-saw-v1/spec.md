@@ -214,6 +214,21 @@ Both founders synced live, then answered together (room seq 29 and chat).
   too, since the companion sits outside the ladder. The new work in this
   session queues behind them.
 
+### Session 2026-09-01
+
+- Q: Does "a human concludes the work" apply to solo claims too, or only to
+  auto sessions? → A: To both — but a human's OWN decision is itself the
+  approval, so it concludes on the post with no second click. Only an
+  agent-authored decision is a proposal needing its member's approval.
+  Rejected two alternatives, with reasons. Requiring a click on every task
+  taxes the common case, where the human closing the task is the one who
+  already decided; the guarantee is identical without it. Limiting the rule
+  to auto mode was rejected because "supervised" is not a crisp category —
+  a member starts a run by hand, is called away, and returns later — so a
+  rule hinging on it would be argued after the fact. The failure being
+  prevented is the same in both: an agent judged its own work finished and
+  nobody checked. Recorded as FR-052 and SC-029; T155 implements it.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### Implementation order
@@ -1166,11 +1181,23 @@ tool is closed.
   budget; exhaustion suspends the session for a human's word. Pause MUST
   win over auto mode at once, and either human MUST be able to end a
   session at any time; the end is recorded with who ended it.
-- **FR-052**: Concluding work MUST be a human's manual act. An agent —
-  solo or in session — MAY propose done, with a summary and refs. The
-  claim or session concludes only on a human approval through a visible
-  control. A session that ends by budget or stop without approval is
-  recorded as unconcluded.
+- **FR-052**: Concluding work MUST be a human's act, for solo claims and
+  sessions alike. Who authored the message decides which form that takes,
+  and SAW already carries that fact on every message.
+  A decision authored by a **human** IS the act: the claim or session
+  concludes on that post, with no second confirmation. They have already
+  said it, and asking again is ceremony rather than oversight.
+  A decision authored by an **agent** — solo or in session — is a
+  PROPOSAL: it MUST carry a summary and refs, it MUST NOT conclude
+  anything, and the claim or session concludes only when that agent's own
+  member approves it through a visible control. No member may approve
+  another member's proposal; approving is the same self-directed act as
+  granting auto mode.
+  The approve control MUST sit where the proposal is shown, reachable
+  without navigating elsewhere. An approval that costs a detour is worked
+  around, and a guarantee that is worked around is not a guarantee.
+  A session that ends by budget or stop without approval is recorded as
+  unconcluded.
 - **FR-053**: Each member MUST have a companion: a responder on the thread
   that answers questions about the thread and observes a running session
   without interfering. It sits outside the mode ladder. It MUST hold read
@@ -1329,6 +1356,11 @@ tool is closed.
 - **SC-028**: A companion answers a thread question correctly while its
   member's coding tool is closed, posting as itself; in adversarial tests
   it performs zero claims, zero ref bindings, and zero binding posts.
+- **SC-029**: In adversarial tests, zero claims and zero sessions are
+  concluded by an agent-authored decision without its member's approval,
+  and zero are concluded by a member approving another member's proposal.
+  A human-authored decision concludes its claim in the same post, with no
+  second confirmation required.
 
 ## Assumptions
 
