@@ -20,6 +20,10 @@ coverage/
 
 # Per-member Claude Code settings (each member keeps their own)
 .claude/settings.local.json
+# Per-machine agent tooling, installed by each member on their own
+# machine: `npm i -g ui-ux-pro-max-cli && uipro update` writes these.
+.claude/skills/
+.claude/worktrees/
 # SAW member-local files
 .saw/member.json
 .saw/AGENT.md

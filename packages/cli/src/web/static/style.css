@@ -496,3 +496,14 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
    agent, which made a stand-in indistinguishable from the real thing. */
 .badge.companion { color: var(--violet); border-color: var(--violet); }
 .msg.from-companion { border-left: 3px solid var(--violet); }
+
+/* A failed session control explains itself beside the control (T154). */
+.session-error {
+  flex-basis: 100%;
+  color: var(--red);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  background: rgba(255, 107, 107, 0.08);
+}

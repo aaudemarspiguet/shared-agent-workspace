@@ -297,6 +297,21 @@ function renderStatus(status) {
 
 const SESSION_OVER = ["concluded", "ended"];
 
+// Where a failed session control explains itself. It belongs beside the
+// control, not in the composer's error box at the far end of the pane: the
+// member pressed a button at the top of the thread and would never see an
+// explanation printed at the bottom.
+let sessionErrorBox = null;
+
+function showSessionError(text) {
+  if (!sessionErrorBox) {
+    showComposerError(text);
+    return;
+  }
+  sessionErrorBox.textContent = text;
+  sessionErrorBox.hidden = false;
+}
+
 /** The thread's session that has not concluded or ended, if any. */
 function activeSessionFor(threadId) {
   return state.sessions
@@ -321,14 +336,15 @@ async function sessionCall(path, body) {
       body: JSON.stringify(body)
     });
   } catch {
-    showComposerError(DAEMON_DOWN);
+    showSessionError(DAEMON_DOWN);
     return false;
   }
   if (res.ok) return true;
   const answer = await res.json().catch(() => ({}));
-  showComposerError(
-    (answer.error && `${answer.error.code}: ${answer.error.message}`) ||
-      "the daemon refused that control"
+  // The daemon refuses these now rather than reporting a success it did
+  // not achieve, so there is a real reason to show. Say it plainly.
+  showSessionError(
+    (answer.error && answer.error.message) || "the daemon refused that control"
   );
   return false;
 }
@@ -457,6 +473,8 @@ function renderReadiness(thread) {
  */
 function renderSessionPanel(thread) {
   const panel = el("div", "session-panel");
+  sessionErrorBox = el("div", "session-error");
+  sessionErrorBox.hidden = true;
 
   const claimApproval = renderClaimApproval(thread);
   if (claimApproval) panel.appendChild(claimApproval);
@@ -503,6 +521,7 @@ function renderSessionPanel(thread) {
     panel.appendChild(el("div", "session-past", `Last session ${by}.`));
   }
 
+  panel.appendChild(sessionErrorBox);
   return panel;
 }
 
