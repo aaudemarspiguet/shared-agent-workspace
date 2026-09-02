@@ -382,6 +382,59 @@ function renderClaimApproval(thread) {
   return box;
 }
 
+/**
+ * Auto mode, as a switch rather than a button that reads like a label.
+ *
+ * Turning it ON takes a second press, because it is standing consent: it
+ * lets this member's agent take turns without being asked each time
+ * (FR-050). Turning it OFF is immediate and always will be — withdrawing
+ * consent must never be harder than giving it.
+ */
+function autoModeSwitch(thread, on) {
+  const wrap = el("div", "auto-wrap");
+  const sw = el("button", "auto-toggle" + (on ? " on" : ""));
+  sw.type = "button";
+  sw.setAttribute("role", "switch");
+  sw.setAttribute("aria-checked", on ? "true" : "false");
+  sw.appendChild(el("span", "auto-track"));
+  sw.appendChild(el("span", "auto-label", on ? "Auto mode on" : "Auto mode off"));
+  wrap.appendChild(sw);
+
+  if (on) {
+    sw.title = "turn off auto mode for yourself";
+    sw.addEventListener("click", async () => {
+      await sessionCall("/api/auto-mode", { thread_id: thread.id, enabled: false });
+    });
+    return wrap;
+  }
+
+  sw.title = "turn on auto mode for yourself";
+  const ask = el("div", "auto-confirm");
+  ask.hidden = true;
+  ask.appendChild(
+    el(
+      "div",
+      "auto-confirm-text",
+      "Auto mode lets your agent take turns in this thread without asking you each time. It is yours alone — it stays on until you turn it off."
+    )
+  );
+  ask.appendChild(
+    button("Turn it on", "auto-confirm-yes", async () => {
+      await sessionCall("/api/auto-mode", { thread_id: thread.id, enabled: true });
+    })
+  );
+  ask.appendChild(
+    button("Cancel", "auto-confirm-no", () => {
+      ask.hidden = true;
+    })
+  );
+  sw.addEventListener("click", () => {
+    ask.hidden = !ask.hidden;
+  });
+  wrap.appendChild(ask);
+  return wrap;
+}
+
 /** One member's turn budget. The number is the member's own ceiling. */
 function turnBox(member) {
   const box = el("span", "turn-box");
@@ -434,22 +487,33 @@ function renderReadiness(thread) {
   task.className = "task-input";
   task.maxLength = 600;
   task.placeholder = "what the two agents will work on";
-  const turns = document.createElement("input");
-  turns.type = "number";
-  turns.className = "turns-input";
-  turns.min = "1";
-  turns.max = "500";
-  turns.value = "50";
-  turns.title = "your own turn budget for this session";
+  // A free number box asks the member to invent a figure they have no basis
+  // for. These are the ones people actually pick; 50 is DEFAULT_MAX_TURNS in
+  // packages/shared, so the default here is the contract's default.
+  let chosen = 50;
+  const budget = el("div", "budget");
+  budget.appendChild(el("span", "budget-label", "your turns:"));
+  [10, 25, 50, 100].forEach((n) => {
+    const chip = el("button", "budget-chip" + (n === chosen ? " on" : ""));
+    chip.type = "button";
+    chip.textContent = String(n);
+    chip.title = "your own ceiling for this session — the other member sets theirs";
+    chip.addEventListener("click", () => {
+      chosen = n;
+      Array.from(budget.querySelectorAll(".budget-chip")).forEach((c) =>
+        c.classList.toggle("on", c.textContent === String(n))
+      );
+    });
+    budget.appendChild(chip);
+  });
   box.appendChild(task);
-  box.appendChild(turns);
+  box.appendChild(budget);
   box.appendChild(
     button("I'm ready", "ready-btn", async () => {
       const body = { thread_id: thread.id };
       const text = task.value.trim();
       if (text) body.task = text;
-      const n = Number(turns.value);
-      if (Number.isFinite(n) && n > 0) body.max_turns = n;
+      body.max_turns = chosen;
       if (await sessionCall("/api/session/ready", body)) task.value = "";
     })
   );
@@ -481,11 +545,7 @@ function renderSessionPanel(thread) {
 
   const row = el("div", "session-row");
   const on = thread.my_auto_mode === true;
-  row.appendChild(
-    button(on ? "auto mode: on" : "auto mode: off", "auto-toggle" + (on ? " on" : ""), async () => {
-      await sessionCall("/api/auto-mode", { thread_id: thread.id, enabled: !on });
-    })
-  );
+  row.appendChild(autoModeSwitch(thread, on));
 
   const session = activeSessionFor(thread.id);
   if (session) {
@@ -650,12 +710,187 @@ function renderThreads(threads) {
 }
 
 /**
- * The header above the conversation: what this thread is, where it stands,
- * who holds it, and the one control that is the member's own to set.
+ * Refs, collapsed to a count that opens (FR-045).
  *
- * The mode control lives here rather than on every list row. It is per
- * thread, it applies to the member's own agent only, and a dropdown on every
- * row of the navigation reads as a bulk-edit affordance it is not.
+ * A thread accumulates branches, PRs and commits without limit, and printed
+ * flat they pushed the title off its own line. The lineage is one chip until
+ * somebody wants it.
+ */
+function renderRefLineage(thread) {
+  const refs = (thread.refs || [])
+    .map((binding) => binding.ref || binding)
+    .filter((r) => r && r.kind);
+  if (refs.length === 0) return null;
+
+  const box = el("span", "lineage");
+  const toggle = el("button", "lineage-toggle");
+  toggle.type = "button";
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.textContent = refs.length === 1 ? "1 ref" : refs.length + " refs";
+  toggle.title = "the branches, commits and pull requests bound to this thread";
+
+  const list = el("div", "lineage-list");
+  list.hidden = true;
+  refs.forEach((r) => {
+    const item = el("div", "lineage-item");
+    item.appendChild(el("span", "ref", r.kind + ":" + r.value));
+    list.appendChild(item);
+  });
+
+  toggle.addEventListener("click", () => {
+    list.hidden = !list.hidden;
+    toggle.setAttribute("aria-expanded", list.hidden ? "false" : "true");
+    toggle.classList.toggle("open", !list.hidden);
+  });
+  box.appendChild(toggle);
+  box.appendChild(list);
+  return box;
+}
+
+/** The three modes, each with the sentence that says what it costs. */
+const MODES = [
+  ["edit", "Editing", "Your agent can change files and push branches."],
+  ["comment", "Commenting", "Your agent can post here, but not change files."],
+  ["view", "Viewing", "Your agent reads only. It will not post or change anything."]
+];
+
+/**
+ * Your agent's mode, by the composer (T121, FR-037).
+ *
+ * It sits where you act, the way a document editor keeps
+ * Editing/Suggesting/Viewing beside the page rather than in the title bar.
+ * A bare three-item dropdown never said what the words cost, so each option
+ * carries its consequence.
+ *
+ * It is the member's own and only the member's: FR-037 forbids setting
+ * anyone else's through any surface, so there is no control for the other
+ * side and the footer says why.
+ */
+function renderModeControl(thread) {
+  const mount = $("composer-mode");
+  mount.textContent = "";
+  if (!thread) {
+    mount.hidden = true;
+    return;
+  }
+  mount.hidden = false;
+
+  const current = thread.my_mode || "comment";
+  const row = MODES.find((m) => m[0] === current) || MODES[1];
+
+  const pill = el("button", "mode-pill mode-" + current);
+  pill.type = "button";
+  pill.setAttribute("aria-haspopup", "true");
+  pill.setAttribute("aria-expanded", "false");
+  pill.appendChild(el("span", "mode-dot"));
+  pill.appendChild(el("span", "mode-name", row[1]));
+  pill.title = "your agent's mode on this thread - yours alone to set";
+
+  const menu = el("div", "mode-menu");
+  menu.hidden = true;
+  MODES.forEach(([value, name, desc]) => {
+    const opt = el("button", "mode-opt" + (value === current ? " on" : ""));
+    opt.type = "button";
+    opt.appendChild(el("span", "mode-opt-name", name));
+    opt.appendChild(el("span", "mode-opt-desc", desc));
+    opt.addEventListener("click", async () => {
+      menu.hidden = true;
+      pill.setAttribute("aria-expanded", "false");
+      try {
+        await api("/api/thread/mode", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ thread_id: thread.id, mode: value })
+        });
+      } catch {
+        showComposerError(DAEMON_DOWN);
+      }
+    });
+    menu.appendChild(opt);
+  });
+  menu.appendChild(
+    el("div", "mode-foot", "This governs your agent, not you. Only you can set it.")
+  );
+
+  pill.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    pill.setAttribute("aria-expanded", menu.hidden ? "false" : "true");
+  });
+  mount.appendChild(pill);
+  mount.appendChild(menu);
+}
+
+// One listener, not one per render: clicking away closes an open mode menu.
+document.addEventListener("click", () => {
+  const menu = document.querySelector(".mode-menu");
+  if (menu && !menu.hidden) {
+    menu.hidden = true;
+    const pill = document.querySelector(".mode-pill");
+    if (pill) pill.setAttribute("aria-expanded", "false");
+  }
+});
+
+// Whether the member has opened the session lane by hand. null means the
+// lane decides for itself, which is what it does until somebody disagrees.
+let stripOpen = null;
+
+/**
+ * The session lane, below the header rather than inside it.
+ *
+ * The header answers "what is this thread"; this answers "what is happening
+ * in it". They were one block, and the controls - which grow tall, and grow
+ * taller mid-session - kept pushing the identity off the top of the pane.
+ *
+ * It opens itself only when something is actually waiting on this member.
+ */
+function renderSessionStrip(thread) {
+  const strip = $("session-strip");
+  strip.textContent = "";
+  if (!thread) {
+    strip.hidden = true;
+    return;
+  }
+  strip.hidden = false;
+
+  const session = activeSessionFor(thread.id);
+  const wantsMe =
+    !!session ||
+    (thread.claim_state === "done_proposed" && thread.claimed_by === state.me);
+  const open = stripOpen === null ? wantsMe : stripOpen;
+
+  const bar = el("div", "strip-bar");
+  const summary = session
+    ? "Session " +
+      session.state +
+      (session.members || [])
+        .map((m) => " · " + m.member + " " + (m.turns_used || 0) + "/" + (m.max_turns || 0))
+        .join("")
+    : thread.my_auto_mode === true
+      ? "Auto mode on for you - waiting for both to be ready"
+      : "No session";
+  bar.appendChild(el("span", "strip-summary" + (session ? " live" : ""), summary));
+
+  const toggle = el("button", "strip-toggle");
+  toggle.type = "button";
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  toggle.textContent = open ? "Hide controls" : "Session controls";
+  toggle.addEventListener("click", () => {
+    stripOpen = !open;
+    renderSessionStrip(thread);
+  });
+  bar.appendChild(toggle);
+  strip.appendChild(bar);
+
+  if (open) strip.appendChild(renderSessionPanel(thread));
+}
+
+/**
+ * The header above the conversation: what this thread is, where it stands,
+ * and who holds it.
+ *
+ * Identity only. The mode control went to the composer, where you act, and
+ * the session controls to their own lane below.
  */
 function renderThreadHeader() {
   const head = $("thread-header");
@@ -667,11 +902,17 @@ function renderThreadHeader() {
         ? "Broadcasts — messages sent to no single thread"
         : "All activity — every thread, newest last";
     head.appendChild(el("span", "thread-head-title", label));
+    renderModeControl(null);
+    renderSessionStrip(null);
     return;
   }
 
   const t = state.threadsById.get(state.selection.threadId);
-  if (!t) return;
+  if (!t) {
+    renderModeControl(null);
+    renderSessionStrip(null);
+    return;
+  }
 
   head.appendChild(el("span", "thread-head-title", t.title));
   const meta = el("span", "thread-head-meta");
@@ -682,39 +923,14 @@ function renderThreadHeader() {
   else if (t.type === "work_item") meta.appendChild(el("span", "assignee none", "unassigned"));
   const note = claimNote(t);
   if (note) meta.appendChild(el("span", "badge claim-note", note));
-  (t.refs || []).forEach((binding) => {
-    const r = binding.ref || binding;
-    if (r && r.kind) meta.appendChild(el("span", "ref", r.kind + ":" + r.value));
-  });
+  const lineage = renderRefLineage(t);
+  if (lineage) meta.appendChild(lineage);
   head.appendChild(meta);
 
-  // Your own mode on the thread (T121). It restrains your own agent only;
-  // there is no control for the other member's, by design.
-  const modeBox = el("span", "thread-head-mode");
-  modeBox.appendChild(el("span", "mode-label", "my agent:"));
-  const mode = document.createElement("select");
-  mode.className = "mode-select";
-  mode.title = "your agent's mode on this thread (yours only)";
-  ["view", "comment", "edit"].forEach((m) => mode.appendChild(new Option(m, m)));
-  mode.value = t.my_mode || "comment";
-  mode.addEventListener("change", async () => {
-    try {
-      await api("/api/thread/mode", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ thread_id: t.id, mode: mode.value })
-      });
-    } catch {
-      showComposerError(DAEMON_DOWN);
-    }
-  });
-  modeBox.appendChild(mode);
-  head.appendChild(modeBox);
-
-  // The session controls sit under the header, not in it: they are the
-  // thread's live state rather than its identity, and they grow tall.
-  const panel = renderSessionPanel(t);
-  if (panel) head.appendChild(panel);
+  // The mode control moved to the composer and the session controls to
+  // their own lane. What stays here is the thread's identity.
+  renderModeControl(t);
+  renderSessionStrip(t);
 }
 
 $("thread-new").addEventListener("click", () => {

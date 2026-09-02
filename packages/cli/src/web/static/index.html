@@ -60,6 +60,10 @@
           <!-- What the selected thread is and where it stands, above the
                conversation — the header a tracker puts on an issue. -->
           <div id="thread-header" class="thread-header"></div>
+          <!-- The session lane. The header says what the thread IS; this says
+               what is happening in it right now. They were one block and the
+               identity kept getting pushed off the top by controls. -->
+          <div id="session-strip" class="session-strip"></div>
           <div id="feed" class="feed" aria-live="polite"></div>
           <form id="composer">
             <div class="row">
@@ -73,6 +77,9 @@
               <select id="msg-target" title="redirect target">
                 <option value="">to: everyone</option>
               </select>
+              <!-- Your agent's mode sits where you act, the way a document
+                   editor keeps Editing/Suggesting/Viewing by the page. -->
+              <div id="composer-mode" class="composer-mode" hidden></div>
             </div>
             <div class="row">
               <textarea id="msg-body" rows="2"
