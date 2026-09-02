@@ -10,6 +10,21 @@ on:
   pull_request:
 
 jobs:
+  # The repo has had eslint and an `npm run lint` script all along, and CI
+  # never ran either. A lint error sat on main unnoticed as a result (#210).
+  # One platform is enough for a static check, and it gates: a lint error is
+  # not a platform difference, so there is nothing here to report-but-allow.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
   test:
     strategy:
       fail-fast: false

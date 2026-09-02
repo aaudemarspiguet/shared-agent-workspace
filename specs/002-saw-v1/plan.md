@@ -168,6 +168,18 @@ jointly-approved PR.
 | 3 | US1 identity and FR-008 scopes | Widens threads from project scope to the full scope set |
 | 4 | US2 journals, then US3–US6 in stated priority | — |
 
+Two phases were added after this table was first written and are recorded
+here so the sequencing is complete:
+
+| Phase | Content | Gate |
+|---|---|---|
+| 4b | Interface identity — thread-first navigation, the thread message pane, the developer console (FR-045, FR-047) | Needs phase 3. **Gates T154**: session controls attach to this navigation, so building them first means building them twice. |
+| 6 | US9 — auto mode, sessions, companions, plain speech | **Second joint PR gate.** The session vocabulary is a `packages/shared` change, so it needs the frozen-package approval exactly as phase 2 did. |
+
+Phase 6 numbering follows `tasks.md`, where phase 4b and phase 6 were both
+inserted after phase 5 already existed. The order of work is phase 4b, then
+5, then 6 — not the numeric order.
+
 ## Complexity Tracking
 
 | Item | Why needed | Simpler alternative rejected because |
