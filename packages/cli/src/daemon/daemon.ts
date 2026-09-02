@@ -34,13 +34,17 @@ export interface DaemonEvent {
     | "claim_result"
     | "connection"
     | "threads"
-    | "handoff";
+    | "handoff"
+    | "session"
+    | "wake";
   message?: StoredMessage;
   presence?: PresenceFrame;
   pause?: PauseStateFrame;
   claim?: ClaimResultFrame;
   connected?: boolean;
   handoff?: import("@saw/shared").StoredHandoff;
+  session?: import("@saw/shared").StoredSession;
+  wake?: import("@saw/shared").WakeFrame;
 }
 
 /** A binding decision waiting for this member's answer (T129). */
@@ -108,6 +112,19 @@ export interface DaemonOptions {
    * serves the relay on a local port, and the daemon dials that port.
    */
   relayWsUrl?: string;
+  /**
+   * How a wake starts a run in the member's coding tool (FR-054).
+   *
+   * Required, and deliberately so. This used to default to the real Claude
+   * Code adapter with a comment saying tests inject a fake — and the shared
+   * integration harness never did, so the whole suite spawned real headless
+   * `claude` runs on the developer's own account. It surfaced on Windows,
+   * where a live process's working directory cannot be removed, as an EBUSY
+   * on teardown in four tests that never mention waking. A default that
+   * reaches for the real world is not a default a test can opt out of by
+   * accident, so there is no longer one: every caller states its adapter.
+   */
+  wakeAdapter: import("./wake.js").WakeAdapter;
   root: string;
   clientName?: string;
   /** Cap on unsent runs held in .saw/log-spool.jsonl. Tests set it small. */
@@ -132,6 +149,7 @@ export class Daemon {
   private subscribers = new Set<(event: DaemonEvent) => void>();
   private pendingNotices: ClaimNotice[] = [];
   private pendingBindings: PendingBinding[] = [];
+  private wakeAdapter?: import("./wake.js").WakeAdapter;
   /** The last error frame from the relay. It names a refused connection. */
   private lastRelayError: ErrorFrame | undefined;
   /** Set by `start` while it waits. A refused credential ends the wait. */
@@ -151,6 +169,7 @@ export class Daemon {
     this.runContext = new RunContext(config.github_username);
     this.logSpool = new LogSpool(options.root, options.logSpoolCapacity);
     this.pendingBindings = readState(options.root).pending_bindings ?? [];
+    this.wakeAdapter = options.wakeAdapter;
 
     this.client = new RelayClient(
       {
@@ -200,6 +219,19 @@ export class Daemon {
         onThreadRef: (binding) => {
           this.state.addThreadRef(binding);
           this.emit({ kind: "threads" });
+        },
+        onSession: (session) => {
+          this.state.addSession(session);
+          this.emit({ kind: "session", session });
+        },
+        onAutoMode: (frame) => {
+          if (frame.member === this.config.github_username) {
+            this.state.setMyAutoMode(frame.thread_id, frame.enabled);
+          }
+          this.emit({ kind: "threads" });
+        },
+        onWake: (frame) => {
+          void this.handleWake(frame);
         },
         onHandoff: (handoff) => {
           this.state.addHandoff(handoff);
@@ -333,6 +365,89 @@ export class Daemon {
     const before = this.pendingBindings.length;
     this.pendingBindings = this.pendingBindings.filter((b) => b.thread_id !== threadId);
     if (this.pendingBindings.length !== before) this.persistBindings();
+  }
+
+  /**
+   * Honor one wake (T151/T152). Pause wins first; then the FR-028 cap -
+   * ONE wake-started run at a time on this machine, others queue, at most
+   * one queued per thread. The adapter hands the run to the coding tool;
+   * the run's own hooks do the rest (injection in, log out).
+   */
+  private wakeInFlight = false;
+  private wakeQueue: import("@saw/shared").WakeFrame[] = [];
+
+  private async handleWake(frame: import("@saw/shared").WakeFrame): Promise<void> {
+    if (this.pauseMirror.ownPaused) return;
+    if (!this.wakeAdapter || !this.wakeAdapter.supportsWake()) return;
+    if (this.wakeInFlight) {
+      const queuedForThread = this.wakeQueue.some((w) => w.thread_id === frame.thread_id);
+      if (!queuedForThread) this.wakeQueue.push(frame);
+      return;
+    }
+    this.wakeInFlight = true;
+    this.emit({ kind: "wake", wake: frame });
+    try {
+      const title = frame.thread_id
+        ? this.state.threadById(frame.thread_id)?.title ?? frame.thread_id
+        : "the room";
+      const outcome = await this.wakeAdapter.startRun(
+        {
+          threadId: frame.thread_id,
+          threadTitle: title,
+          reason: frame.reason,
+          sessionId: frame.session_id
+        },
+        this.root
+      );
+      if (!outcome.ok) {
+        const at = new Date().toISOString();
+        await this.runStopSystem({
+          started_at: at,
+          ended_at: at,
+          what: { tools_used: {} },
+          why_trigger: `wake failed: ${outcome.message ?? "the coding tool did not start"}`,
+          ...(frame.thread_id ? { thread_id: frame.thread_id } : {})
+        });
+      }
+    } finally {
+      this.wakeInFlight = false;
+      const next = this.wakeQueue.shift();
+      if (next) void this.handleWake(next);
+    }
+  }
+
+  /** Auto mode and session passthroughs (spec 002 US9, human acts). */
+  autoModeSet(threadId: string, enabled: boolean): void {
+    this.client.autoModeSet(threadId, enabled);
+    this.state.setMyAutoMode(threadId, enabled);
+  }
+
+  sessionReady(threadId: string, task?: string, maxTurns?: number): void {
+    this.client.sessionReady(threadId, task, maxTurns);
+  }
+
+  sessionEnd(sessionId: string): void {
+    this.client.sessionEnd(sessionId);
+  }
+
+  convergePropose(
+    sessionId: string,
+    summary: string,
+    refs: { kind: "branch" | "commit"; value: string }[]
+  ): void {
+    this.client.convergePropose(sessionId, summary, refs);
+  }
+
+  convergeApprove(sessionId: string): void {
+    this.client.convergeApprove(sessionId);
+  }
+
+  claimApprove(threadId: string): void {
+    this.client.claimApprove(threadId);
+  }
+
+  sessions(): import("@saw/shared").StoredSession[] {
+    return this.state.sessions();
   }
 
   /** Set this member's own mode on a thread (spec 002 T118/T121). */

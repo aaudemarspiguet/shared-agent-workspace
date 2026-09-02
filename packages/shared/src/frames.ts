@@ -240,6 +240,13 @@ export interface ClaimResultFrame {
   thread_id?: string;
   granted: boolean;
   claimed_by: string;
+  /**
+   * The claim's state after this verdict (spec 002 T155). Authoritative:
+   * a mirror applies it when present. Absent from pre-phase-6 relays.
+   * Needed because claim_approve is a frame, not a message - without this
+   * the mirrors would never hear the conclusion.
+   */
+  state?: "open" | "claimed" | "handed_off" | "done_proposed" | "done";
 }
 export interface LogOkFrame {
   kind: "log_ok";

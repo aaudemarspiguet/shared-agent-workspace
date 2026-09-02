@@ -65,6 +65,44 @@ export function registerThreadTools(server: McpServer, root: string): void {
   );
 
   server.registerTool(
+    "session_propose_done",
+    {
+      description:
+        "Propose that your live session's task is finished. A human must " +
+        "approve before anything concludes - your proposal never closes work " +
+        "by itself.",
+      inputSchema: {
+        session_id: z.string().min(1).max(26).describe("The session, from workspace_status."),
+        summary: z
+          .string()
+          .min(1)
+          .max(2000)
+          .describe("Plain text: what was done and why it is complete."),
+        refs: z
+          .array(z.object({ kind: z.enum(["branch", "commit"]), value: z.string().min(1) }))
+          .max(10)
+          .optional()
+          .describe("The branches or commits carrying the work.")
+      }
+    },
+    async (args: {
+      session_id: string;
+      summary: string;
+      refs?: { kind: "branch" | "commit"; value: string }[];
+    }) => {
+      const gate = await agentGate(root);
+      if (gate) return gate;
+      const res = await daemonCall(root, "/api/session/propose", {
+        method: "POST",
+        body: { session_id: args.session_id, summary: args.summary, refs: args.refs ?? [] }
+      });
+      if (!res) return errorResult("not_connected", NOT_RUNNING);
+      if (res.status !== 200) return mapDaemonError(res.status, res.json);
+      return jsonResult(res.json);
+    }
+  );
+
+  server.registerTool(
     "thread_handoff",
     {
       description:

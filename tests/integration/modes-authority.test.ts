@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { agentGate, renderContext, writeDaemonInfo, type InjectResponse } from "@saw/cli";
 import {
   apiPost,
+  expectNoWakes,
   startWeb,
   twoMemberWorkspace,
   waitFor,
@@ -98,10 +99,12 @@ describe("binding decisions (T128, T129, T131)", () => {
       "the decision to reach bob"
     );
 
-    // SC-021: zero runs, zero cursor movement on bob's machine.
+    // SC-021: zero runs, zero cursor movement on bob's machine — and zero
+    // runs asked for, which is the observable the log alone cannot give.
     const logs = await ws.bob.daemon.log({ member: "me" });
     expect(logs.entries).toEqual([]);
     expect(ws.bob.daemon.cursor.value).toBe(0);
+    expectNoWakes(ws.bob);
 
     // The decision is surfaced with the settles-not-directs contract, and
     // repeats across an acknowledged injection (T129).
