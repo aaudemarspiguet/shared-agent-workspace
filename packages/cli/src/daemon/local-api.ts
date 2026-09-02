@@ -14,6 +14,24 @@ import { isTunnelAddress } from "../tunnel.js";
 
 const MAX_BODY_BYTES = 256_000;
 
+/**
+ * Refuse a write that needs the relay, when the relay is not there.
+ *
+ * Every one of these routes hands its work to a `RelayClient` method that
+ * begins `if (!this.connected) return;` — the write is dropped and nothing
+ * is returned to say so. Answering 200 on top of that told the member their
+ * control worked when it had done nothing at all: the approve button that
+ * looked dead, the readiness that never started a session. `/api/post`
+ * already guards this way; these routes simply never did.
+ *
+ * Returns true when it has answered, so the caller stops.
+ */
+function refuseWithoutRelay(daemon: Daemon, res: ServerResponse): boolean {
+  if (daemon.connected) return false;
+  respond(res, 503, errorBody("not_connected", "the relay is not connected"));
+  return true;
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -277,6 +295,7 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "thread_id and mode are required"));
         return true;
       }
+      if (refuseWithoutRelay(daemon, res)) return true;
       daemon.setThreadMode(body.thread_id, mode);
       respond(res, 200, { ok: true, thread_id: body.thread_id, mode });
       return true;
@@ -293,6 +312,7 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "thread_id and enabled are required"));
         return true;
       }
+      if (refuseWithoutRelay(daemon, res)) return true;
       daemon.autoModeSet(body.thread_id, body.enabled);
       respond(res, 200, { ok: true });
       return true;
@@ -308,6 +328,7 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "thread_id is required"));
         return true;
       }
+      if (refuseWithoutRelay(daemon, res)) return true;
       daemon.sessionReady(body.thread_id, body.task, body.max_turns);
       respond(res, 200, { ok: true });
       return true;
@@ -319,6 +340,7 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "session_id is required"));
         return true;
       }
+      if (refuseWithoutRelay(daemon, res)) return true;
       daemon.sessionEnd(body.session_id);
       respond(res, 200, { ok: true });
       return true;
@@ -334,6 +356,7 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "session_id and summary are required"));
         return true;
       }
+      if (refuseWithoutRelay(daemon, res)) return true;
       daemon.convergePropose(body.session_id, body.summary, body.refs ?? []);
       respond(res, 200, { ok: true });
       return true;
@@ -345,6 +368,7 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "session_id is required"));
         return true;
       }
+      if (refuseWithoutRelay(daemon, res)) return true;
       daemon.convergeApprove(body.session_id);
       respond(res, 200, { ok: true });
       return true;
@@ -356,6 +380,7 @@ export async function handleApiRequest(
         respond(res, 400, errorBody("invalid_input", "thread_id is required"));
         return true;
       }
+      if (refuseWithoutRelay(daemon, res)) return true;
       daemon.claimApprove(body.thread_id);
       respond(res, 200, { ok: true });
       return true;
@@ -380,6 +405,7 @@ export async function handleApiRequest(
           respond(res, 400, errorBody("invalid_input", "thread_id, to, and tip_ref are required"));
           return true;
         }
+        if (refuseWithoutRelay(daemon, res)) return true;
         daemon.handoffPropose({
           thread_id: body.thread_id,
           to: body.to,
@@ -399,6 +425,7 @@ export async function handleApiRequest(
         }
         const toState =
           body.action === "accept" ? "accepted" : body.action === "decline" ? "declined" : "withdrawn";
+        if (refuseWithoutRelay(daemon, res)) return true;
         daemon.handoffResolve(body.handoff_id, toState);
         respond(res, 200, { ok: true });
         return true;

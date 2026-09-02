@@ -202,3 +202,56 @@ describe("the session surface (T154)", () => {
     }
   });
 });
+
+describe("a control refuses rather than lying when the relay is gone", () => {
+  // The bug this pins: every one of these routes hands its work to a client
+  // method beginning `if (!this.connected) return;`, then answered 200 on
+  // top of the dropped write. On the surface that was an approve button
+  // that looked dead and a readiness that never started a session — the
+  // member is told it worked, and nothing happened. Proven live on
+  // 2026-09-02: all three of the first routes returned {"ok":true} for a
+  // thread id that does not even exist.
+  it("answers 503 on every relay-bound write instead of a false success", async () => {
+    workspace = await twoMemberWorkspace();
+    const web = await startWeb(workspace.alice);
+    const dead = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    try {
+      const threadId = await openThread(web, "the relay is about to go away");
+
+      await workspace.relay.close();
+      await waitFor(async () => {
+        const h = (await apiGet(web, "/api/health")).json as { relay_connected: boolean };
+        return h.relay_connected === false;
+      }, "the daemon to notice the relay is gone");
+
+      const writes: { path: string; body: Record<string, unknown> }[] = [
+        { path: "/api/claim/approve", body: { thread_id: threadId } },
+        { path: "/api/auto-mode", body: { thread_id: threadId, enabled: true } },
+        { path: "/api/session/ready", body: { thread_id: threadId, task: "anything" } },
+        { path: "/api/session/end", body: { session_id: dead } },
+        { path: "/api/session/approve", body: { session_id: dead } },
+        { path: "/api/session/propose", body: { session_id: dead, summary: "anything" } },
+        { path: "/api/thread/mode", body: { thread_id: threadId, mode: "edit" } },
+        {
+          path: "/api/handoff",
+          body: {
+            action: "propose",
+            thread_id: threadId,
+            to: "bob",
+            tip_ref: { kind: "branch", value: "alice/x" }
+          }
+        },
+        { path: "/api/handoff", body: { action: "accept", handoff_id: dead } }
+      ];
+
+      for (const write of writes) {
+        const res = await apiPost(web, write.path, write.body);
+        const answer = res.json as { error?: { code?: string } };
+        expect(res.status, `${write.path} reported success it did not achieve`).toBe(503);
+        expect(answer.error?.code, `${write.path} must name the real reason`).toBe("not_connected");
+      }
+    } finally {
+      await web.close();
+    }
+  });
+});
