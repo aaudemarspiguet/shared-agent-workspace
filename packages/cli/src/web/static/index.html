@@ -7,7 +7,7 @@
        The page presents it on every call. A page on another origin cannot
        read this document, so it cannot get the token. -->
   <meta name="saw-token" content="__SAW_LOCAL_TOKEN__" />
-  <title>SAW — shared room</title>
+  <title>SAW — shared workspace</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -25,14 +25,19 @@
     </div>
   </header>
 
+  <!-- Two places, the way a tracker and its settings are two places (FR-045,
+       FR-047). Work lives in Threads. Everything about the machine — the
+       connection, the integration, the directory — lives in Console. -->
   <nav id="tabs">
-    <button class="tab active" data-tab="room">Room</button>
-    <button class="tab" data-tab="log">Work log</button>
+    <button class="tab active" data-tab="room">Threads</button>
+    <button class="tab" data-tab="console">Console</button>
   </nav>
 
   <main>
     <section id="room" class="panel active">
       <div class="room-layout">
+        <!-- The primary navigation (T145, FR-045). Not a sidebar beside the
+             feed: the feed is one of the views listed inside it. -->
         <aside id="threads" aria-label="threads">
           <div class="threads-head">
             <span>Threads</span>
@@ -47,45 +52,77 @@
             </select>
             <button id="thread-create" type="submit">Open</button>
           </form>
+          <div id="thread-filters" class="thread-filters" role="group"
+            aria-label="filter threads by state"></div>
           <div id="thread-list" role="listbox"></div>
         </aside>
         <div class="room-main">
+          <!-- What the selected thread is and where it stands, above the
+               conversation — the header a tracker puts on an issue. -->
+          <div id="thread-header" class="thread-header"></div>
           <div id="feed" class="feed" aria-live="polite"></div>
-      <form id="composer">
-        <div class="row">
-          <select id="msg-type" title="message type">
-            <option value="status">status</option>
-            <option value="intent">intent</option>
-            <option value="question">question</option>
-            <option value="decision">decision</option>
-            <option value="handoff">handoff</option>
-          </select>
-          <select id="msg-target" title="redirect target">
-            <option value="">to: everyone</option>
-          </select>
-        </div>
-        <div class="row">
-          <textarea id="msg-body" rows="2"
-            placeholder="Write to the room as yourself. Agents see it on their next turn."></textarea>
-          <button id="send-btn" type="submit">Send</button>
-        </div>
-        <div id="composer-error" class="error" hidden></div>
-      </form>
+          <form id="composer">
+            <div class="row">
+              <select id="msg-type" title="message type">
+                <option value="status">status</option>
+                <option value="intent">intent</option>
+                <option value="question">question</option>
+                <option value="decision">decision</option>
+                <option value="handoff">handoff</option>
+              </select>
+              <select id="msg-target" title="redirect target">
+                <option value="">to: everyone</option>
+              </select>
+            </div>
+            <div class="row">
+              <textarea id="msg-body" rows="2"
+                placeholder="Write to the room as yourself. Agents see it on their next turn."></textarea>
+              <button id="send-btn" type="submit">Send</button>
+            </div>
+            <div id="composer-error" class="error" hidden></div>
+          </form>
         </div>
       </div>
     </section>
 
-    <section id="log" class="panel">
-      <div class="log-controls">
-        <select id="log-member">
-          <option value="any">both members</option>
-          <option value="me">me</option>
-          <option value="peer">peer</option>
-        </select>
-        <input id="log-work-item" type="text" placeholder="filter by work item" />
-        <button id="log-refresh">Refresh</button>
+    <!-- The developer console (T147, FR-047): monitor and configure. -->
+    <section id="console" class="panel">
+      <div class="console-grid">
+        <div class="card">
+          <h2>Connection</h2>
+          <div id="console-connection" class="rows"></div>
+        </div>
+        <div class="card">
+          <h2>Repository</h2>
+          <div id="console-repo" class="rows"></div>
+        </div>
+        <div class="card">
+          <h2>Agent integration</h2>
+          <div id="console-integration" class="rows"></div>
+        </div>
+        <div class="card">
+          <h2>Members</h2>
+          <div id="console-members" class="rows"></div>
+        </div>
+        <div class="card wide">
+          <h2>Your modes</h2>
+          <div id="console-modes" class="rows"></div>
+        </div>
       </div>
-      <div id="log-list" class="log-list"></div>
+
+      <div class="card wide">
+        <h2>Work log</h2>
+        <div class="log-controls">
+          <select id="log-member">
+            <option value="any">both members</option>
+            <option value="me">me</option>
+            <option value="peer">peer</option>
+          </select>
+          <input id="log-work-item" type="text" placeholder="filter by work item" />
+          <button id="log-refresh">Refresh</button>
+        </div>
+        <div id="log-list" class="log-list"></div>
+      </div>
     </section>
   </main>
 

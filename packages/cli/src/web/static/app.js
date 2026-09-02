@@ -32,6 +32,11 @@ const state = {
   // The thread is the organizing unit of the page (spec 002, FR-045).
   // mode is "all", "broadcasts", or "thread"; threadId applies to "thread".
   selection: { mode: "all", threadId: "" },
+  // Which thread states the navigation lists, the way a tracker filters
+  // its issue list. "all", or one of open/done/archived.
+  threadFilter: "all",
+  // The console's last read of /api/health. Null until the tab is opened.
+  health: null,
   // ThreadView rows by id, from /api/status. Titles, claims, and counts.
   threadsById: new Map()
 };
@@ -267,72 +272,125 @@ function renderStatus(status) {
   target.value = current;
 
   renderThreads(status.threads || []);
+  renderThreadHeader();
+  // A status arrives on every event. Redraw the console only while it is
+  // the panel on screen.
+  const consolePanel = $("console");
+  if (consolePanel && consolePanel.classList.contains("active")) renderConsole();
 }
 
-// ---- Thread list (spec 002 T113, FR-045) ----
+// ---- Thread navigation and the thread header (T145/T146, FR-045) ----
+
+/** How a claim reads to a person. Claims are assignees (FR-045). */
+function claimLabel(thread) {
+  if (thread.claim_state === "open" || !thread.claimed_by) return "";
+  return thread.claimed_by;
+}
+
+/** The word next to the assignee, when the claim is not simply held. */
+function claimNote(thread) {
+  if (thread.claim_state === "done") return "done";
+  if (thread.claim_state === "done_proposed") return "awaiting approval";
+  if (thread.claim_state === "handed_off") return "handoff open";
+  return "";
+}
+
+/** One assignee chip: initial and name, the way a tracker shows an owner. */
+function assigneeChip(who) {
+  const chip = el("span", "assignee");
+  chip.appendChild(el("span", "avatar", who.slice(0, 1).toUpperCase()));
+  chip.appendChild(el("span", "", who));
+  chip.title = "assignee — holds the claim on this thread";
+  return chip;
+}
+
+/** The state chips above the list. A tracker filters by state; so does this. */
+function renderThreadFilters(threads) {
+  const box = $("thread-filters");
+  box.textContent = "";
+  const counts = { all: threads.length, open: 0, done: 0, archived: 0 };
+  threads.forEach((t) => {
+    if (counts[t.state] !== undefined) counts[t.state] += 1;
+  });
+  ["all", "open", "done", "archived"].forEach((name) => {
+    // A state nobody is using is noise. "all" and "open" always show, so
+    // the control never empties out.
+    if (counts[name] === 0 && name !== "all" && name !== "open") return;
+    const chip = el("button", "chip" + (state.threadFilter === name ? " on" : ""));
+    chip.type = "button";
+    chip.textContent = name + " " + counts[name];
+    chip.addEventListener("click", () => {
+      state.threadFilter = name;
+      renderThreads(Array.from(state.threadsById.values()));
+    });
+    box.appendChild(chip);
+  });
+}
 
 /**
- * The sidebar is the primary navigation: threads with visible states and
- * claims that read like assignees. The flat feed stays as a view.
+ * The primary navigation: threads with visible states and claims that read
+ * like assignees (T145, FR-045). The flat feed is not the structure here —
+ * it is the first entry in this list, one view among the threads.
  */
 function renderThreads(threads) {
   state.threadsById = new Map(threads.map((t) => [t.id, t]));
   const list = $("thread-list");
   list.textContent = "";
+  renderThreadFilters(threads);
 
-  const row = (label, mode, threadId, extra) => {
+  const row = (label, mode, threadId, build) => {
     const div = el("div", "thread-row");
     div.setAttribute("role", "option");
     const selected =
       state.selection.mode === mode &&
       (mode !== "thread" || state.selection.threadId === threadId);
     if (selected) div.classList.add("selected");
+    div.setAttribute("aria-selected", selected ? "true" : "false");
     div.appendChild(el("span", "thread-title", label));
-    if (extra) div.appendChild(extra);
+    if (build) build(div);
     div.addEventListener("click", () => {
       state.selection = { mode, threadId: threadId || "" };
       renderThreads(Array.from(state.threadsById.values()));
+      renderThreadHeader();
       renderFeed();
     });
     return div;
   };
 
-  list.appendChild(row("All activity", "all", ""));
-  list.appendChild(row("Broadcasts", "broadcasts", ""));
-  threads
+  // The saved views. A flat feed stays reachable, as a view over threads.
+  const views = el("div", "thread-views");
+  views.appendChild(row("All activity", "all", ""));
+  views.appendChild(row("Broadcasts", "broadcasts", ""));
+  list.appendChild(views);
+
+  const shown = threads
     .slice()
-    .sort((a, b) => (b.message_count || 0) - (a.message_count || 0))
-    .forEach((t) => {
-      const meta = el("span", "thread-meta");
-      meta.appendChild(el("span", "badge " + t.type, t.type.replace("_", " ")));
-      if (t.state !== "open") meta.appendChild(el("span", "badge state", t.state));
-      if (t.type === "work_item" && t.claimed_by) {
-        meta.appendChild(el("span", "assignee", t.claimed_by));
-      }
-      if (t.message_count) meta.appendChild(el("span", "count", String(t.message_count)));
-      // Your own mode on the thread (spec 002 T121). It restrains your own
-      // agent only; there is no control for the other member's, by design.
-      const mode = document.createElement("select");
-      mode.className = "mode-select";
-      mode.title = "your agent's mode on this thread (yours only)";
-      ["view", "comment", "edit"].forEach((m) => mode.appendChild(new Option(m, m)));
-      mode.value = t.my_mode || "comment";
-      mode.addEventListener("click", (ev) => ev.stopPropagation());
-      mode.addEventListener("change", async (ev) => {
-        ev.stopPropagation();
-        try {
-          await api("/api/thread/mode", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ thread_id: t.id, mode: mode.value })
-          });
-        } catch {
-          showComposerError(DAEMON_DOWN);
-        }
-      });
-      meta.appendChild(mode);
-      list.appendChild(row(t.title, "thread", t.id, meta));
+    .filter((t) => state.threadFilter === "all" || t.state === state.threadFilter)
+    // Open work first, then by how much is happening in it.
+    .sort((a, b) => {
+      const rank = (t) => (t.state === "open" ? 0 : t.state === "done" ? 1 : 2);
+      if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      return (b.message_count || 0) - (a.message_count || 0);
     });
+
+  if (shown.length === 0) {
+    list.appendChild(el("div", "empty", "No threads in this filter."));
+  }
+
+  shown.forEach((t) => {
+    list.appendChild(
+      row(t.title, "thread", t.id, (div) => {
+        const meta = el("span", "thread-meta");
+        if (t.state !== "open") meta.appendChild(el("span", "badge state", t.state));
+        const who = claimLabel(t);
+        if (who) meta.appendChild(assigneeChip(who));
+        const note = claimNote(t);
+        if (note) meta.appendChild(el("span", "badge claim-note", note));
+        if (t.message_count) meta.appendChild(el("span", "count", String(t.message_count)));
+        div.appendChild(meta);
+      })
+    );
+  });
 
   // The selected thread can disappear (archived elsewhere). Fall back.
   if (
@@ -340,8 +398,72 @@ function renderThreads(threads) {
     !state.threadsById.has(state.selection.threadId)
   ) {
     state.selection = { mode: "all", threadId: "" };
+    renderThreadHeader();
     renderFeed();
   }
+}
+
+/**
+ * The header above the conversation: what this thread is, where it stands,
+ * who holds it, and the one control that is the member's own to set.
+ *
+ * The mode control lives here rather than on every list row. It is per
+ * thread, it applies to the member's own agent only, and a dropdown on every
+ * row of the navigation reads as a bulk-edit affordance it is not.
+ */
+function renderThreadHeader() {
+  const head = $("thread-header");
+  head.textContent = "";
+
+  if (state.selection.mode !== "thread") {
+    const label =
+      state.selection.mode === "broadcasts"
+        ? "Broadcasts — messages sent to no single thread"
+        : "All activity — every thread, newest last";
+    head.appendChild(el("span", "thread-head-title", label));
+    return;
+  }
+
+  const t = state.threadsById.get(state.selection.threadId);
+  if (!t) return;
+
+  head.appendChild(el("span", "thread-head-title", t.title));
+  const meta = el("span", "thread-head-meta");
+  meta.appendChild(el("span", "badge " + t.type, t.type.replace("_", " ")));
+  meta.appendChild(el("span", "badge state", t.state));
+  const who = claimLabel(t);
+  if (who) meta.appendChild(assigneeChip(who));
+  else if (t.type === "work_item") meta.appendChild(el("span", "assignee none", "unassigned"));
+  const note = claimNote(t);
+  if (note) meta.appendChild(el("span", "badge claim-note", note));
+  (t.refs || []).forEach((binding) => {
+    const r = binding.ref || binding;
+    if (r && r.kind) meta.appendChild(el("span", "ref", r.kind + ":" + r.value));
+  });
+  head.appendChild(meta);
+
+  // Your own mode on the thread (T121). It restrains your own agent only;
+  // there is no control for the other member's, by design.
+  const modeBox = el("span", "thread-head-mode");
+  modeBox.appendChild(el("span", "mode-label", "my agent:"));
+  const mode = document.createElement("select");
+  mode.className = "mode-select";
+  mode.title = "your agent's mode on this thread (yours only)";
+  ["view", "comment", "edit"].forEach((m) => mode.appendChild(new Option(m, m)));
+  mode.value = t.my_mode || "comment";
+  mode.addEventListener("change", async () => {
+    try {
+      await api("/api/thread/mode", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ thread_id: t.id, mode: mode.value })
+      });
+    } catch {
+      showComposerError(DAEMON_DOWN);
+    }
+  });
+  modeBox.appendChild(mode);
+  head.appendChild(modeBox);
 }
 
 $("thread-new").addEventListener("click", () => {
@@ -596,7 +718,153 @@ $("pause-btn").addEventListener("click", async () => {
   }
 });
 
-// ---- Tabs and log browser (T043) ----
+// ---- The developer console (T147, FR-047) ----
+//
+// Monitor and configure: is the connection up and how does it reach the
+// relay, is this repository's agent integration actually wired, who is in
+// the workspace, and what has this member's agent been allowed to do.
+// Every value comes from the daemon. Nothing here is inferred from a
+// hopeful default, because a console that reports health it did not measure
+// is worse than no console at all.
+
+/** One label/value line in a console card. `tone` paints the value. */
+function consoleRow(label, value, tone) {
+  const row = el("div", "row-item");
+  row.appendChild(el("span", "row-label", label));
+  row.appendChild(el("span", "row-value" + (tone ? " " + tone : ""), value));
+  return row;
+}
+
+/** Fill one card, or say plainly that the answer is not available. */
+function fillCard(id, build) {
+  const box = $(id);
+  box.textContent = "";
+  build(box);
+}
+
+function renderConsole() {
+  const status = state.status;
+  const health = state.health;
+
+  fillCard("console-connection", (box) => {
+    box.appendChild(
+      status && status.relay_connected
+        ? consoleRow("Relay", "connected", "good")
+        : consoleRow("Relay", "not connected", "bad")
+    );
+    box.appendChild(
+      state.socketOpen
+        ? consoleRow("Daemon", "saw up is serving this page", "good")
+        : consoleRow("Daemon", "no live channel", "bad")
+    );
+    if (health) {
+      box.appendChild(
+        consoleRow(
+          "Transport",
+          health.relay_transport === "tunnel" ? "tunnel (iroh ticket)" : "direct address"
+        )
+      );
+      const pending = health.log_spool_pending || 0;
+      box.appendChild(
+        consoleRow(
+          "Run log spool",
+          pending === 0 ? "empty" : pending + " run(s) held for reconnect",
+          pending === 0 ? "good" : "warn"
+        )
+      );
+    }
+    if (status) {
+      box.appendChild(
+        consoleRow("Your agent", status.paused ? "paused" : "running", status.paused ? "warn" : "good")
+      );
+    }
+  });
+
+  fillCard("console-repo", (box) => {
+    if (!health) {
+      box.appendChild(consoleRow("Repository", "not read yet"));
+      return;
+    }
+    box.appendChild(consoleRow("Workspace", health.workspace || "—"));
+    box.appendChild(consoleRow("Remote", health.repo_remote || "—"));
+    box.appendChild(consoleRow("Checkout", health.repo_root || "—"));
+    // The prefix is the boundary: this member may push only under it.
+    box.appendChild(consoleRow("Your branch prefix", health.branch_prefix || "—"));
+  });
+
+  fillCard("console-integration", (box) => {
+    if (!health || !health.integration) {
+      box.appendChild(consoleRow("Hooks", "not read yet"));
+      return;
+    }
+    const integration = health.integration;
+    box.appendChild(
+      integration.ok
+        ? consoleRow("Hooks", "all four wired to this checkout", "good")
+        : consoleRow("Hooks", "needs attention", "bad")
+    );
+    (integration.hooks || []).forEach((hook) => {
+      const value = !hook.wired
+        ? "not wired"
+        : hook.current
+          ? "wired"
+          : "wired to another checkout";
+      const tone = !hook.wired ? "bad" : hook.current ? "good" : "warn";
+      box.appendChild(consoleRow(hook.event, value, tone));
+    });
+    if (!integration.settings_readable) {
+      box.appendChild(
+        consoleRow("Settings file", "missing or unreadable — run saw up", "bad")
+      );
+    }
+    const path = el("div", "row-note", integration.settings_path || "");
+    box.appendChild(path);
+  });
+
+  fillCard("console-members", (box) => {
+    if (!status) {
+      box.appendChild(consoleRow("Members", "not read yet"));
+      return;
+    }
+    status.members.forEach((m) => {
+      const marks = [];
+      marks.push(m.online ? "online" : "offline");
+      if (m.paused) marks.push("paused");
+      if (m.github_username === status.me) marks.push("you");
+      box.appendChild(
+        consoleRow(m.github_username, marks.join(" · "), m.online ? "good" : "")
+      );
+    });
+  });
+
+  fillCard("console-modes", (box) => {
+    const threads = state.status ? state.status.threads || [] : [];
+    if (threads.length === 0) {
+      box.appendChild(consoleRow("Modes", "no threads yet"));
+      return;
+    }
+    // This member's own mode per thread, and nothing about the other
+    // member's: no member may set another's, and showing a control that
+    // cannot act would misrepresent the rule (FR-041, SC-016).
+    threads.forEach((t) => {
+      box.appendChild(consoleRow(t.title, t.my_mode || "comment"));
+    });
+  });
+}
+
+/** Read the console's own endpoint, then draw. Never throws at the caller. */
+async function loadConsole() {
+  try {
+    const res = await api("/api/health");
+    if (res.ok) state.health = await res.json();
+  } catch {
+    // The daemon is down. renderConsole says so from socket state alone.
+    state.health = null;
+  }
+  renderConsole();
+}
+
+// ---- Tabs and the work log (T043) ----
 
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -604,7 +872,12 @@ document.querySelectorAll(".tab").forEach((tab) => {
     document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
     tab.classList.add("active");
     $(tab.dataset.tab).classList.add("active");
-    if (tab.dataset.tab === "log") loadLog();
+    // The console reads live state, so it is read when it is opened rather
+    // than kept warm behind a hidden panel.
+    if (tab.dataset.tab === "console") {
+      void loadConsole();
+      void loadLog();
+    }
   });
 });
 
@@ -673,4 +946,5 @@ $("log-work-item").addEventListener("keydown", (e) => {
 // The composer stays off until the socket opens and the relay reports in.
 renderComposerState();
 renderPingButton();
+renderThreadHeader();
 connect();

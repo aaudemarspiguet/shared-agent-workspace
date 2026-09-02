@@ -204,9 +204,9 @@ Added after the founders locked the interface identity: thread-based
 navigation as the primary structure, chat inside a thread, the ticket link
 as one use case. These bind the surface tasks above to that identity.
 
-- [ ] T145 [P] Make the web app's primary navigation the thread list with visible states and claims-as-assignees, per FR-045; the flat feed becomes a view over threads (extends T113) (issue #201)
-- [ ] T146 [P] Inside a thread, render the message pane newest-last with presence and addressed messages as mentions, per FR-045 (extends T113) (issue #202)
-- [ ] T147 Frame the web app's non-thread pages as the developer console per FR-047: connection and tunnel state, hook and integration health per repository, modes, member directory (issue #203)
+- [x] T145 [P] Make the web app's primary navigation the thread list with visible states and claims-as-assignees, per FR-045; the flat feed becomes a view over threads (extends T113) (issue #201)
+- [x] T146 [P] Inside a thread, render the message pane newest-last with presence and addressed messages as mentions, per FR-045 (extends T113) (issue #202)
+- [x] T147 Frame the web app's non-thread pages as the developer console per FR-047: connection and tunnel state, hook and integration health per repository, modes, member directory (issue #203)
 
 > Sequencing (2026-09-01): phase 4b runs before T154. T154 attaches the
 > auto-mode toggle, readiness control, budget box and approve control to
