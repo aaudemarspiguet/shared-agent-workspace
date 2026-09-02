@@ -10,6 +10,7 @@ import {
   type SawConfig
 } from "../config.js";
 import { Daemon } from "../daemon/daemon.js";
+import { ClaudeWakeAdapter } from "../daemon/wake.js";
 import { displayRelay, isTunnelAddress, resolveRelay } from "../tunnel.js";
 import { launchFor } from "../launch.js";
 import { writeFileSync } from "node:fs";
@@ -249,7 +250,9 @@ export async function runUp(options: UpOptions): Promise<void> {
 
   let daemon: Daemon;
   try {
-    daemon = new Daemon({ root, relayWsUrl });
+    // The one place the real adapter is named. Every other caller is a
+    // test and says so; that is the point of the option being required.
+    daemon = new Daemon({ root, relayWsUrl, wakeAdapter: new ClaudeWakeAdapter() });
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error), EXIT_ENV_ERROR);
   }

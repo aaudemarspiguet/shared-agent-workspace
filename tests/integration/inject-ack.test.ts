@@ -1,7 +1,13 @@
 // The ack endpoint moves a persisted cursor. A bad value silences the member.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Daemon, startWebServer } from "@saw/cli";
-import { startWeb, twoMemberWorkspace, waitFor, type TestWorkspace } from "./helpers.js";
+import {
+  RecordingWakeAdapter,
+  startWeb,
+  twoMemberWorkspace,
+  waitFor,
+  type TestWorkspace
+} from "./helpers.js";
 
 describe("injection acknowledgement bounds (PR #54 review)", () => {
   let ws: TestWorkspace;
@@ -63,7 +69,10 @@ describe("injection acknowledgement bounds (PR #54 review)", () => {
     expect(persisted).toBeGreaterThan(0);
 
     // A second daemon on the same root: persisted cursor, nothing synced yet.
-    const restarted = new Daemon({ root: ws.bob.root });
+    const restarted = new Daemon({
+      root: ws.bob.root,
+      wakeAdapter: new RecordingWakeAdapter()
+    });
     try {
       expect(restarted.state.latestSeq()).toBe(0);
       expect(restarted.cursor.value).toBe(persisted);
