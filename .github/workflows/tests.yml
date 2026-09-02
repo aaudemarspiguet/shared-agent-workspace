@@ -1,7 +1,9 @@
-# T084: run the test suite on both platforms. The job reports and does not
-# gate: the Windows baseline has known failures (T081/T056, issues #98 and
-# #60), so a red Windows run is information, not a block. Flip
-# continue-on-error to false when the Windows baseline reaches green.
+# T084: run the test suite on both platforms, and both gate. Windows
+# reported without gating while its baseline had known failures (T081/T056);
+# that baseline has been honestly green since 2026-09-01 (quickstart-results,
+# #168), and a red run that reports as a pass is how a real failure hides —
+# the wake-adapter EBUSY (#214) was exactly that shape: invisible to CI, red
+# on the one machine that could see it.
 name: Tests
 
 on:
@@ -31,7 +33,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
