@@ -3,7 +3,7 @@
 **Feature**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md)
 **Date**: 2026-08-27
 
-This guide proves User Story 7 and User Story 8 end to end. It is a validation
+This guide proves User Stories 7, 8 and 9 end to end. It is a validation
 guide, not an implementation guide — the contracts are in
 [contracts/threads-and-modes.md](./contracts/threads-and-modes.md) and the
 entities are in [data-model.md](./data-model.md).
@@ -147,8 +147,89 @@ Across every scenario above, confirm the totals:
 - Zero runs of any member's agent started from another member's action.
 - Zero runs started without that member's own prompt.
 
-This is the v1 boundary. Continuous mode is deferred to v2 (FR-042(a)) and
-nothing in v1 may ship a path around it.
+This is the v1 boundary, as Scenarios A to H exercise it: outside a consented
+session, no agent runs itself and no member's action starts another member's
+agent.
+
+Auto mode is no longer deferred. It shipped in v1 under FR-050 and FR-042(a),
+where a session is authorised by each member's own standing consent for their
+own agent alone. That does not waive the boundary — it satisfies it — and
+Scenario I is where the satisfied form is checked. The property is unchanged
+and absolute in both: no path exists by which a member who has not given that
+consent has their agent started, their machine used, or their budget spent.
+
+## Scenario I — a consented session runs itself, and only then (US9, SC-025..SC-029)
+
+Scenarios A to H predate User Story 9. They validate threads, modes,
+authority and handoff; not one of them exercises auto mode, sessions, wakes,
+budgets, convergence, or the companion. Run this one too, or the phase 6
+stack ships across two machines unvalidated by any live scenario.
+
+Both members start with auto mode **off**, which is the shipped default.
+
+**Nobody's agent starts without their own consent.**
+
+1. Member A posts an ordinary message to a thread. Confirm A's own agent
+   wakes within one turn, and that **zero** runs start on B's machine.
+2. B's agent posts to the same thread. Confirm **zero** runs start on A's
+   machine. An agent's message wakes nobody (SC-025).
+3. A turns auto mode on for one thread; B leaves it off. Confirm this alone
+   starts no session and no run: consent is per member, and one side's
+   consent is not an agreement.
+
+**A session needs two yeses, and the readiness order does not matter.**
+
+4. Both members turn auto mode on for the thread and state the task.
+5. A declares readiness. Confirm no session starts on one readiness alone.
+6. B declares readiness. Confirm the session starts on the **second** ready,
+   and that it would have started the same way had B gone first.
+7. Confirm both agents take autonomous turns — at least three each — and
+   that every run sits on its own member's machine and budget (SC-026).
+
+**One side's consent is not the other's.**
+
+8. End the session. Turn auto mode off for B only, and start again with A
+   alone in auto mode. Confirm A's agent completes autonomous turns while
+   **zero** runs start on B's machine (SC-027).
+
+**The stopping controls actually stop it.**
+
+9. With a session live, B pauses their agent. Confirm the pause takes effect
+   at once and outranks auto mode — a paused member's agent takes no turn,
+   and their own typing does not resume it.
+10. Set a low turn budget and let a member reach it. Confirm the session
+    suspends rather than overrunning, and that the budget is enforced on the
+    member's own side as well as at the relay.
+11. Confirm **either** human can end the session, and that the record says
+    who ended it (FR-051).
+
+**A human concludes the work, not an agent.**
+
+12. Let an agent propose convergence. Confirm the proposal carries its
+    summary and refs, and that the session does **not** conclude on it.
+13. Confirm the proposal concludes only when its **own** member approves,
+    and that the other member cannot approve it (SC-029).
+14. Post a human-authored `decision` on a claim. Confirm it concludes in
+    that same post, with no second confirmation asked for.
+
+**The companion answers with the coding tool closed.**
+
+15. Close A's coding tool entirely. Leave `saw up` running.
+16. B asks a question on a thread, addressed to A.
+17. Confirm A's companion answers from the thread record, posting as itself
+    and attributed to A (SC-028).
+18. Confirm the companion performed **zero** claims, **zero** ref bindings,
+    and **zero** binding posts, and that the run appears once in the work
+    log.
+19. Have a real answer arrive during the grace period and confirm the
+    companion stays silent — a person answering is what it defers to.
+
+**The boundary still holds.**
+
+20. Repeat Scenario H's totals over this scenario: outside a session, zero
+    runs started from another member's action; inside one, every run traces
+    to its own member's standing consent, declared through their own
+    auto-mode control and readiness (FR-019, FR-042a).
 
 ---
 

@@ -21,5 +21,14 @@ push, so this table stops being the only record.
 
 ## Two-machine quickstart scenarios (T141)
 
-Not run yet. The eight scenarios run after Phase 4 lands, on two machines,
-and their outcome is recorded here.
+Not run yet. The nine scenarios run on two machines, and their outcome is
+recorded here. A scenario that was not run is recorded as not run, never as
+passed.
+
+Scenario I (a consented session runs itself, and only then) was added on
+2026-09-02. Scenarios A to H were written for User Stories 7 and 8 and all
+predate User Story 9: between them they never start a session, never wake an
+agent, never spend a turn budget, never propose a convergence and never ask
+the companion anything. The phase 6 stack landed on 2026-09-02, so without
+Scenario I this task would have reported a passing two-machine run while the
+newest half of v1 had never been exercised on two machines at all.
