@@ -9,6 +9,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { validatePost, type LogQuery } from "@saw/shared";
 import type { Daemon } from "./daemon.js";
 import { checkApiRequest, type LocalAuth } from "./local-auth.js";
+import { readIntegrationHealth } from "../hooks/health.js";
+import { isTunnelAddress } from "../tunnel.js";
 
 const MAX_BODY_BYTES = 256_000;
 
@@ -74,13 +76,25 @@ export async function handleApiRequest(
 
   try {
     if (req.method === "GET" && path === "/api/health") {
+      // The developer console reads this (FR-047, T147): connection and
+      // tunnel state, and the agent integration for this repository. Every
+      // field is something the daemon already knows or can read from disk —
+      // a console that guesses is worse than no console.
       respond(res, 200, {
         ok: true,
         member: daemon.config.github_username,
         relay_connected: daemon.connected,
         paused: daemon.pauseMirror.ownPaused,
         // Runs held for the next reconnect. Zero on a healthy daemon (T055).
-        log_spool_pending: daemon.logSpool.size
+        log_spool_pending: daemon.logSpool.size,
+        workspace: daemon.config.workspace_name,
+        repo_root: daemon.root,
+        repo_remote: daemon.config.repo_remote,
+        branch_prefix: daemon.config.branch_prefix,
+        // How this member reaches the relay. A ticket is the zero-config
+        // tunnel; anything else is a direct address.
+        relay_transport: isTunnelAddress(daemon.config.relay_url) ? "tunnel" : "direct",
+        integration: readIntegrationHealth(daemon.root)
       });
       return true;
     }
