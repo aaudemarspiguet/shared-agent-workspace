@@ -1,5 +1,6 @@
 // SAW room page logic. Talks only to the local daemon.
-/* global WebSocket, document, fetch, location, setTimeout, URLSearchParams, Option */
+/* global WebSocket, document, fetch, location, setTimeout, URLSearchParams, Option,
+   localStorage, Notification, window */
 
 // The run token (T057). The daemon writes it into this document when it
 // serves the page. Every call to the daemon presents it.
@@ -104,7 +105,12 @@ function el(tag, className, text) {
 }
 
 function renderMessage(m) {
-  const wrap = el("div", "msg" + (m.sender === state.me ? " mine" : ""));
+  // Addressed to this member: the message reads like a mention (FR-045).
+  const mention = m.target && m.target === state.me && m.sender !== state.me;
+  const wrap = el(
+    "div",
+    "msg" + (m.sender === state.me ? " mine" : "") + (mention ? " mention" : "")
+  );
   const head = el("div", "head");
   head.appendChild(el("span", "sender", m.sender));
   head.appendChild(el("span", "badge " + m.sender_kind, m.sender_kind));
@@ -417,6 +423,9 @@ function connect() {
       $("feed").textContent = "";
       state.seen.clear();
       state.feedItems = [];
+      // Who "me" is must be known before the replay renders, or no old
+      // message addressed to this member would read as a mention.
+      if (data.status) state.me = data.status.me;
       (data.messages || []).forEach(addMessage);
       (data.notices || []).forEach((n) => addItem("notice", n));
       renderStatus(data.status);
@@ -424,7 +433,12 @@ function connect() {
     }
     if (data.kind === "event") {
       const event = data.event || {};
-      if (event.kind === "message" && event.message) addMessage(event.message);
+      if (event.kind === "message" && event.message) {
+        addMessage(event.message);
+        // Only a LIVE arrival can ping. Snapshot replay never lands here,
+        // so a reconnect does not re-announce the whole backlog.
+        notifyPing(event.message);
+      }
       if (event.kind === "claim_result" && event.claim) {
         addItem("notice", event.claim);
       }
@@ -485,6 +499,83 @@ $("composer").addEventListener("submit", async (e) => {
   showComposerError(
     (answer.error && `${answer.error.code}: ${answer.error.message}`) || "post failed"
   );
+});
+
+// ---- Pings (FR-045: an addressed message can reach the member) ----
+
+// Two consents stack here, deliberately. The toggle is the member's own
+// preference, local to this browser. The permission is the browser's, and
+// asking for it needs a click — a page cannot ask idly. A ping shows only
+// when both say yes; the title badge needs neither, because a changed tab
+// title announces nothing outside the member's own tab bar.
+const PING_PREF = "saw-pings";
+const BASE_TITLE = document.title;
+let unseenPings = 0;
+
+function pingPref() {
+  try {
+    return localStorage.getItem(PING_PREF) === "on";
+  } catch {
+    return false;
+  }
+}
+
+function renderPingButton() {
+  const btn = $("ping-btn");
+  if (typeof Notification === "undefined") {
+    btn.hidden = true;
+    return;
+  }
+  if (Notification.permission === "denied") {
+    btn.textContent = "pings blocked";
+    btn.title = "the browser blocks notifications for this page; allow them in site settings";
+    btn.disabled = true;
+    btn.classList.remove("on");
+    return;
+  }
+  const on = pingPref() && Notification.permission === "granted";
+  btn.textContent = on ? "pings: on" : "pings: off";
+  btn.classList.toggle("on", on);
+}
+
+$("ping-btn").addEventListener("click", async () => {
+  if (typeof Notification === "undefined") return;
+  const on = pingPref() && Notification.permission === "granted";
+  try {
+    if (on) {
+      localStorage.setItem(PING_PREF, "off");
+    } else {
+      const answer = await Notification.requestPermission();
+      localStorage.setItem(PING_PREF, answer === "granted" ? "on" : "off");
+    }
+  } catch {
+    // A browser with no storage still gets the session's permission state.
+  }
+  renderPingButton();
+});
+
+/**
+ * One live message addressed to this member, from the other side. The
+ * title badge counts whenever the page is not focused; the desktop
+ * notification additionally needs the toggle and the permission.
+ */
+function notifyPing(m) {
+  if (!state.me || m.target !== state.me || m.sender === state.me) return;
+  if (document.hasFocus()) return;
+  unseenPings += 1;
+  document.title = "(" + unseenPings + ") " + BASE_TITLE;
+  if (pingPref() && typeof Notification !== "undefined" && Notification.permission === "granted") {
+    const body = m.body.length > 140 ? m.body.slice(0, 140) + "…" : m.body;
+    // The tag keeps a reconnect race from stacking duplicate toasts for
+    // one message: same seq, same toast.
+    const note = new Notification(m.sender + " → you in SAW", { body, tag: "saw-ping-" + m.seq });
+    note.onclick = () => window.focus();
+  }
+}
+
+window.addEventListener("focus", () => {
+  unseenPings = 0;
+  document.title = BASE_TITLE;
 });
 
 // ---- Pause control (T037) ----
@@ -581,4 +672,5 @@ $("log-work-item").addEventListener("keydown", (e) => {
 
 // The composer stays off until the socket opens and the relay reports in.
 renderComposerState();
+renderPingButton();
 connect();

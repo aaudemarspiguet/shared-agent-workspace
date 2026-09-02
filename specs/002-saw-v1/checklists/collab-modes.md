@@ -20,24 +20,44 @@ not whether an implementation works.
       the claim moves named? [Completeness, Spec §FR-044]
 - [x] CHK004 - Is the relationship between mode and pause stated, including
       which one wins? [Completeness, Spec §FR-039]
-- [ ] CHK005 - Are the state transitions of a thread defined — who may move it
-      between open, done, and archived, and on what condition? The states are
-      listed but the transitions are not. [Gap, Spec §FR-010]
-- [ ] CHK006 - Is it stated who may post a project broadcast? A broadcast
-      reaches every member, so the spec should say whether that is open to all
-      members or gated. [Gap, Spec §FR-011]
-- [ ] CHK007 - Is it stated who may bind and unbind a ref to a thread, and
-      whether that is a work-authority power? [Gap, Spec §FR-014]
-- [ ] CHK008 - Is a default force value defined for a message whose author
-      states none? [Gap, Spec §FR-043]
-- [ ] CHK009 - Is it stated whether force applies to journal entries, or only
-      to messages? [Gap, Spec §FR-043]
-- [ ] CHK010 - Is a general expiry defined for a handoff that is never
-      answered? Expiry on member removal is covered; an unanswered handoff to
-      a present member is not. [Gap, Spec §FR-044]
-- [ ] CHK011 - Is the effect of a mode change during a run in progress
-      defined? The claim case is covered in Edge Cases; an in-flight tool call
-      is not. [Gap, Spec §FR-037]
+- [x] CHK005 - Are the state transitions of a thread defined — who may move it
+      between open, done, and archived, and on what condition? Resolved
+      2026-08-31, stated in FR-010: the claim holder's human marks done
+      (FR-052), any member of the scope reopens by posting, an owner archives
+      because archiving is administration, and archived is read-only until an
+      owner unarchives. The relay enforced none of this when the box was
+      first ticked; T138 added the rule and its tests. [Gap, Spec §FR-010]
+- [x] CHK006 - Is it stated who may post a project broadcast? Resolved
+      2026-08-31, stated in FR-011: any member, human or agent. A broadcast
+      carries no authority of its own; force (FR-043) governs what a message
+      can settle, not its reach. [Gap, Spec §FR-011]
+- [x] CHK007 - Is it stated who may bind and unbind a ref to a thread, and
+      whether that is a work-authority power? Resolved 2026-08-31, stated in
+      FR-014: it is a work-authority power, needing the member's own mode at
+      `edit`, and a bound branch must sit under its author's own prefix
+      (FR-040). The prefix half was enforced on one of two paths until #209;
+      the mode half was defined in shared and duplicated by hand in the CLI
+      until T138. [Gap, Spec §FR-014]
+- [x] CHK008 - Is a default force value defined for a message whose author
+      states none? Resolved 2026-08-31, stated in FR-043: `advisory`, for
+      everyone including owners, so binding is always a deliberate act and
+      never a consequence of who is posting. [Gap, Spec §FR-043]
+- [x] CHK009 - Is it stated whether force applies to journal entries, or only
+      to messages? Resolved 2026-08-31, stated in FR-043: messages only.
+      Journal entries are always advisory — an agent-generated record never
+      settles a matter. [Gap, Spec §FR-043]
+- [x] CHK010 - Is a general expiry defined for a handoff that is never
+      answered? Resolved 2026-08-31, stated in FR-044: none in v1. It stays
+      `proposed` until the sender withdraws or the recipient answers, and the
+      surfaces show its age. A clock would decide ownership at a moment
+      neither member chose. Note the answer is currently untrue on the message
+      path, where no withdraw exists — #156. [Gap, Spec §FR-044]
+- [x] CHK011 - Is the effect of a mode change during a run in progress
+      defined? Resolved 2026-08-31 and written as FR-055 — it takes effect at
+      the agent's next tool call, the surface shows the member that access
+      changed, and the work is revertible through git. FR-055 answered this
+      from the day it was written and simply never said which question it was
+      answering; it does now. [Gap, Spec §FR-037]
 
 ## Requirement Clarity
 
@@ -67,11 +87,12 @@ not whether an implementation works.
       [Consistency, Spec §FR-005]
 - [x] CHK020 - Is the owner-override rule consistent with FR-008 and SC-006
       now that the axes are separated? [Consistency, Spec §FR-005, §FR-008]
-- [ ] CHK021 - Does FR-043 restate the participation requirement that FR-005
-      places on every work-authority power? FR-043 names the owner role as the
-      authority source but does not repeat that binding also needs
-      participation, so the two must be read together to get the rule right.
-      [Consistency, Spec §FR-043, §FR-005]
+- [x] CHK021 - Does FR-043 restate the participation requirement that FR-005
+      places on every work-authority power? It does now: FR-043 states that
+      posting with `binding` force needs both the authority (the owner role)
+      and the standing (participation in the thread), rather than leaving the
+      reader to combine two requirements correctly. [Consistency, Spec §FR-043,
+      §FR-005]
 - [ ] CHK022 - Is local-only enforcement consistent with the adversarial
       criteria? FR-039 enforces mode at the member's own agent gate, while
       SC-015 and SC-016 promise zero violations under adversarial test. A
@@ -135,6 +156,30 @@ not whether an implementation works.
 
 ## Notes
 
+### 2026-09-01 — T138 and T162
+
+Twelve items were unchecked, not eleven as the note below said; the
+miscount is what let five of them belong to no task at all until #206 filed
+them. Eight are now closed: CHK005 to CHK011 by T138, and CHK021 alongside
+them because it is one sentence in the same requirement.
+
+Four remain, all in #206, and all needing both founders rather than either
+agent: CHK016 (what "surface it to its member" is required to be — the
+behaviour shipped in T128/T129 before the requirement was written),
+CHK022 and CHK039 (mode is enforced on the member's own machine while
+SC-015, SC-016 and now SC-028 promise adversarial resistance), and CHK026
+(SC-021's observable proxy — which, as it turns out, the T131 test already
+uses; it needs recording, not inventing).
+
+The lesson worth keeping: every one of CHK005 to CHK011 had been answered by
+the founders on 2026-08-31. The answers went into the record and the
+question IDs did not, so both sides could read the same spec and disagree
+about whether anything was open. Two of the answers were also being
+contradicted by the code at the time. An answer that is not tied to its
+question, and not checked against the code, is not resolved.
+
+### Original notes (2026-08-27)
+
 Eleven items are unchecked. None blocks `/speckit-plan`; each is recorded so
 the plan phase resolves it rather than discovering it during implementation.
 
@@ -153,4 +198,5 @@ Two deserve attention before implementation starts:
 
 CHK005 to CHK011 are ordinary gaps of the kind the plan phase closes: thread
 state transitions, broadcast and ref-binding permissions, the default force
-value, handoff expiry, and mode changes mid-run.
+value, handoff expiry, and mode changes mid-run. (Closed by T138 on
+2026-09-01 — see the note above.)

@@ -8,7 +8,8 @@ import {
   NEEDS_UPGRADE_CODE,
   needsUpgradeMessage,
   PROTOCOL_VERSION } from "@saw/shared";
-import { parseClientFrame } from "./boundary.js";
+import { branchPrefixRefusal, parseClientFrame } from "./boundary.js";
+import { threadStateRefusal } from "./thread-state.js";
 import { joinWorkspace, mintWorkspaceInvite, registerWorkspace } from "./join.js";
 import { handleLogAppend, handleLogQuery } from "./log.js";
 import { handlePost } from "./messages.js";
@@ -168,12 +169,29 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           break;
         }
         case "thread_state_set": {
-          // CHK005 (who may move a thread between states) is an open task
-          // (T138). Until it is decided, any member of the project scope may,
-          // and the change is attributable: the new state broadcasts to all.
+          // FR-010 (CHK005, T138). The claim holder concludes, the owner
+          // archives, anybody reopens, and archived stays read-only. This
+          // path used to allow every member every move, which meant either
+          // member could close the other's work.
           const thread = store.threadById(frame.thread_id);
           if (!thread || thread.workspace_id !== member.workspace_id) {
             send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          const stateRefusal = threadStateRefusal(
+            thread,
+            store.threadClaim(thread.id),
+            member,
+            frame.state
+          );
+          if (stateRefusal) {
+            store.appendRejectionLog(
+              member.workspace_id,
+              member.id,
+              "no_authority",
+              stateRefusal
+            );
+            send(ws, { kind: "error", code: "no_authority", message: stateRefusal });
             break;
           }
           store.setThreadState(frame.thread_id, frame.state);
@@ -186,6 +204,17 @@ export function startRelay(dbPath: string, port: number): Promise<RelayServer> {
           const thread = store.threadById(frame.thread_id);
           if (!thread || thread.workspace_id !== member.workspace_id) {
             send(ws, { kind: "error", code: "invalid_input", message: "thread not found" });
+            break;
+          }
+          // FR-040 (T143). This path had no prefix check at all: the rule
+          // was written inline in the post path only, so binding through
+          // the frame bound anything, including the other member's branch
+          // namespace, and did it silently. Same rule, same refusal, told
+          // to the sender rather than dropped.
+          const refusal = branchPrefixRefusal(parsed.ref, member.github_username);
+          if (refusal) {
+            store.appendRejectionLog(member.workspace_id, member.id, "invalid_ref", refusal);
+            send(ws, { kind: "error", code: "invalid_input", message: refusal });
             break;
           }
           const binding = store.bindThreadRef(

@@ -391,6 +391,69 @@ describe("modes, authority, handoffs over the wire (spec 002 US8)", () => {
     bob.close();
   });
 
+  // The prefix rule has two ways in, and until this test it held on only
+  // one of them: the frame path had no check at all, so a member could bind
+  // the other member's branch namespace by binding directly instead of
+  // posting - silently, with no refusal and no rejection log.
+  it("refuses the other member's branch on the DIRECT bind frame too (T143, FR-040)", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "direct bind guard", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "direct bind guard"))).thread;
+    await bob.waitFor(is("thread", (f) => f.thread.id === t.id));
+
+    // Alice binds a branch under BOB's prefix through the frame.
+    alice.send({
+      kind: "thread_ref_bind",
+      thread_id: t.id,
+      workspace_id: workspaceId,
+      ref: { kind: "branch", value: "bob/not-mine" }
+    });
+    const err = await alice.waitFor(is("error", (f) => f.message.includes("bob/not-mine")));
+    // The refusal names the branch and the prefix that would have worked.
+    expect(err.message).toContain("alice/");
+
+    // The refusal is recorded, not only spoken: nothing drops silently.
+    alice.send({ kind: "log_query", query: { member: "any", limit: 50 }, peer_activity: false });
+    const log = await alice.waitFor(is("log_result", (f) => !f.peer));
+    expect(
+      log.entries.some(
+        (e) => e.source === "boundary_rejection" && (e.why_trigger ?? "").includes("bob/not-mine")
+      )
+    ).toBe(true);
+
+    // Her own branch binds through the same frame.
+    alice.send({
+      kind: "thread_ref_bind",
+      thread_id: t.id,
+      workspace_id: workspaceId,
+      ref: { kind: "branch", value: "alice/mine" }
+    });
+    await alice.waitFor(is("thread_ref", (f) => f.binding.ref.value === "alice/mine"));
+
+    // A commit has no owner, so it binds for anyone.
+    alice.send({
+      kind: "thread_ref_bind",
+      thread_id: t.id,
+      workspace_id: workspaceId,
+      ref: { kind: "commit", value: "b".repeat(40) }
+    });
+    await alice.waitFor(is("thread_ref", (f) => f.binding.ref.kind === "commit"));
+
+    const bound = relay.store
+      .threadRefs(workspaceId)
+      .filter((b) => b.thread_id === t.id)
+      .map((b) => b.ref.value);
+    expect(bound).not.toContain("bob/not-mine");
+    expect(bound).toContain("alice/mine");
+    alice.close();
+    bob.close();
+  });
+
   it("binds a branch to a thread only under its author's own prefix (T143, FR-040)", async () => {
     const alice = await connect(aliceToken);
     const bob = await connect(bobToken);
@@ -485,5 +548,124 @@ describe("modes, authority, handoffs over the wire (spec 002 US8)", () => {
     expect(bound.map((b) => b.ref.value)).toEqual(["a42c95c"]);
 
     alice.close();
+  });
+});
+
+
+// FR-010 (CHK005, T138). Until this, `thread_state_set` had no authority
+// check and no test at all: any member could move any thread to any state,
+// so either member could conclude the other's work or archive it out of
+// reach. The answer was given on 2026-08-31 and never reached the code.
+//
+// These assert on the store rather than on a broadcast frame. A thread's
+// state changes more than once here, and every change broadcasts the same
+// frame shape, so matching on frames alone would pass against a stale one.
+describe("thread state transitions (T138, FR-010, CHK005)", () => {
+  async function untilState(threadId: string, state: string): Promise<void> {
+    for (let i = 0; i < 120; i++) {
+      if (relay.store.threadById(threadId)?.state === state) return;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(`thread never reached state ${state}`);
+  }
+
+  it("concludes on the claim holder's word, not the other member's", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "who closes this", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "who closes this")))
+      .thread;
+
+    alice.send({
+      kind: "post",
+      post: { type: "intent", body: "mine", thread_id: t.id },
+      sender_kind: "human"
+    });
+    await alice.waitFor(is("claim_result", (f) => f.granted && f.claimed_by === "alice"));
+
+    // Bob tries to close Alice's work. This is the defect the rule closes.
+    bob.send({ kind: "thread_state_set", thread_id: t.id, state: "done" });
+    const refused = await bob.waitFor(is("error", (f) => f.message.includes("claimed by alice")));
+    expect(refused.code).toBe("no_authority");
+    expect(relay.store.threadById(t.id)?.state).toBe("open");
+
+    // Recorded, not only spoken: nothing about a refusal drops silently.
+    bob.send({ kind: "log_query", query: { member: "any", limit: 50 }, peer_activity: false });
+    const log = await bob.waitFor(is("log_result", (f) => !f.peer));
+    expect(
+      log.entries.some(
+        (e) => e.source === "boundary_rejection" && (e.why_trigger ?? "").includes("who closes this")
+      )
+    ).toBe(true);
+
+    // The claim holder concludes it herself.
+    alice.send({ kind: "thread_state_set", thread_id: t.id, state: "done" });
+    await untilState(t.id, "done");
+
+    // Any member of the scope reopens it by posting — no separate control,
+    // no permission to ask for.
+    bob.send({
+      kind: "post",
+      post: { type: "status", body: "one more thing", thread_id: t.id },
+      sender_kind: "human"
+    });
+    await untilState(t.id, "open");
+
+    alice.close();
+    bob.close();
+  });
+
+  it("archives on the owner's word only, and archived is read-only", async () => {
+    const alice = await connect(aliceToken);
+    const bob = await connect(bobToken);
+    await bob.waitFor(is("thread_snapshot"));
+
+    alice.send({
+      kind: "thread_open",
+      open: { type: "work_item", title: "archive me", workspace_id: workspaceId }
+    });
+    const t = (await alice.waitFor(is("thread", (f) => f.thread.title === "archive me"))).thread;
+
+    // Archiving manages the container, so it is the owner's power and not
+    // any member's — even on a thread nobody has claimed.
+    bob.send({ kind: "thread_state_set", thread_id: t.id, state: "archived" });
+    const denied = await bob.waitFor(is("error", (f) => f.message.includes("is an owner power")));
+    expect(denied.code).toBe("no_authority");
+    expect(relay.store.threadById(t.id)?.state).toBe("open");
+
+    alice.send({ kind: "thread_state_set", thread_id: t.id, state: "archived" });
+    await untilState(t.id, "archived");
+
+    // Read-only: a post is refused rather than filed into a closed record.
+    bob.send({
+      kind: "post",
+      post: { type: "status", body: "still talking", thread_id: t.id },
+      sender_kind: "human"
+    });
+    const closed = await bob.waitFor(is("error", (f) => f.message.includes("takes no new messages")));
+    expect(closed.message).toContain("owner");
+
+    // And bob cannot let himself back in by unarchiving it.
+    bob.send({ kind: "thread_state_set", thread_id: t.id, state: "open" });
+    await bob.waitFor(is("error", (f) => f.message.includes("only the owner can unarchive")));
+    expect(relay.store.threadById(t.id)?.state).toBe("archived");
+
+    // The owner unarchives, and the thread takes messages again.
+    alice.send({ kind: "thread_state_set", thread_id: t.id, state: "open" });
+    await untilState(t.id, "open");
+    bob.send({
+      kind: "post",
+      post: { type: "status", body: "back", thread_id: t.id },
+      sender_kind: "human"
+    });
+    await bob.waitFor(is("post_ok", (f) => f.seq > 0));
+
+    alice.close();
+    bob.close();
   });
 });

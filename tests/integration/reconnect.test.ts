@@ -2,7 +2,12 @@
 // Maps to quickstart.md Scenario 5 (SC-007): 100% in-order replay.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Daemon } from "@saw/cli";
-import { twoMemberWorkspace, waitFor, type TestWorkspace } from "./helpers.js";
+import {
+  RecordingWakeAdapter,
+  twoMemberWorkspace,
+  waitFor,
+  type TestWorkspace
+} from "./helpers.js";
 
 describe("reconnect ordering (Scenario 5)", () => {
   let ws: TestWorkspace;
@@ -32,7 +37,7 @@ describe("reconnect ordering (Scenario 5)", () => {
     }
 
     // Bob comes back. A fresh daemon on the same root syncs from the relay.
-    bob2 = new Daemon({ root: ws.bob.root });
+    bob2 = new Daemon({ root: ws.bob.root, wakeAdapter: new RecordingWakeAdapter() });
     expect(await bob2.start(6000)).toBe(true);
     await waitFor(
       () => bob2.messages(0).messages.length >= before + 6,

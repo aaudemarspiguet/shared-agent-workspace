@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { startRelay, type RelayServer } from "@saw/relay";
 import {
   Daemon,
+  type WakeAdapter,
+  type WakeRun,
   joinWorkspace,
   mintInvite,
   registerWorkspace,
@@ -18,6 +20,46 @@ export interface TestMember {
   name: string;
   root: string;
   daemon: Daemon;
+  /** Every run this member's daemon asked its coding tool to start. */
+  wakes: RecordingWakeAdapter;
+}
+
+/**
+ * A wake adapter that records instead of starting anything (FR-054).
+ *
+ * Every daemon this harness builds gets one. Before it existed the harness
+ * passed no adapter at all and the daemon defaulted to the real Claude Code
+ * one, so the whole integration suite spawned real headless `claude` runs on
+ * whoever's machine ran `npm test` — silently on macOS, and on Windows as an
+ * EBUSY teardown failure in four tests that never mention waking, because a
+ * live process holds its working directory open there.
+ *
+ * Tests that care about waking read `runs`. Tests that do not care still get
+ * the guarantee that nothing was started, which is what `expectNoWakes` is
+ * for: a wake nobody asked for should fail a test, not pass one quietly.
+ */
+export class RecordingWakeAdapter implements WakeAdapter {
+  name = "recording";
+  readonly runs: WakeRun[] = [];
+
+  supportsWake(): boolean {
+    return true;
+  }
+
+  startRun(run: WakeRun): Promise<{ ok: boolean; message?: string }> {
+    this.runs.push(run);
+    return Promise.resolve({ ok: true });
+  }
+}
+
+/** Assert this member's coding tool was never started (SC-019 in spirit). */
+export function expectNoWakes(member: TestMember): void {
+  if (member.wakes.runs.length > 0) {
+    throw new Error(
+      `${member.name}'s coding tool was started ${member.wakes.runs.length} time(s), ` +
+        `for: ${member.wakes.runs.map((r) => r.reason).join(", ")}`
+    );
+  }
 }
 
 export interface TestWorkspace {
@@ -92,10 +134,11 @@ export async function startMember(
     members: params.members,
     token: params.token
   });
-  const daemon = new Daemon({ root, clientName: `itest-${name}` });
+  const wakes = new RecordingWakeAdapter();
+  const daemon = new Daemon({ root, clientName: `itest-${name}`, wakeAdapter: wakes });
   const connected = await daemon.start(6000);
   if (!connected) throw new Error(`daemon for ${name} did not connect`);
-  return { name, root, daemon };
+  return { name, root, daemon, wakes };
 }
 
 /**

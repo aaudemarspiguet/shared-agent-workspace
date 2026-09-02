@@ -102,10 +102,18 @@ export function registerRoomTools(server: McpServer, root: string): void {
     },
     async (args: Record<string, unknown>) => {
       const threadId = typeof args.thread_id === "string" ? args.thread_id : undefined;
+      // A post carrying refs binds them to the thread (FR-014), and binding
+      // needs the member's own mode at `edit` — CHK007, answered 2026-08-31.
+      // Gating the whole post at `post` let a member in `comment` bind refs,
+      // because binding rode along on an action that needs one rung less.
+      const bindsRefs = Array.isArray(args.refs) && args.refs.length > 0;
       const gate = await agentGate(
         root,
         threadId
-          ? { threadId, action: args.type === "intent" ? "claim" : "post" }
+          ? {
+              threadId,
+              action: bindsRefs ? "bind_ref" : args.type === "intent" ? "claim" : "post"
+            }
           : undefined
       );
       if (gate) return gate;

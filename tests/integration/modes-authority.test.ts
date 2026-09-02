@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { agentGate, renderContext, writeDaemonInfo, type InjectResponse } from "@saw/cli";
 import {
   apiPost,
+  expectNoWakes,
   startWeb,
   twoMemberWorkspace,
   waitFor,
@@ -45,6 +46,17 @@ describe("the ordered agent gate (T119, T122, T124)", () => {
     const claimDenied = await agentGate(ws.bob.root, { threadId, action: "claim" });
     expect(JSON.stringify(claimDenied)).toContain("mode_denied");
     expect(JSON.stringify(claimDenied)).toContain("comment");
+
+    // Binding a ref needs `edit` too (FR-014, CHK007). This action was
+    // defined in the shared ladder and passed by no caller, so a member in
+    // `comment` bound refs by hanging them on a post, which needs one rung
+    // less. Now the same rung as claiming.
+    const bindDenied = await agentGate(ws.bob.root, { threadId, action: "bind_ref" });
+    expect(JSON.stringify(bindDenied)).toContain("mode_denied");
+    expect(JSON.stringify(bindDenied)).toContain("bind_ref");
+    ws.bob.daemon.setThreadMode(threadId, "edit");
+    expect(await agentGate(ws.bob.root, { threadId, action: "bind_ref" })).toBeUndefined();
+    ws.bob.daemon.setThreadMode(threadId, "comment");
 
     // view: even posting is denied, and the denial is recorded (T120).
     ws.bob.daemon.setThreadMode(threadId, "view");
@@ -87,10 +99,12 @@ describe("binding decisions (T128, T129, T131)", () => {
       "the decision to reach bob"
     );
 
-    // SC-021: zero runs, zero cursor movement on bob's machine.
+    // SC-021: zero runs, zero cursor movement on bob's machine — and zero
+    // runs asked for, which is the observable the log alone cannot give.
     const logs = await ws.bob.daemon.log({ member: "me" });
     expect(logs.entries).toEqual([]);
     expect(ws.bob.daemon.cursor.value).toBe(0);
+    expectNoWakes(ws.bob);
 
     // The decision is surfaced with the settles-not-directs contract, and
     // repeats across an acknowledged injection (T129).
