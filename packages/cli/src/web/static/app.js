@@ -37,6 +37,9 @@ const state = {
   threadFilter: "all",
   // The console's last read of /api/health. Null until the tab is opened.
   health: null,
+  // Sessions the daemon knows about, seeded by the snapshot and kept
+  // current by session events (T154).
+  sessions: [],
   // ThreadView rows by id, from /api/status. Titles, claims, and counts.
   threadsById: new Map()
 };
@@ -114,7 +117,12 @@ function renderMessage(m) {
   const mention = m.target && m.target === state.me && m.sender !== state.me;
   const wrap = el(
     "div",
-    "msg" + (m.sender === state.me ? " mine" : "") + (mention ? " mention" : "")
+    "msg" +
+      (m.sender === state.me ? " mine" : "") +
+      (mention ? " mention" : "") +
+      // A companion answer is not its member and not their coding agent.
+      // Saying so is the whole point of it having its own identity.
+      (m.sender_kind === "companion" ? " from-companion" : "")
   );
   const head = el("div", "head");
   head.appendChild(el("span", "sender", m.sender));
@@ -277,6 +285,225 @@ function renderStatus(status) {
   // the panel on screen.
   const consolePanel = $("console");
   if (consolePanel && consolePanel.classList.contains("active")) renderConsole();
+}
+
+// ---- Sessions, auto mode, and the two approvals (T154, T155, US9) ----
+//
+// Every control here is self-directed. A member turns on THEIR OWN auto
+// mode, declares THEIR OWN readiness, and approves THEIR OWN agent's
+// proposal. Nothing on this surface writes another member's consent, and
+// nothing offers a control that would be refused if pressed — an approve
+// button on someone else's proposal would be a lie about who decides.
+
+const SESSION_OVER = ["concluded", "ended"];
+
+/** The thread's session that has not concluded or ended, if any. */
+function activeSessionFor(threadId) {
+  return state.sessions
+    .filter((s) => s.thread_id === threadId && !SESSION_OVER.includes(s.state))
+    .slice(-1)[0];
+}
+
+/** Replace one session in the page's list, keeping arrival order. */
+function upsertSession(session) {
+  const at = state.sessions.findIndex((s) => s.id === session.id);
+  if (at === -1) state.sessions.push(session);
+  else state.sessions[at] = session;
+}
+
+/** POST to the daemon and say so plainly when it refuses. */
+async function sessionCall(path, body) {
+  let res;
+  try {
+    res = await api(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    showComposerError(DAEMON_DOWN);
+    return false;
+  }
+  if (res.ok) return true;
+  const answer = await res.json().catch(() => ({}));
+  showComposerError(
+    (answer.error && `${answer.error.code}: ${answer.error.message}`) ||
+      "the daemon refused that control"
+  );
+  return false;
+}
+
+function button(label, className, onClick) {
+  const b = el("button", className, label);
+  b.type = "button";
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+/**
+ * The claim's approve control (T155, FR-052, SC-029).
+ *
+ * An agent's decision is a proposal; a human's own post concludes. So this
+ * appears only on the member's own claim, and only while it is proposed.
+ * Approval is self-directed: no member may approve another's, which is why
+ * the other side sees a plain sentence rather than a control.
+ */
+function renderClaimApproval(thread) {
+  if (thread.claim_state !== "done_proposed") return null;
+  const box = el("div", "approval");
+  if (thread.claimed_by !== state.me) {
+    box.appendChild(
+      el("span", "approval-note", `${thread.claimed_by}'s agent proposed this done. Theirs to approve.`)
+    );
+    return box;
+  }
+  box.appendChild(el("span", "approval-note", "Your agent proposes this work is done."));
+  box.appendChild(
+    button("Approve and close", "approve", async () => {
+      await sessionCall("/api/claim/approve", { thread_id: thread.id });
+    })
+  );
+  return box;
+}
+
+/** One member's turn budget. The number is the member's own ceiling. */
+function turnBox(member) {
+  const box = el("span", "turn-box");
+  const used = member.turns_used || 0;
+  const max = member.max_turns || 0;
+  box.appendChild(el("span", "turn-who", member.member));
+  const count = el("span", "turn-count", `${used}/${max}`);
+  if (max > 0 && used >= max) count.classList.add("spent");
+  box.appendChild(count);
+  box.title = member.ready_at
+    ? `ready since ${fmtTime(member.ready_at)}`
+    : "has not declared readiness yet";
+  if (!member.ready_at) box.classList.add("not-ready");
+  return box;
+}
+
+/** The convergence proposal, and who may conclude it. */
+function renderConvergence(session) {
+  const c = session.convergence;
+  if (!c) return null;
+  const box = el("div", "approval");
+  box.appendChild(el("div", "converge-summary", c.summary));
+  (c.refs || []).forEach((r) => box.appendChild(el("span", "ref", r.kind + ":" + r.value)));
+  if (c.approved_by) {
+    box.appendChild(
+      el("span", "approval-note", `Approved by ${c.approved_by} at ${fmtTime(c.approved_at)}.`)
+    );
+    return box;
+  }
+  if (c.proposed_by === state.me) {
+    box.appendChild(el("span", "approval-note", "Your agent proposes the work has converged."));
+    box.appendChild(
+      button("Approve and conclude", "approve", async () => {
+        await sessionCall("/api/session/approve", { session_id: session.id });
+      })
+    );
+  } else {
+    box.appendChild(
+      el("span", "approval-note", `${c.proposed_by}'s agent proposed convergence. Theirs to approve.`)
+    );
+  }
+  return box;
+}
+
+/** The readiness control: the task, this member's budget, and the yes. */
+function renderReadiness(thread) {
+  const box = el("div", "readiness");
+  const task = document.createElement("input");
+  task.type = "text";
+  task.className = "task-input";
+  task.maxLength = 600;
+  task.placeholder = "what the two agents will work on";
+  const turns = document.createElement("input");
+  turns.type = "number";
+  turns.className = "turns-input";
+  turns.min = "1";
+  turns.max = "500";
+  turns.value = "50";
+  turns.title = "your own turn budget for this session";
+  box.appendChild(task);
+  box.appendChild(turns);
+  box.appendChild(
+    button("I'm ready", "ready-btn", async () => {
+      const body = { thread_id: thread.id };
+      const text = task.value.trim();
+      if (text) body.task = text;
+      const n = Number(turns.value);
+      if (Number.isFinite(n) && n > 0) body.max_turns = n;
+      if (await sessionCall("/api/session/ready", body)) task.value = "";
+    })
+  );
+  box.appendChild(
+    el(
+      "div",
+      "readiness-note",
+      "A session starts when both members are ready. Either of you can end it."
+    )
+  );
+  return box;
+}
+
+/**
+ * The session panel under the thread header.
+ *
+ * It is deliberately quiet until it has something to say: with auto mode off
+ * and no session, it is one toggle. Auto mode is the consent, readiness is
+ * the yes, and the panel shows them in that order because that is the order
+ * the rules apply in.
+ */
+function renderSessionPanel(thread) {
+  const panel = el("div", "session-panel");
+
+  const claimApproval = renderClaimApproval(thread);
+  if (claimApproval) panel.appendChild(claimApproval);
+
+  const row = el("div", "session-row");
+  const on = thread.my_auto_mode === true;
+  row.appendChild(
+    button(on ? "auto mode: on" : "auto mode: off", "auto-toggle" + (on ? " on" : ""), async () => {
+      await sessionCall("/api/auto-mode", { thread_id: thread.id, enabled: !on });
+    })
+  );
+
+  const session = activeSessionFor(thread.id);
+  if (session) {
+    row.appendChild(el("span", "badge session-state", session.state));
+    if (session.task) row.appendChild(el("span", "session-task", session.task));
+    (session.members || []).forEach((m) => row.appendChild(turnBox(m)));
+    row.appendChild(
+      button("End session", "end-btn", async () => {
+        await sessionCall("/api/session/end", { session_id: session.id });
+      })
+    );
+  } else if (on) {
+    row.appendChild(el("span", "session-hint", "auto mode is on for you"));
+  }
+  panel.appendChild(row);
+
+  if (session) {
+    const converge = renderConvergence(session);
+    if (converge) panel.appendChild(converge);
+  } else if (on) {
+    panel.appendChild(renderReadiness(thread));
+  }
+
+  // A session that finished still owes the room an account of who stopped it.
+  const last = state.sessions
+    .filter((s) => s.thread_id === thread.id && SESSION_OVER.includes(s.state))
+    .slice(-1)[0];
+  if (!session && last) {
+    const by =
+      last.ended_by === "budget"
+        ? "ended when a turn budget ran out"
+        : `${last.state} by ${last.ended_by || "someone"}`;
+    panel.appendChild(el("div", "session-past", `Last session ${by}.`));
+  }
+
+  return panel;
 }
 
 // ---- Thread navigation and the thread header (T145/T146, FR-045) ----
@@ -464,6 +691,11 @@ function renderThreadHeader() {
   });
   modeBox.appendChild(mode);
   head.appendChild(modeBox);
+
+  // The session controls sit under the header, not in it: they are the
+  // thread's live state rather than its identity, and they grow tall.
+  const panel = renderSessionPanel(t);
+  if (panel) head.appendChild(panel);
 }
 
 $("thread-new").addEventListener("click", () => {
@@ -548,6 +780,7 @@ function connect() {
       // Who "me" is must be known before the replay renders, or no old
       // message addressed to this member would read as a mention.
       if (data.status) state.me = data.status.me;
+      state.sessions = data.sessions || [];
       (data.messages || []).forEach(addMessage);
       (data.notices || []).forEach((n) => addItem("notice", n));
       renderStatus(data.status);
@@ -563,6 +796,12 @@ function connect() {
       }
       if (event.kind === "claim_result" && event.claim) {
         addItem("notice", event.claim);
+      }
+      // The daemon has always emitted this; the page ignored it until T154.
+      // It is what makes turn counts and state changes live.
+      if (event.kind === "session" && event.session) {
+        upsertSession(event.session);
+        renderThreadHeader();
       }
       if (event.kind === "handoff" && event.handoff) {
         state.feedItems = state.feedItems.filter(
