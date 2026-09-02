@@ -306,3 +306,70 @@ Phase 4 follows immediately: modes are thin, depend only on threads, and are
 what makes shared threads safe to open widely.
 
 Identity, scopes, and journals come after, in the spec's stated priority.
+
+---
+
+## Phase 7: Convergence
+
+Appended by `/speckit-converge` on 2026-09-02, after User Story 7, User Story
+8, phase 4b and phase 6 were built. This is the work the "Scope of this file"
+section above said would be left: every requirement belonging to User Stories 1
+to 6. Nothing here was found by comparing branches — it is the present state of
+the code read against `spec.md`, `plan.md` and this file.
+
+Zero constitution violations were found. All seven principles were checked,
+including Principle III against the auto-mode work: pause outranks auto mode,
+consent is per member, and both are enforced and tested.
+
+**Numbering note.** This phase starts at **T162** and not at the next unused id
+in this file. `T162` already exists as GitHub issue #206, opened on 2026-09-01
+with no matching line here. Leaving it out and starting the new work at T162
+would have produced two different tasks with one id — and per the numbering
+rule at the top of this file, `/speckit-taskstoissues` de-duplicates by
+matching `\bT\d{3}\b` against every existing issue, so the second T162 would
+have been skipped in silence. T162 below is therefore issue #206's task,
+written down at last, and the convergence work starts at T163.
+
+- [ ] T162 Resolve the five checklist items T138 does not cover: CHK016, CHK022, CHK026 and CHK039, and confirm CHK021 which T138 closed in passing (issue #206) (partial)
+
+### User Story 1 — A profile, an invite, a project (P1)
+
+- [ ] T163 Replace the username-only member identity with a local profile per FR-001: a display name plus a keypair store, one or more device keys, the profile being the stable identity rather than any single key. Today `.saw/member.json` holds `github_username` and `branch_prefix` and nothing else (missing)
+- [ ] T164 Make a profile portable per FR-002: moving the profile store to a new machine carries the identity, with a device key added rather than an identity recreated (missing)
+- [ ] T165 Authenticate every connection by proof of a profile key per FR-003. `packages/shared/src/invite.ts` signs with one shared HMAC secret today, which proves possession of the invite, not of a member's key (partial)
+- [ ] T166 Add the project as a container of one or more repo-bound workspaces per FR-004. `packages/relay/src/store.ts` has no `projects` table; the workspace is the top-level unit (missing)
+- [ ] T167 Store and enforce the two independent authority axes of FR-005. `owner` exists only as an inline check in `packages/shared/src/threads.ts` for directed handoffs; there is no role storage and no administration axis (partial)
+- [ ] T168 Serve the member directory from the project relay per FR-007, with each member's roles on both axes (partial)
+- [ ] T169 [US1] Widen `THREAD_SCOPES` beyond `project` to team, group and private per FR-008, in `packages/shared/src/threads.ts`. The column and the comment already anticipate this; only the values are missing (missing)
+- [ ] T170 [P] [US1] Integration test asserting a member outside a thread's scope receives zero messages from it and cannot name it, and that Principle III's symmetry holds inside every scope (SC-006, missing)
+
+### User Story 2 — Status without pinging (P1)
+
+- [ ] T171 [US2] Add the journal entry per FR-015 and FR-016: every run of a connected tool produces one per claimed thread, sharing defaults to automatic, and an entry crosses at run end. Only the run log exists today — the one `journal` hit in `store.ts` is the SQLite WAL pragma (missing)
+- [ ] T172 [US2] Make a journal entry inherit its thread's scope per FR-017, and carry provenance per FR-021: author, origin class, and whether a human approved agent content (missing)
+- [ ] T173 [US2] Reconcile ghosted stretches from automatic logging per FR-022 (missing)
+- [ ] T174 [US2] Let a member's agent read any thread within the member's access per FR-018, so it can answer about a teammate's work while they are offline. Delivery covers participated threads plus broadcasts today, which is narrower than FR-018 asks (partial)
+- [ ] T175 [P] [US2] Integration test asserting an agent's readable set never exceeds its member's while FR-018 widens the read path (Principle III, SC-018 extension, missing)
+
+### Trust and safety
+
+- [ ] T176 Implement redaction as a tombstone per FR-020, over messages and journal entries and the shared run record of the same run: author-unshare and owner-redact as one operation, caches honoring it, the tombstone keeping author, timestamps and the fact of withholding but never content. The `redact` code in `packages/shared/src/log.ts` is boundary redaction of log fields for content smuggling, which is a different thing (missing)
+- [ ] T177 [P] Integration test asserting a tombstoned item is served to nobody and reaches no future agent context, and that its author, timestamps and the fact of withholding survive (missing)
+
+### User Story 4 — Code collaboration
+
+- [ ] T178 Warn both agents on their next turn when two members' work on one thread touches the same file inside a configurable window, default 60 minutes, detected from pushed refs and the members' own run records and never from access to the other member's files, per FR-029 (missing)
+
+### User Story 5 — A thread bound to a ticket (P3)
+
+- [ ] T179 [US5] Ship the three tracker connectors of FR-030: GitHub Issues, Linear, Jira, as thin bindings over each provider's official agent-facing interfaces using each member's existing access (missing)
+- [ ] T180 [US5] Implement FR-046's bound-ticket deep links once T179 lands: every SAW status comment on the ticket carries a link to its thread, opening it lands in that member's own surface on that thread, and a viewer without SAW gets a plain explanation plus the status projection when one is enabled. Deferred out of phase 4b by the note above T154 and never tasked since (missing)
+- [ ] T181 Add the read-only thread status projection of FR-034, which T180 depends on for a viewer without SAW (missing)
+
+### User Story 6 — Every project in one place (P3)
+
+- [ ] T182 [US6] Widen the local web app to cover all of a member's projects per FR-032. `packages/cli/src/web/server.ts` serves one workspace, and the developer console built in T147 is scoped to that one repository (partial)
+
+### Tool integrations
+
+- [ ] T183 [P] Document the tool-agnostic integration surface of FR-031 as a contract, with the Principle V documented finding for any adapter that reaches beyond a standard surface. `specs/002-saw-v1/contracts/` holds only `threads-and-modes.md` today (partial)
