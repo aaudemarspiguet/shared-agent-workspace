@@ -322,7 +322,7 @@ export interface StoredMessage {
    */
   thread_seq?: number;
   sender: string;
-  sender_kind: "agent" | "human";
+  sender_kind: "agent" | "human" | "companion";
   type: MessageType;
   body: string;
   refs: GitRef[];

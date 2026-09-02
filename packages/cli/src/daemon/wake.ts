@@ -13,6 +13,12 @@ export interface WakeRun {
   threadTitle: string;
   reason: "own_message" | "session_turn";
   sessionId: string | null;
+  /**
+   * Present for a companion answer (FR-053): this exact prompt runs, and
+   * the spawned tool carries SAW_COMPANION=1 so its posts take the
+   * companion identity structurally.
+   */
+  companionPrompt?: string;
 }
 
 /** The tool-agnostic contract (FR-054). One method, declared support. */
@@ -80,12 +86,15 @@ export class ClaudeWakeAdapter implements WakeAdapter {
         // `where` says yes — the #179 bug. The first fix of this line landed
         // as an import with no call site, and only the lint gate caught the
         // unused name; the adapter test now drives this path for real.
-        const launch = launchFor("claude", ["-p", wakePrompt(run)]);
+        const launch = launchFor("claude", ["-p", run.companionPrompt ?? wakePrompt(run)]);
         const child = spawn(launch.file, launch.args, {
           cwd: root,
           stdio: ["ignore", "ignore", "ignore"],
           detached: false,
-          shell: launch.shell
+          shell: launch.shell,
+          env: run.companionPrompt
+            ? { ...process.env, SAW_COMPANION: "1" }
+            : process.env
         });
         child.on("error", (err) => done(false, err.message));
         child.on("exit", (code) => done(code === 0, code === 0 ? undefined : `exit ${code}`));

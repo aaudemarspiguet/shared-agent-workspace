@@ -54,4 +54,22 @@ describe.runIf(posix)("the Claude adapter, spawning for real (T151)", () => {
     expect(ran).toContain("the real spawn");
     expect(ran).toContain("SAW_COMPANION=unset");
   });
+
+  it("a companion run carries SAW_COMPANION=1 and the companion prompt", async () => {
+    const adapter = new ClaudeWakeAdapter();
+    const out = await adapter.startRun(
+      {
+        threadId: "t-companion-spawn",
+        threadTitle: "the real spawn",
+        reason: "own_message",
+        sessionId: null,
+        companionPrompt: "you are bob's SAW companion. Answer from the record only."
+      },
+      dir
+    );
+    expect(out.ok).toBe(true);
+    const ran = readFileSync(record, "utf8");
+    expect(ran).toContain("bob's SAW companion");
+    expect(ran).toContain("SAW_COMPANION=1");
+  });
 });

@@ -22,9 +22,28 @@ export function handlePost(
   registry: ConnectionRegistry,
   sender: MemberRow,
   post: MessagePost,
-  senderKind: "agent" | "human"
+  senderKind: "agent" | "human" | "companion"
 ): PostOutcome {
   const workspaceId = sender.workspace_id;
+
+  // A companion answers; it never wields capability (FR-053, SC-028,
+  // issue #206 third instance): no binding force whatever its member's
+  // role, no claim effects, no ref bindings. Enforced here so SC-028
+  // promises no more than the code does - the prompt is guidance, this
+  // is the rule.
+  if (senderKind === "companion" && post.force === "binding") {
+    store.appendRejectionLog(
+      workspaceId,
+      sender.id,
+      "no_authority",
+      "binding force from a companion"
+    );
+    return {
+      ok: false,
+      code: "no_authority",
+      message: "a companion never posts with binding force. It answers; its member decides."
+    };
+  }
 
   // Authority gates a binding message before anything is stored (T125,
   // FR-043). The v1 authority source is the owner role. The refusal is
@@ -98,6 +117,15 @@ export function handlePost(
     // and the refusal is recorded.
     store.addParticipant(thread.id, sender.github_username);
     for (const ref of post.refs) {
+      if (senderKind === "companion") {
+        store.appendRejectionLog(
+          workspaceId,
+          sender.id,
+          "invalid_ref",
+          "a companion never binds refs; the ref stays on the message only"
+        );
+        continue;
+      }
       const refusal = branchPrefixRefusal(ref, sender.github_username);
       if (refusal) {
         // The post path adds one fact the frame path cannot: the message
@@ -127,8 +155,9 @@ export function handlePost(
     { excludeMemberId: sender.id }
   );
 
-  // Claims resolve in the same order the messages were recorded.
-  if (thread) {
+  // Claims resolve in the same order the messages were recorded. A
+  // companion's messages never move claim state (FR-053).
+  if (thread && senderKind !== "companion") {
     const claim = applyClaimTransition(store, workspaceId, sender, post.type, thread, senderKind);
     if (claim) registry.broadcast(store, workspaceId, claim);
   }
