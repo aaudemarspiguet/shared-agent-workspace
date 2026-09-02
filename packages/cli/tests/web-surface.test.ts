@@ -63,6 +63,30 @@ describe("the web surface's wiring", () => {
     expect(css).toMatch(/\.msg\.mention/);
   });
 
+  // Every control the page offers must reach a route that exists. A button
+  // wired to a misspelled or removed path fails only when a member presses
+  // it, in a browser, with the error in a console nobody is watching — so
+  // the page's routes are checked against the daemon's here (T154).
+  it("calls only local API routes the daemon actually serves", () => {
+    const api = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "daemon", "local-api.ts");
+    const routes = readFileSync(api, "utf8");
+    // Any "/api/..." literal in the page, however it reaches fetch. The
+    // session controls pass their path through a helper rather than naming
+    // it at the call site, and those are exactly the new ones.
+    const called = new Set(matches(js, /"(\/api\/[^"?]*)"/g));
+    expect(called.size).toBeGreaterThan(5);
+    const unserved = [...called].filter((path) => !routes.includes(`"${path}"`)).sort();
+    expect(unserved).toEqual([]);
+  });
+
+  // The session controls are consent, not decoration. If the panel stops
+  // reading a member's OWN auto-mode state it silently shows everyone the
+  // default, which would misreport whether consent had been given.
+  it("reads auto mode from the member's own thread view", () => {
+    expect(js).toContain("my_auto_mode");
+    expect(css).toMatch(/\.auto-toggle\.on/);
+  });
+
   // No inline script or style: the page is served under a strict CSP, and
   // either one would be blocked with no error the member can see.
   it("keeps script and style out of the markup", () => {

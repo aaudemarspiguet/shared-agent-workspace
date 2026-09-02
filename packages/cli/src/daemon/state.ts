@@ -25,6 +25,12 @@ export interface ThreadView extends StoredThread {
   claimed_by?: string;
   /** This member's mode on the thread. Default comment (FR-038). */
   my_mode: Mode;
+  /**
+   * This member's own auto-mode consent on the thread (FR-050). Their own
+   * and nobody else's: consent is per member, so there is no field here for
+   * the other member's setting and no surface can imply one.
+   */
+  my_auto_mode: boolean;
   refs: ThreadRefBinding[];
   message_count: number;
 }
@@ -364,6 +370,7 @@ export class RoomState {
       claim_state: claim?.state ?? "open",
       claimed_by: claim?.claimed_by,
       my_mode: this.threadModes.get(thread.id) ?? "comment",
+      my_auto_mode: this.myAutoMode(thread.id),
       refs: this.threadRefs.get(thread.id) ?? [],
       message_count: this.threadMsgCount.get(thread.id) ?? 0
     };

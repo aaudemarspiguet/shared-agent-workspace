@@ -175,7 +175,10 @@ export function startWebServer(daemon: Daemon, port: number): Promise<WebServer>
         kind: "snapshot",
         status: daemon.status(),
         messages: daemon.messages(0, 500).messages,
-        notices: daemon.state.recentClaimNotices(20)
+        notices: daemon.state.recentClaimNotices(20),
+        // Sessions ride the snapshot so a page that opens mid-session shows
+        // the session, not an empty panel waiting for the next event (T154).
+        sessions: daemon.sessions()
       })
     );
     const unsubscribe = daemon.subscribe((event) => {

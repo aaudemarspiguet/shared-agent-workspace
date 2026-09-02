@@ -79,6 +79,51 @@ thread
     await runThreadMode(opts);
   });
 thread
+  .command("auto")
+  .description("Turn YOUR OWN agent's auto mode on or off for a thread (FR-050).")
+  .option("--id <thread-id>", "the thread")
+  .option("--on", "give your standing consent on this thread")
+  .option("--off", "withdraw it")
+  .action(async (opts: { id?: string; on?: boolean; off?: boolean }) => {
+    const { runThreadAuto } = await import("./commands/thread.js");
+    await runThreadAuto(opts);
+  });
+thread
+  .command("ready")
+  .description("Declare YOUR OWN readiness. A session starts when both members are ready.")
+  .option("--id <thread-id>", "the thread")
+  .option("--task <text>", "what the agents will work on (the first readiness sets it)")
+  .option("--max-turns <n>", "your own turn budget for the session (default 50)")
+  .action(async (opts: { id?: string; task?: string; maxTurns?: string }) => {
+    const { runThreadReady } = await import("./commands/thread.js");
+    await runThreadReady(opts);
+  });
+thread
+  .command("session")
+  .description("Show sessions: state, task, each member's turns, and who ended it.")
+  .option("--id <thread-id>", "only this thread's sessions")
+  .action(async (opts: { id?: string }) => {
+    const { runThreadSession } = await import("./commands/thread.js");
+    await runThreadSession(opts);
+  });
+thread
+  .command("end")
+  .description("End a session. Either member may end it, and the record says who did.")
+  .option("--session <session-id>", "the session")
+  .action(async (opts: { session?: string }) => {
+    const { runThreadEnd } = await import("./commands/thread.js");
+    await runThreadEnd(opts);
+  });
+thread
+  .command("approve")
+  .description("Approve YOUR OWN agent's proposal: a convergence, or a thread's done proposal.")
+  .option("--session <session-id>", "approve a convergence proposal")
+  .option("--claim <thread-id>", "approve your agent's proposal that the work is done")
+  .action(async (opts: { session?: string; claim?: string }) => {
+    const { runThreadApprove } = await import("./commands/thread.js");
+    await runThreadApprove(opts);
+  });
+thread
   .command("handoff <action>")
   .description("propose | accept | decline | withdraw a claim handoff.")
   .option("--id <thread-id>", "for propose: the thread")

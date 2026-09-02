@@ -405,3 +405,94 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 }
 #console .log-controls { padding: 0 0 8px; border-bottom: none; }
 #console .log-list { padding: 0; overflow: visible; }
+
+/* ---- Sessions, auto mode, approvals (T154, T155, US9) ---- */
+.session-panel {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.session-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.auto-toggle {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+/* Auto mode is consent, so its "on" state must be unmistakable. */
+.auto-toggle.on { color: var(--violet); border-color: var(--violet); background: rgba(180, 140, 255, 0.14); }
+.badge.session-state { background: rgba(79, 140, 255, 0.22); color: var(--accent); }
+.session-task { font-size: 12px; color: var(--muted); font-style: italic; }
+.session-hint { font-size: 11px; color: var(--muted); }
+.session-past { font-size: 11px; color: var(--muted); }
+
+.turn-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+}
+.turn-box.not-ready { opacity: 0.55; }
+.turn-who { color: var(--muted); }
+.turn-count { font-family: var(--mono); }
+/* A spent budget suspends the session. It should read as a stop, not a stat. */
+.turn-count.spent { color: var(--red); font-weight: 600; }
+
+.readiness { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.task-input, .turns-input {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+.task-input { flex: 1; min-width: 200px; }
+.turns-input { width: 68px; }
+.ready-btn, .end-btn, .approve {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.ready-btn { border-color: var(--accent); }
+.end-btn { border-color: var(--red); color: var(--red); margin-left: auto; }
+/* An approval concludes work. It is the strongest control here. */
+.approve { background: var(--green); border-color: var(--green); color: #0f1115; font-weight: 600; }
+.readiness-note { flex-basis: 100%; font-size: 11px; color: var(--muted); }
+
+.approval {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(62, 207, 142, 0.4);
+  background: rgba(62, 207, 142, 0.08);
+}
+.approval-note { font-size: 12px; }
+.converge-summary { flex-basis: 100%; font-size: 12px; white-space: pre-wrap; }
+
+/* ---- The companion's voice (T153/T154, FR-053) ---- */
+/* It answers as itself, attributed to its member, and it is neither that
+   member nor their coding agent. Until now it wore the same badge as an
+   agent, which made a stand-in indistinguishable from the real thing. */
+.badge.companion { color: var(--violet); border-color: var(--violet); }
+.msg.from-companion { border-left: 3px solid var(--violet); }
