@@ -294,6 +294,31 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   #threads { border-right: none; border-bottom: 1px solid var(--line, #ddd);
     padding-bottom: 8px; max-height: 35vh; } }
 
+/* ---- Unread and waiting-on-you (the list lane, seq 89 items 1-2) ---- */
+/* The dot sits at the row's top right, off the title's own line - the
+   title keeps its full-width ellipsis and the dot reads like a badge. */
+.thread-row { position: relative; }
+.unread-dot {
+  position: absolute;
+  top: 9px; right: 8px;
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1.5px solid var(--red);
+}
+.unread-dot.strong { background: var(--red); }
+.thread-row.unread .thread-title { font-weight: 600; padding-right: 16px; }
+.waiting-count {
+  position: absolute;
+  top: 6px; right: 8px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
 /* ---- Pings (FR-045: an addressed message reads like a mention) ---- */
 .msg.mention { border-left: 3px solid var(--amber); background: #221c11; }
 #ping-btn { font-size: 12px; padding: 2px 8px; border-radius: 10px; color: var(--muted); }
