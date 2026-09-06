@@ -1,5 +1,5 @@
 // SAW room page logic. Talks only to the local daemon.
-/* global WebSocket, document, fetch, location, setTimeout, URLSearchParams, Option,
+/* global WebSocket, document, fetch, location, setTimeout, Option,
    localStorage, Notification, window */
 
 // The run token (T057). The daemon writes it into this document when it
@@ -1338,7 +1338,7 @@ async function loadConsole() {
   renderConsole();
 }
 
-// ---- Tabs and the work log (T043) ----
+// ---- Tabs (T043) ----
 
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -1350,71 +1350,8 @@ document.querySelectorAll(".tab").forEach((tab) => {
     // than kept warm behind a hidden panel.
     if (tab.dataset.tab === "console") {
       void loadConsole();
-      void loadLog();
     }
   });
-});
-
-function renderEntry(entry) {
-  const wrap = el(
-    "div",
-    "entry" + (entry.source === "boundary_rejection" ? " rejection" : "")
-  );
-  const head = el("div", "head");
-  head.appendChild(el("span", "member", entry.member));
-  head.appendChild(el("span", "", fmtTime(entry.started_at) + " → " + fmtTime(entry.ended_at)));
-  if (entry.work_item) head.appendChild(el("span", "work-item", entry.work_item));
-  head.appendChild(el("span", "badge", entry.source));
-  wrap.appendChild(head);
-  wrap.appendChild(el("div", "why", entry.why_trigger));
-  const what = entry.what || {};
-  const tools = Object.entries(what.tools_used || {})
-    .map(([k, v]) => `${k}×${v}`)
-    .join(" ");
-  const parts = [];
-  if (tools) parts.push(tools);
-  if (what.branch) parts.push(`${what.branch}@${(what.head || "").slice(0, 7)}`);
-  if (what.files_changed !== undefined) parts.push(`${what.files_changed} files changed`);
-  if (parts.length > 0) wrap.appendChild(el("div", "what", parts.join(" · ")));
-  return wrap;
-}
-
-async function loadLog() {
-  const list = $("log-list");
-  list.textContent = "";
-  const params = new URLSearchParams();
-  params.set("member", $("log-member").value);
-  const workItem = $("log-work-item").value.trim();
-  if (workItem) params.set("work_item", workItem);
-  params.set("limit", "100");
-  // The tab opens this. A rejected fetch here left the list empty with no word.
-  let data;
-  try {
-    const res = await api("/api/log?" + params.toString());
-    if (!res.ok) {
-      const why = "The log is not available. Is the relay connected?";
-      list.appendChild(el("div", "empty", why));
-      return;
-    }
-    data = await res.json();
-  } catch {
-    list.appendChild(el("div", "empty", DAEMON_DOWN));
-    return;
-  }
-  const entries = data.entries || [];
-  if (entries.length === 0) {
-    list.appendChild(el("div", "empty", "No recorded activity for this filter."));
-    return;
-  }
-  entries.slice().reverse().forEach((entry) => list.appendChild(renderEntry(entry)));
-}
-
-$("log-refresh").addEventListener("click", loadLog);
-$("log-work-item").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    loadLog();
-  }
 });
 
 // The composer stays off until the socket opens and the relay reports in.
