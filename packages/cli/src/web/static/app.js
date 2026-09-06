@@ -30,8 +30,11 @@ const state = {
   // this list, so nothing refetches (T066).
   feedItems: [],
   // The thread is the organizing unit of the page (spec 002, FR-045).
-  // mode is "all", "broadcasts", or "thread"; threadId applies to "thread".
-  selection: { mode: "all", threadId: "" },
+  // mode is "waiting", "all", "broadcasts", or "thread"; threadId applies
+  // to "thread". The page OPENS on "waiting" — both humans asked for the
+  // same thing from two directions (seq 81, seq 85): the app must open on
+  // YOU, not on everything.
+  selection: { mode: "waiting", threadId: "" },
   // Which thread states the navigation lists, the way a tracker filters
   // its issue list. "all", or one of open/done/archived.
   threadFilter: "all",
@@ -208,9 +211,125 @@ function renderHandoff(h) {
   return div;
 }
 
+// ---- Unread and waiting-on-you (the list lane: items 1 and 2 of seq 89) ----
+
+// What the member has SEEN, kept in this browser only. A thread is seen up
+// to a seq when its own view was open in a focused window - glancing the
+// All-activity firehose does not count as reading a thread, so the
+// aggregate views never mark anything seen. Broadcasts are a leaf view and
+// live under the "" key.
+const SEEN_KEY = "saw-last-seen";
+
+function seenMap() {
+  try {
+    return JSON.parse(localStorage.getItem(SEEN_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function markThreadSeen(threadId) {
+  let top = 0;
+  state.feedItems.forEach((i) => {
+    if (i.kind !== "message") return;
+    if ((i.data.thread_id || "") !== threadId) return;
+    if (i.data.seq > top) top = i.data.seq;
+  });
+  if (top === 0) return;
+  try {
+    const seen = seenMap();
+    if ((seen[threadId] || 0) < top) {
+      seen[threadId] = top;
+      localStorage.setItem(SEEN_KEY, JSON.stringify(seen));
+    }
+  } catch {
+    // A browser with no storage keeps working; the dots just stay lit.
+  }
+}
+
+/**
+ * One pass over the feed, once per render: the seen map read once, and per
+ * thread ("" = broadcasts) the newest seq, the unread count, the unread
+ * mentions, and whether this member has posted there. Every dot and view
+ * derives from this object instead of re-reading storage per item — the
+ * review of #229 measured 980 storage reads for one render of a small
+ * room, and that grows with the square of the message count.
+ */
+function unreadSnapshot() {
+  const seen = seenMap();
+  const newest = {};
+  const unread = {};
+  const postedIn = new Set();
+  state.feedItems.forEach((i) => {
+    if (i.kind !== "message") return;
+    const key = i.data.thread_id || "";
+    if (i.data.seq > (newest[key] || 0)) newest[key] = i.data.seq;
+    if (i.data.sender === state.me) postedIn.add(key);
+    if (i.data.seq <= (seen[key] || 0)) return;
+    const u = unread[key] || (unread[key] = { count: 0, mentions: 0 });
+    u.count += 1;
+    if (i.data.target === state.me && i.data.sender !== state.me) u.mentions += 1;
+  });
+  return { newest, unread, postedIn };
+}
+
+/** Unread facts for one thread ("" = broadcasts): count, and mentions. */
+function unreadInfo(threadId, snap) {
+  return snap.unread[threadId] || { count: 0, mentions: 0 };
+}
+
+/**
+ * Why one thread is waiting on THIS member, as plain reasons. Empty means
+ * it is not. A mention you have not read, an approval only you can give,
+ * a handoff only you can answer, news in work you own, or new posts in a
+ * conversation you took part in. Someone else's busy thread that you never
+ * joined does not land here — its dot in the list still says it moved.
+ */
+function waitingReasons(t, snap) {
+  const reasons = [];
+  const unread = unreadInfo(t.id, snap);
+  if (unread.mentions > 0) reasons.push("mentions you");
+  if (t.claim_state === "done_proposed" && t.claimed_by === state.me) {
+    reasons.push("your approval");
+  }
+  const handoff = state.feedItems.some(
+    (i) =>
+      i.kind === "handoff" &&
+      i.data.state === "proposed" &&
+      i.data.to_member === state.me &&
+      i.data.thread_id === t.id
+  );
+  if (handoff) reasons.push("handoff to you");
+  if (unread.count > 0 && unread.mentions === 0) {
+    if (t.claimed_by === state.me) reasons.push("new in yours");
+    else if (snap.postedIn.has(t.id)) reasons.push("new replies where you posted");
+  }
+  return reasons;
+}
+
+/** The threads waiting on this member, most recently active first. */
+function waitingThreads(snap) {
+  return Array.from(state.threadsById.values())
+    .map((t) => ({ thread: t, reasons: waitingReasons(t, snap) }))
+    .filter((w) => w.reasons.length > 0)
+    .sort((a, b) => (snap.newest[b.thread.id] || 0) - (snap.newest[a.thread.id] || 0));
+}
+
+/** The ids the waiting view shows, computed once per render. */
+function waitingIds(snap) {
+  return new Set(waitingThreads(snap).map((w) => w.thread.id));
+}
+
 /** Does one feed entry belong to the view the member chose? */
-function passesFilter(item) {
+function passesFilter(item, ids) {
   if (state.selection.mode === "all") return true;
+  if (state.selection.mode === "waiting") {
+    // The waiting view shows the threads that need this member, whole, so
+    // the message that made a thread waiting arrives with its context.
+    if (item.kind === "notice") return false;
+    if (item.kind === "handoff") return ids.has(item.data.thread_id);
+    return ids.has(item.data.thread_id || "");
+  }
   // Claim notices carry no thread, so they live in the full view only.
   if (item.kind === "notice") return false;
   if (item.kind === "handoff") {
@@ -226,16 +345,22 @@ function passesFilter(item) {
 function addItem(kind, data) {
   const item = { kind, data };
   state.feedItems.push(item);
-  if (passesFilter(item)) appendToFeed(renderItem(item));
+  const ids = state.selection.mode === "waiting" ? waitingIds(unreadSnapshot()) : null;
+  if (passesFilter(item, ids)) appendToFeed(renderItem(item));
 }
 
 /** Draw the feed again from the entries the page holds. No refetch. */
 function renderFeed() {
   const feed = $("feed");
   feed.textContent = "";
-  state.feedItems
-    .filter(passesFilter)
-    .forEach((item) => feed.appendChild(renderItem(item)));
+  const ids = state.selection.mode === "waiting" ? waitingIds(unreadSnapshot()) : null;
+  const items = state.feedItems.filter((item) => passesFilter(item, ids));
+  items.forEach((item) => feed.appendChild(renderItem(item)));
+  if (items.length === 0 && state.selection.mode === "waiting") {
+    // The best thing this view can say. An empty inbox is a state worth
+    // designing for, not an accident.
+    feed.appendChild(el("div", "empty", "Nothing is waiting on you."));
+  }
   feed.scrollTop = feed.scrollHeight;
 }
 
@@ -243,6 +368,18 @@ function addMessage(m) {
   if (state.seen.has(m.seq)) return;
   state.seen.add(m.seq);
   addItem("message", m);
+  // Reading happens where the member is: a message landing in the thread
+  // they have open, in a focused window, is seen on arrival. Anywhere
+  // else, the list relights so its dot can say so.
+  const key = m.thread_id || "";
+  const open =
+    (state.selection.mode === "thread" && state.selection.threadId === key) ||
+    (state.selection.mode === "broadcasts" && key === "");
+  if (open && document.hasFocus()) {
+    markThreadSeen(key);
+  } else if (state.me) {
+    renderThreads(Array.from(state.threadsById.values()));
+  }
 }
 
 function renderStatus(status) {
@@ -656,6 +793,10 @@ function renderThreads(threads) {
     if (build) build(div);
     div.addEventListener("click", () => {
       state.selection = { mode, threadId: threadId || "" };
+      // Opening a leaf view is reading it. The aggregate views are a
+      // glance, and a glance marks nothing seen.
+      if (mode === "thread") markThreadSeen(threadId);
+      if (mode === "broadcasts") markThreadSeen("");
       renderThreads(Array.from(state.threadsById.values()));
       renderThreadHeader();
       renderFeed();
@@ -663,10 +804,26 @@ function renderThreads(threads) {
     return div;
   };
 
-  // The saved views. A flat feed stays reachable, as a view over threads.
+  // The saved views. "Waiting on you" leads because it is the question
+  // both humans open the app to answer; the flat feed stays reachable, as
+  // a view over threads.
   const views = el("div", "thread-views");
+  const snap = unreadSnapshot();
+  const waiting = waitingThreads(snap);
+  views.appendChild(
+    row("Waiting on you", "waiting", "", (div) => {
+      if (waiting.length > 0) {
+        div.appendChild(el("span", "waiting-count", String(waiting.length)));
+      }
+    })
+  );
   views.appendChild(row("All activity", "all", ""));
-  views.appendChild(row("Broadcasts", "broadcasts", ""));
+  views.appendChild(
+    row("Broadcasts", "broadcasts", "", (div) => {
+      const b = unreadInfo("", snap);
+      if (b.count > 0) div.appendChild(el("span", "unread-dot" + (b.mentions ? " strong" : "")));
+    })
+  );
   list.appendChild(views);
 
   const shown = threads
@@ -686,6 +843,21 @@ function renderThreads(threads) {
   shown.forEach((t) => {
     list.appendChild(
       row(t.title, "thread", t.id, (div) => {
+        // The red dot (item 1 of seq 89). Every thread with unread gets
+        // one; a mention of you, or news in work you own, gets the strong
+        // form - shrey's rule and amogh's ask, one dot.
+        const unread = unreadInfo(t.id, snap);
+        if (unread.count > 0) {
+          const strong = unread.mentions > 0 || t.claimed_by === state.me;
+          const dot = el("span", "unread-dot" + (strong ? " strong" : ""));
+          dot.title =
+            unread.count +
+            " unread" +
+            (unread.mentions > 0 ? ", mentions you" : "") +
+            (t.claimed_by === state.me ? ", yours" : "");
+          div.classList.add("unread");
+          div.appendChild(dot);
+        }
         const meta = el("span", "thread-meta");
         if (t.state !== "open") meta.appendChild(el("span", "badge state", t.state));
         const who = claimLabel(t);
@@ -698,12 +870,13 @@ function renderThreads(threads) {
     );
   });
 
-  // The selected thread can disappear (archived elsewhere). Fall back.
+  // The selected thread can disappear (archived elsewhere). Fall back to
+  // the home view, which is the waiting one.
   if (
     state.selection.mode === "thread" &&
     !state.threadsById.has(state.selection.threadId)
   ) {
-    state.selection = { mode: "all", threadId: "" };
+    state.selection = { mode: "waiting", threadId: "" };
     renderThreadHeader();
     renderFeed();
   }
@@ -900,7 +1073,9 @@ function renderThreadHeader() {
     const label =
       state.selection.mode === "broadcasts"
         ? "Broadcasts — messages sent to no single thread"
-        : "All activity — every thread, newest last";
+        : state.selection.mode === "waiting"
+          ? "Waiting on you — mentions, approvals, handoffs, and news in your work"
+          : "All activity — every thread, newest last";
     head.appendChild(el("span", "thread-head-title", label));
     renderModeControl(null);
     renderSessionStrip(null);
@@ -1019,6 +1194,10 @@ function connect() {
       (data.messages || []).forEach(addMessage);
       (data.notices || []).forEach((n) => addItem("notice", n));
       renderStatus(data.status);
+      // The waiting view judges messages BY THEIR THREADS, and the replay
+      // above ran before renderStatus filled the thread map - so the feed
+      // must be drawn once more, now that it can answer.
+      renderFeed();
       return;
     }
     if (data.kind === "event") {
