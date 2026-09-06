@@ -1,6 +1,6 @@
 // SAW room page logic. Talks only to the local daemon.
 /* global WebSocket, document, fetch, location, setTimeout, URLSearchParams, Option,
-   localStorage, Notification, window */
+   localStorage, Notification, window, navigator */
 
 // The run token (T057). The daemon writes it into this document when it
 // serves the page. Every call to the daemon presents it.
@@ -115,30 +115,110 @@ function el(tag, className, text) {
   return node;
 }
 
+// ---- Plain speech, move 1: the page reads well before the agents do ----
+
+/**
+ * The first sentence of a post, for the fold and for notifications. It
+ * skips a shouted heading line (ALL CAPS, a few words) and a bare greeting
+ * line ("shrey -"), because agent posts open with both and neither says
+ * anything. Capped, so a run-on first sentence still folds.
+ */
+function headline(body) {
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l);
+  let line = lines[0] || "";
+  for (const l of lines) {
+    const shouted = l === l.toUpperCase() && /[A-Z]/.test(l) && l.split(/\s+/).length <= 6;
+    const greeting = /^[a-z0-9_-]+\s*[-:,]\s*$/i.test(l);
+    if (!shouted && !greeting) {
+      line = l;
+      break;
+    }
+  }
+  const first = line.match(/^.*?[.!?](\s|$)/);
+  let text = (first ? first[0] : line).trim();
+  if (text.length > 140) text = text.slice(0, 137).trimEnd() + "…";
+  return text;
+}
+
+function wordCount(body) {
+  return body.trim().split(/\s+/).filter(Boolean).length;
+}
+
 function renderMessage(m) {
   // Addressed to this member: the message reads like a mention (FR-045).
   const mention = m.target && m.target === state.me && m.sender !== state.me;
+  const human = m.sender_kind === "human";
   const wrap = el(
     "div",
     "msg" +
+      (human ? " from-human" : " from-agent") +
       (m.sender === state.me ? " mine" : "") +
       (mention ? " mention" : "") +
       // A companion answer is not its member and not their coding agent.
       // Saying so is the whole point of it having its own identity.
       (m.sender_kind === "companion" ? " from-companion" : "")
   );
+  wrap.id = "seq-" + m.seq;
   const head = el("div", "head");
   head.appendChild(el("span", "sender", m.sender));
   head.appendChild(el("span", "badge " + m.sender_kind, m.sender_kind));
   head.appendChild(el("span", "type " + m.type, m.type));
   if (m.target) head.appendChild(el("span", "target", "→ " + m.target));
-  head.appendChild(el("span", "", "#" + m.seq + " · " + fmtTime(m.sent_at)));
+  head.appendChild(el("span", "", fmtTime(m.sent_at)));
   wrap.appendChild(head);
-  wrap.appendChild(el("div", "body", m.body));
+
+  if (human) {
+    // A person's words show in full. They are the ones worth reading.
+    wrap.appendChild(el("div", "body", m.body));
+  } else {
+    // An agent post folds to its first sentence; the rest opens on demand.
+    // The founders asked for the room to be readable before the agents are
+    // (plain-speech plan, move 1). The full text is still here, one click.
+    const line = headline(m.body);
+    wrap.appendChild(el("div", "headline", line));
+    if (line.length < m.body.trim().length) {
+      const words = wordCount(m.body);
+      const body = el("div", "body", m.body);
+      body.hidden = true;
+      const toggle = el("button", "details-toggle", "details · " + words + " words");
+      toggle.type = "button";
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.addEventListener("click", () => {
+        body.hidden = !body.hidden;
+        toggle.setAttribute("aria-expanded", body.hidden ? "false" : "true");
+        toggle.textContent = body.hidden ? "details · " + words + " words" : "hide details";
+      });
+      wrap.appendChild(toggle);
+      wrap.appendChild(body);
+    }
+  }
+
+  // Pointers live here, under the words, never in them: the post's own
+  // number as a link you can copy (the founders' one real disagreement,
+  // settled this way), then the branches and commits it carries.
   const meta = el("div", "meta");
+  const num = el("button", "postnum", "post " + m.seq);
+  num.type = "button";
+  num.title = "copy a link to this post";
+  num.addEventListener("click", async () => {
+    const link = location.origin + "/#seq-" + m.seq;
+    try {
+      await navigator.clipboard.writeText(link);
+      num.textContent = "link copied";
+      setTimeout(() => {
+        num.textContent = "post " + m.seq;
+      }, 1200);
+    } catch {
+      num.textContent = link;
+    }
+  });
+  meta.appendChild(num);
   (m.refs || []).forEach((r) => meta.appendChild(el("span", "ref", r.kind + ":" + r.value)));
   if (m.work_item) meta.appendChild(el("span", "work-item", m.work_item));
-  if (meta.childNodes.length > 0) wrap.appendChild(meta);
+  wrap.appendChild(meta);
   return wrap;
 }
 
@@ -1197,7 +1277,19 @@ function connect() {
       // The waiting view judges messages BY THEIR THREADS, and the replay
       // above ran before renderStatus filled the thread map - so the feed
       // must be drawn once more, now that it can answer.
+      // A copied post link lands here too: #seq-96 opens the full feed and
+      // scrolls to that post once the replay has drawn it.
+      const linked = location.hash.startsWith("#seq-") ? location.hash.slice(1) : "";
+      if (linked) {
+        state.selection = { mode: "all", threadId: "" };
+        renderThreads(Array.from(state.threadsById.values()));
+        renderThreadHeader();
+      }
       renderFeed();
+      if (linked) {
+        const target = document.getElementById(linked);
+        if (target) target.scrollIntoView();
+      }
       return;
     }
     if (data.kind === "event") {
@@ -1340,7 +1432,9 @@ function notifyPing(m) {
   unseenPings += 1;
   document.title = "(" + unseenPings + ") " + BASE_TITLE;
   if (pingPref() && typeof Notification !== "undefined" && Notification.permission === "granted") {
-    const body = m.body.length > 140 ? m.body.slice(0, 140) + "…" : m.body;
+    // The notification says the one thing the post says, not its first
+    // 140 characters - which, for an agent post, was often a heading.
+    const body = headline(m.body);
     // The tag keeps a reconnect race from stacking duplicate toasts for
     // one message: same seq, same toast.
     const note = new Notification(m.sender + " → you in SAW", { body, tag: "saw-ping-" + m.seq });
