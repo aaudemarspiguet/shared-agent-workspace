@@ -87,6 +87,77 @@ describe("the web surface's wiring", () => {
     expect(css).toMatch(/\.auto-toggle\.on/);
   });
 
+  // Items 3-7 of the UI plan agreed in the room. Each of these is a claim
+  // about WHERE a control lives or WHAT SHAPE it has, and each was a real
+  // complaint from a member using the page, so each gets an assertion that
+  // fails if the control drifts back.
+
+  // 3. The header says what the thread IS. The session controls grow tall
+  // mid-session, and inside the header they pushed the title off the pane.
+  it("keeps the session controls out of the thread header", () => {
+    expect(html).toContain('id="session-strip"');
+    // The panel is built into the lane, never appended to the header.
+    expect(js).toMatch(/renderSessionStrip\(/);
+    const header = js.slice(js.indexOf("function renderThreadHeader()"));
+    expect(header).not.toMatch(/head\.appendChild\(\s*panel/);
+  });
+
+  // 4. Auto mode is standing consent (FR-050), so it must read as a switch
+  // and cost a second press to give. Withdrawing it stays one press.
+  it("makes auto mode a switch that asks before it turns on", () => {
+    expect(js).toMatch(/setAttribute\("role", "switch"\)/);
+    expect(js).toMatch(/aria-checked/);
+    expect(js).toContain("auto-confirm");
+    // Turning it off must not route through the confirmation.
+    const fn = js.slice(js.indexOf("function autoModeSwitch("));
+    const offFirst = fn.indexOf("enabled: false");
+    const askFirst = fn.indexOf("auto-confirm");
+    expect(offFirst).toBeGreaterThan(-1);
+    expect(offFirst).toBeLessThan(askFirst);
+  });
+
+  // 5. A free number box asked members to invent a figure. The choices are
+  // fixed, and the default stays DEFAULT_MAX_TURNS from packages/shared.
+  it("offers turn budgets as choices rather than a number to type", () => {
+    expect(js).not.toContain("turns-input");
+    expect(js).toContain("budget-chip");
+    expect(js).toMatch(/let chosen = 50;/);
+  });
+
+  // 6. Refs are unbounded and were printed flat into the header.
+  it("collapses refs into a lineage that opens", () => {
+    expect(js).toMatch(/function renderRefLineage\(/);
+    expect(css).toContain(".lineage-list");
+  });
+
+  // 7. The mode control belongs where the member acts, and each option must
+  // say what it costs. FR-037: it governs the agent, and only its own
+  // member may set it — so the menu must never offer another member's.
+  it("puts the mode control by the composer and says what each mode means", () => {
+    expect(html).toContain('id="composer-mode"');
+    const composer = html.slice(html.indexOf('<form id="composer"'));
+    expect(composer).toContain('id="composer-mode"');
+    expect(js).toMatch(/const MODES = \[/);
+    ["Editing", "Commenting", "Viewing"].forEach((name) => expect(js).toContain(name));
+    expect(js).toContain("Only you can set it.");
+    // The control posts a thread id and a mode, never a member.
+    const control = js.slice(js.indexOf("function renderModeControl("));
+    const body = control.slice(0, control.indexOf("document.addEventListener"));
+    expect(body).not.toMatch(/member:/);
+  });
+
+  // 8. Everything the script opens and closes, it does by setting .hidden.
+  // The UA sheet's [hidden] rule is plain, so an author display rule wins
+  // and the element stays visible with the attribute set: the lineage list,
+  // the mode menu and the auto-mode confirmation all shipped permanently
+  // open, and #thread-form had been so since T113. Rendering is the only
+  // way to see it, so the rule itself is what this file can guard.
+  it("lets the hidden attribute beat an author display rule", () => {
+    expect(css).toMatch(/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/);
+    // Every element the script toggles this way needs that rule to hold.
+    expect(js).toMatch(/\.hidden = /);
+  });
+
   // No inline script or style: the page is served under a strict CSP, and
   // either one would be blocked with no error the member can see.
   it("keeps script and style out of the markup", () => {

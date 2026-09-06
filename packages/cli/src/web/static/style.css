@@ -16,6 +16,15 @@
 
 * { box-sizing: border-box; }
 
+/* The hidden attribute is how the script opens and closes every popover,
+   form and strip on this page. The UA sheet's [hidden] { display: none } is
+   a plain rule, so any author display rule below outranks it and the element
+   stays on screen with its attribute set — which is how the lineage list,
+   the mode menu, the auto-mode confirmation and, since T113, the thread
+   form all rendered permanently open. !important is what makes the
+   attribute win, and it lets the rules below keep their display: flex. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -386,7 +395,7 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   background: rgba(127, 127, 127, 0.18); }
 .thread-head-meta .badge.state { background: rgba(240, 180, 0, 0.25); }
 .thread-head-meta .badge.claim-note { background: rgba(180, 140, 255, 0.22); color: var(--violet); }
-.thread-head-mode { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+.thread-head-mode { display: none; }
 .mode-label { font-size: 11px; color: var(--muted); }
 .thread-head-mode .mode-select { margin-left: 0; font-size: 11px; }
 
@@ -433,27 +442,76 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 
 /* ---- Sessions, auto mode, approvals (T154, T155, US9) ---- */
 .session-panel {
-  flex-basis: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 6px;
-  padding-top: 8px;
+  padding: 8px 16px 10px;
   border-top: 1px dashed var(--line);
 }
 .session-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.auto-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .auto-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font: inherit;
   font-size: 11px;
-  padding: 2px 9px;
-  border-radius: 10px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: none;
   color: var(--muted);
   cursor: pointer;
 }
+/* The track reads as a switch at a glance, which a bordered word did not. */
+.auto-track {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--line);
+  transition: background 120ms ease;
+}
+.auto-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 120ms ease, background 120ms ease;
+}
 /* Auto mode is consent, so its "on" state must be unmistakable. */
 .auto-toggle.on { color: var(--violet); border-color: var(--violet); background: rgba(180, 140, 255, 0.14); }
+.auto-toggle.on .auto-track { background: rgba(180, 140, 255, 0.45); }
+.auto-toggle.on .auto-track::after { transform: translateX(12px); background: var(--violet); }
+
+/* The second press. Standing consent is worth one sentence first. */
+.auto-confirm {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(180, 140, 255, 0.4);
+  background: rgba(180, 140, 255, 0.08);
+}
+.auto-confirm-text { flex-basis: 100%; font-size: 12px; color: var(--text); }
+.auto-confirm-yes, .auto-confirm-no {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.auto-confirm-yes { border-color: var(--violet); color: var(--violet); }
 .badge.session-state { background: rgba(79, 140, 255, 0.22); color: var(--accent); }
 .session-task { font-size: 12px; color: var(--muted); font-style: italic; }
 .session-hint { font-size: 11px; color: var(--muted); }
@@ -475,7 +533,7 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 .turn-count.spent { color: var(--red); font-weight: 600; }
 
 .readiness { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.task-input, .turns-input {
+.task-input {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -485,7 +543,20 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   font-size: 12px;
 }
 .task-input { flex: 1; min-width: 200px; }
-.turns-input { width: 68px; }
+.budget { display: inline-flex; align-items: center; gap: 4px; }
+.budget-label { font-size: 11px; color: var(--muted); }
+.budget-chip {
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.budget-chip.on { color: var(--accent); border-color: var(--accent); background: rgba(79, 140, 255, 0.14); }
 .ready-btn, .end-btn, .approve {
   font: inherit;
   font-size: 11px;
@@ -531,4 +602,128 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   border: 1px solid var(--red);
   border-radius: 6px;
   background: rgba(255, 107, 107, 0.08);
+}
+
+
+/* ---- The session lane, the ref lineage, and the mode control (UI 3-7) ---- */
+
+/* The lane sits between the thread's identity and its conversation. Quiet
+   when nothing is happening; it opens itself when something wants you. */
+.session-strip { border-bottom: 1px solid var(--line); background: var(--panel); }
+.strip-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+}
+.strip-summary { font-size: 11px; color: var(--muted); }
+.strip-summary.live { color: var(--accent); }
+.strip-toggle {
+  margin-left: auto;
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.strip-toggle:hover { color: var(--text); }
+
+/* Refs collapse to a count. A thread can carry many and they used to push
+   the title off its own line. */
+.lineage { position: relative; display: inline-flex; }
+.lineage-toggle {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.lineage-toggle.open { color: var(--text); border-color: var(--accent); }
+.lineage-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin-top: 4px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* The mode control, by the composer: where you act, not in the title bar. */
+.composer-mode { position: relative; margin-left: auto; }
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.mode-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+/* Each mode gets its own colour, so the current one is readable without
+   opening anything: edit acts, comment speaks, view watches. */
+.mode-pill.mode-edit { border-color: var(--green); }
+.mode-pill.mode-edit .mode-dot { background: var(--green); }
+.mode-pill.mode-comment { border-color: var(--accent); }
+.mode-pill.mode-comment .mode-dot { background: var(--accent); }
+.mode-pill.mode-view { border-color: var(--line); color: var(--muted); }
+
+.mode-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  z-index: 30;
+  margin-bottom: 6px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.mode-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.mode-opt:hover { background: rgba(255, 255, 255, 0.05); }
+.mode-opt.on { background: rgba(79, 140, 255, 0.14); }
+.mode-opt-name { font-size: 12px; font-weight: 600; }
+.mode-opt-desc { font-size: 11px; color: var(--muted); }
+/* FR-037: the mode governs the agent, never the human, and only its own
+   member may set it. The control says so rather than leaving it implied. */
+.mode-foot {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 6px 9px 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
 }
