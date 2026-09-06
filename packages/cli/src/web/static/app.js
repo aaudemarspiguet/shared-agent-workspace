@@ -247,30 +247,47 @@ function markThreadSeen(threadId) {
   }
 }
 
-/** Unread facts for one thread ("" = broadcasts): count, and mentions. */
-function unreadInfo(threadId) {
-  const seenUpTo = seenMap()[threadId] || 0;
-  let count = 0;
-  let mentions = 0;
+/**
+ * One pass over the feed, once per render: the seen map read once, and per
+ * thread ("" = broadcasts) the newest seq, the unread count, the unread
+ * mentions, and whether this member has posted there. Every dot and view
+ * derives from this object instead of re-reading storage per item — the
+ * review of #229 measured 980 storage reads for one render of a small
+ * room, and that grows with the square of the message count.
+ */
+function unreadSnapshot() {
+  const seen = seenMap();
+  const newest = {};
+  const unread = {};
+  const postedIn = new Set();
   state.feedItems.forEach((i) => {
     if (i.kind !== "message") return;
-    if ((i.data.thread_id || "") !== threadId) return;
-    if (i.data.seq <= seenUpTo) return;
-    count += 1;
-    if (i.data.target === state.me && i.data.sender !== state.me) mentions += 1;
+    const key = i.data.thread_id || "";
+    if (i.data.seq > (newest[key] || 0)) newest[key] = i.data.seq;
+    if (i.data.sender === state.me) postedIn.add(key);
+    if (i.data.seq <= (seen[key] || 0)) return;
+    const u = unread[key] || (unread[key] = { count: 0, mentions: 0 });
+    u.count += 1;
+    if (i.data.target === state.me && i.data.sender !== state.me) u.mentions += 1;
   });
-  return { count, mentions };
+  return { newest, unread, postedIn };
+}
+
+/** Unread facts for one thread ("" = broadcasts): count, and mentions. */
+function unreadInfo(threadId, snap) {
+  return snap.unread[threadId] || { count: 0, mentions: 0 };
 }
 
 /**
  * Why one thread is waiting on THIS member, as plain reasons. Empty means
- * it is not. The definition is deliberately narrow: a mention you have not
- * read, an approval only you can give, a handoff only you can answer, or
- * news in work you own. Someone else's busy thread never lands here.
+ * it is not. A mention you have not read, an approval only you can give,
+ * a handoff only you can answer, news in work you own, or new posts in a
+ * conversation you took part in. Someone else's busy thread that you never
+ * joined does not land here — its dot in the list still says it moved.
  */
-function waitingReasons(t) {
+function waitingReasons(t, snap) {
   const reasons = [];
-  const unread = unreadInfo(t.id);
+  const unread = unreadInfo(t.id, snap);
   if (unread.mentions > 0) reasons.push("mentions you");
   if (t.claim_state === "done_proposed" && t.claimed_by === state.me) {
     reasons.push("your approval");
@@ -283,28 +300,33 @@ function waitingReasons(t) {
       i.data.thread_id === t.id
   );
   if (handoff) reasons.push("handoff to you");
-  if (t.claimed_by === state.me && unread.count > 0 && unread.mentions === 0) {
-    reasons.push("new in yours");
+  if (unread.count > 0 && unread.mentions === 0) {
+    if (t.claimed_by === state.me) reasons.push("new in yours");
+    else if (snap.postedIn.has(t.id)) reasons.push("new replies where you posted");
   }
   return reasons;
 }
 
 /** The threads waiting on this member, most recently active first. */
-function waitingThreads() {
+function waitingThreads(snap) {
   return Array.from(state.threadsById.values())
-    .map((t) => ({ thread: t, reasons: waitingReasons(t) }))
+    .map((t) => ({ thread: t, reasons: waitingReasons(t, snap) }))
     .filter((w) => w.reasons.length > 0)
-    .sort((a, b) => (b.thread.message_count || 0) - (a.thread.message_count || 0));
+    .sort((a, b) => (snap.newest[b.thread.id] || 0) - (snap.newest[a.thread.id] || 0));
+}
+
+/** The ids the waiting view shows, computed once per render. */
+function waitingIds(snap) {
+  return new Set(waitingThreads(snap).map((w) => w.thread.id));
 }
 
 /** Does one feed entry belong to the view the member chose? */
-function passesFilter(item) {
+function passesFilter(item, ids) {
   if (state.selection.mode === "all") return true;
   if (state.selection.mode === "waiting") {
     // The waiting view shows the threads that need this member, whole, so
     // the message that made a thread waiting arrives with its context.
     if (item.kind === "notice") return false;
-    const ids = new Set(waitingThreads().map((w) => w.thread.id));
     if (item.kind === "handoff") return ids.has(item.data.thread_id);
     return ids.has(item.data.thread_id || "");
   }
@@ -323,14 +345,16 @@ function passesFilter(item) {
 function addItem(kind, data) {
   const item = { kind, data };
   state.feedItems.push(item);
-  if (passesFilter(item)) appendToFeed(renderItem(item));
+  const ids = state.selection.mode === "waiting" ? waitingIds(unreadSnapshot()) : null;
+  if (passesFilter(item, ids)) appendToFeed(renderItem(item));
 }
 
 /** Draw the feed again from the entries the page holds. No refetch. */
 function renderFeed() {
   const feed = $("feed");
   feed.textContent = "";
-  const items = state.feedItems.filter(passesFilter);
+  const ids = state.selection.mode === "waiting" ? waitingIds(unreadSnapshot()) : null;
+  const items = state.feedItems.filter((item) => passesFilter(item, ids));
   items.forEach((item) => feed.appendChild(renderItem(item)));
   if (items.length === 0 && state.selection.mode === "waiting") {
     // The best thing this view can say. An empty inbox is a state worth
@@ -784,7 +808,8 @@ function renderThreads(threads) {
   // both humans open the app to answer; the flat feed stays reachable, as
   // a view over threads.
   const views = el("div", "thread-views");
-  const waiting = waitingThreads();
+  const snap = unreadSnapshot();
+  const waiting = waitingThreads(snap);
   views.appendChild(
     row("Waiting on you", "waiting", "", (div) => {
       if (waiting.length > 0) {
@@ -795,7 +820,7 @@ function renderThreads(threads) {
   views.appendChild(row("All activity", "all", ""));
   views.appendChild(
     row("Broadcasts", "broadcasts", "", (div) => {
-      const b = unreadInfo("");
+      const b = unreadInfo("", snap);
       if (b.count > 0) div.appendChild(el("span", "unread-dot" + (b.mentions ? " strong" : "")));
     })
   );
@@ -821,7 +846,7 @@ function renderThreads(threads) {
         // The red dot (item 1 of seq 89). Every thread with unread gets
         // one; a mention of you, or news in work you own, gets the strong
         // form - shrey's rule and amogh's ask, one dot.
-        const unread = unreadInfo(t.id);
+        const unread = unreadInfo(t.id, snap);
         if (unread.count > 0) {
           const strong = unread.mentions > 0 || t.claimed_by === state.me;
           const dot = el("span", "unread-dot" + (strong ? " strong" : ""));
