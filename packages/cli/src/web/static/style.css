@@ -16,6 +16,15 @@
 
 * { box-sizing: border-box; }
 
+/* The hidden attribute is how the script opens and closes every popover,
+   form and strip on this page. The UA sheet's [hidden] { display: none } is
+   a plain rule, so any author display rule below outranks it and the element
+   stays on screen with its attribute set — which is how the lineage list,
+   the mode menu, the auto-mode confirmation and, since T113, the thread
+   form all rendered permanently open. !important is what makes the
+   attribute win, and it lets the rules below keep their display: flex. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);

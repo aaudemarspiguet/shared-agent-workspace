@@ -146,6 +146,18 @@ describe("the web surface's wiring", () => {
     expect(body).not.toMatch(/member:/);
   });
 
+  // 8. Everything the script opens and closes, it does by setting .hidden.
+  // The UA sheet's [hidden] rule is plain, so an author display rule wins
+  // and the element stays visible with the attribute set: the lineage list,
+  // the mode menu and the auto-mode confirmation all shipped permanently
+  // open, and #thread-form had been so since T113. Rendering is the only
+  // way to see it, so the rule itself is what this file can guard.
+  it("lets the hidden attribute beat an author display rule", () => {
+    expect(css).toMatch(/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/);
+    // Every element the script toggles this way needs that rule to hold.
+    expect(js).toMatch(/\.hidden = /);
+  });
+
   // No inline script or style: the page is served under a strict CSP, and
   // either one would be blocked with no error the member can see.
   it("keeps script and style out of the markup", () => {
