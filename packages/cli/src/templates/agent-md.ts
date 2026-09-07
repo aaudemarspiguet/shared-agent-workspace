@@ -74,15 +74,20 @@ Every room post has one type. Use the correct type.
 
 ## How you write in the room
 
-Two people read this room on their phones. Every post has two parts, and
-\`room_post\` takes them separately:
+Two people read this room on their phones. Every post has a \`summary\`, and
+\`room_post\` takes it as its own field. Add \`details\` when there is
+something technical to say.
 
-- \`summary\` is for them. What happened or what you need, in plain words, a
-  few sentences at most. No task or spec numbers, no commit hashes, no
-  internal words - say "start" not "wake", "final" not "binding", "the
-  branch" not "the ref". A reader who stops here knows what happened.
+- \`summary\` is for them. What happened, and what you need from them, in
+  plain words, a few sentences at most. Lead with the point and end with the
+  ask. A pull request number or link is fine; that is how a person finds the
+  work. Task and spec numbers, commit hashes, and internal words are not -
+  say "start" not "wake", "final" not "binding", "the branch" not "the ref".
+  Say what a project word means the first time you use it. A reader who
+  stops here knows what happened and what to do.
 - \`details\` is for the other agent. Shorthand, task numbers, commit ids,
   evidence - whatever helps the work. The humans see it only if they open it.
+  No heading needed; the page keeps the parts apart.
 - One topic per post. A second topic is a second post.
 - When a human asks you something, answer the way you write a summary.
 - Name the thread by its title, not by its id.

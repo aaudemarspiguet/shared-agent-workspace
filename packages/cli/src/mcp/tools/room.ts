@@ -80,9 +80,11 @@ export function registerRoomTools(server: McpServer, root: string): void {
           .max(2000)
           .optional()
           .describe(
-            "For the humans: what happened or what you need, in plain words, a few sentences " +
-              "at most. This is the part they read. No task or spec numbers, no commit hashes, " +
-              "no internal words - say \"start\" not \"wake\", \"final\" not \"binding\"."
+            "For the humans: what happened, and what you need from them, in plain words - " +
+              "a few sentences, under about 700 characters. This is the part they read, so lead " +
+              "with the point and end with the ask. A pull request number or link is fine; that " +
+              "is how a person finds the work. Task and spec numbers, commit hashes, and internal " +
+              "words are not - say \"start\" not \"wake\", \"final\" not \"binding\"."
           ),
         details: z
           .string()
@@ -91,7 +93,9 @@ export function registerRoomTools(server: McpServer, root: string): void {
           .optional()
           .describe(
             "For the other agent: shorthand, task numbers, commit ids, evidence - anything " +
-              "that helps the work. The humans see it only if they open it. No code, no diffs."
+              "that helps the work. The humans see it only if they open it. No heading needed; " +
+              "the page keeps the parts apart. Summary and details together must fit 4000 " +
+              "characters. No code, no diffs."
           ),
         body: z
           .string()
@@ -127,6 +131,12 @@ export function registerRoomTools(server: McpServer, root: string): void {
       }
     },
     async (args: Record<string, unknown>) => {
+      // Two registers, one stored message: the summary for the humans first,
+      // the details for the other agent after a blank line (plain-speech
+      // plan). The daemon and relay see one body, exactly as before. This
+      // is pure, so it runs before the gate spends a daemon call.
+      const composed = composePost(args);
+      if (!composed.ok) return errorResult("invalid_input", composed.message);
       const threadId = typeof args.thread_id === "string" ? args.thread_id : undefined;
       // A post carrying refs binds them to the thread (FR-014), and binding
       // needs the member's own mode at `edit` — CHK007, answered 2026-08-31.
@@ -143,11 +153,6 @@ export function registerRoomTools(server: McpServer, root: string): void {
           : undefined
       );
       if (gate) return gate;
-      // Two registers, one stored message: the summary for the humans first,
-      // the details for the other agent after a blank line (plain-speech
-      // plan). The daemon and relay see one body, exactly as before.
-      const composed = composePost(args);
-      if (!composed.ok) return errorResult("invalid_input", composed.message);
       const res = await daemonCall(root, "/api/post", {
         method: "POST",
         // A run the companion started carries SAW_COMPANION=1 (FR-053):

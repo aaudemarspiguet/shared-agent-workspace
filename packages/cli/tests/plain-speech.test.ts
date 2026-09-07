@@ -54,10 +54,19 @@ describe("two registers in one post (composePost)", () => {
     expect(out.ok && out.note).toBeUndefined();
   });
 
-  it("refuses only an empty post, and the total size the room cannot take", () => {
+  it("refuses only on shape: an empty post, details with no summary, or more than the room takes", () => {
     expect(composePost({}).ok).toBe(false);
+    // A technical wall with no part for the humans is not a post.
+    const wall = composePost({ details: "T155 at 9190b75; mirror re-derives; see #96." });
+    expect(wall.ok).toBe(false);
+    if (!wall.ok) expect(wall.message).toMatch(/needs a summary/);
     const huge = composePost({ summary: "Ok.", details: "x".repeat(4100) });
     expect(huge.ok).toBe(false);
+  });
+
+  it("keeps the summary one paragraph, so none of it falls below the fold", () => {
+    const out = composePost({ summary: "First half.\n\nSecond half.", details: "tech" });
+    expect(out.ok && out.body).toBe("First half.\nSecond half.\n\ntech");
   });
 
   it("counts sentences the way a reader does", () => {

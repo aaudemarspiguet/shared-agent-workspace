@@ -123,37 +123,55 @@ function el(tag, className, text) {
  * line ("shrey -"), because agent posts open with both and neither says
  * anything. Capped, so a run-on first sentence still folds.
  */
-function headline(body) {
-  const whole = body.trim();
-  // A post written with room_post's summary and details registers stores
-  // the summary as its first paragraph. That paragraph IS the human part,
-  // so it shows whole - a few sentences, never cut.
-  const paragraphs = whole.split(/\n\s*\n/);
-  if (paragraphs.length > 1 && paragraphs[0].trim().length <= 700) {
-    return paragraphs[0].replace(/\s*\n\s*/g, " ").trim();
-  }
-  // Older posts have no registers: fall back to the first sentence, past a
-  // shouted heading line and a bare greeting line, cut at a word boundary.
-  const lines = whole
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l);
-  let line = lines[0] || "";
-  for (const l of lines) {
+/** Sentences, counted the way a reader does. The same rule the posting tool uses. */
+function sentenceCount(text) {
+  return text.split(/[.!?]+(?:\s+|$)/).filter((s) => s.trim()).length;
+}
+
+/**
+ * Split a post into the part written for people and the rest.
+ *
+ * A post made with room_post's summary and details registers stores the
+ * summary as its first paragraph. That paragraph shows whole when it reads
+ * like a summary - six sentences or fewer, the same rule the posting tool
+ * applies - and the rest folds. Older posts have no registers: the fold is
+ * the first sentence, past any shouted heading line or bare greeting line,
+ * cut at a word boundary. Either way the two parts never overlap, so
+ * opening the details never repeats the summary.
+ */
+function splitPost(body) {
+  const lines = body.trim().split("\n");
+  // Drop leading shouted headings and bare greetings before anything else;
+  // agent posts open with both, and neither says anything.
+  let start = 0;
+  while (start < lines.length) {
+    const l = lines[start].trim();
     const shouted = l === l.toUpperCase() && /[A-Z]/.test(l) && l.split(/\s+/).length <= 6;
     const greeting = /^[a-z0-9_-]+\s*[-:,]\s*$/i.test(l);
-    if (!shouted && !greeting) {
-      line = l;
-      break;
-    }
+    if (l && !shouted && !greeting) break;
+    start += 1;
   }
-  const first = line.match(/^.*?[.!?](\s|$)/);
-  let text = (first ? first[0] : line).trim();
-  if (text.length > 140) {
-    const cut = text.lastIndexOf(" ", 137);
-    text = text.slice(0, cut > 60 ? cut : 137).trimEnd() + "…";
+  const text = lines.slice(start).join("\n").trim();
+  const paragraphs = text.split(/\n\s*\n/);
+  const first = paragraphs[0].replace(/\s*\n\s*/g, " ").trim();
+  if (first && sentenceCount(first) <= 6 && first.length <= 1000) {
+    return { summary: first, rest: paragraphs.slice(1).join("\n\n").trim() };
   }
-  return text;
+  const m = first.match(/^.*?[.!?](\s|$)/);
+  let summary = (m ? m[0] : first).trim();
+  if (summary.length > 140) {
+    const cut = summary.lastIndexOf(" ", 137);
+    summary = summary.slice(0, cut > 60 ? cut : 137).trimEnd() + "…";
+    return { summary, rest: text };
+  }
+  const rest = [first.slice(summary.length).trim(), ...paragraphs.slice(1)]
+    .filter((p) => p.trim())
+    .join("\n\n");
+  return { summary, rest };
+}
+
+function headline(body) {
+  return splitPost(body).summary;
 }
 
 /** A copied post link (#seq-96) opens the full feed at that post. */
@@ -207,11 +225,11 @@ function renderMessage(m) {
     // An agent post folds to its first sentence; the rest opens on demand.
     // The founders asked for the room to be readable before the agents are
     // (plain-speech plan, move 1). The full text is still here, one click.
-    const line = headline(m.body);
-    wrap.appendChild(el("div", "headline", line));
-    if (line.length < m.body.trim().length) {
-      const words = wordCount(m.body);
-      const body = el("div", "body", m.body);
+    const parts = splitPost(m.body);
+    wrap.appendChild(el("div", "headline", parts.summary));
+    if (parts.rest) {
+      const words = wordCount(parts.rest);
+      const body = el("div", "body", parts.rest);
       body.hidden = true;
       const toggle = el("button", "details-toggle", "details · " + words + " words");
       toggle.type = "button";

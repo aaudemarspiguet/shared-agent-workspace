@@ -10,13 +10,16 @@
 // invasive - it would reject useful references and burn agent turns on
 // rewrites. The model writes the human part on purpose, as its own field;
 // the only guardrail is a one-line note when a summary runs long, and the
-// post goes through regardless.
+// post goes through regardless. The two refusals that remain are about
+// shape, not style: an empty post, and details with no summary at all.
+
+import { MAX_BODY_LENGTH } from "@saw/shared";
 
 /** About how many sentences a person reads before they stop. */
 export const MAX_SUMMARY_SENTENCES = 6;
 
-/** The relay's cap on one message body (packages/shared MAX_BODY_LENGTH). */
-const MAX_BODY = 4000;
+/** The relay's cap on one message body, imported so the two can never disagree. */
+const MAX_BODY = MAX_BODY_LENGTH;
 
 export type Composed =
   | { ok: true; body: string; note?: string }
@@ -29,34 +32,36 @@ export function sentenceCount(text: string): number {
     .filter((piece) => piece.trim().length > 0).length;
 }
 
+const NEEDS_SUMMARY =
+  "a post needs a summary for the humans - what happened or what you need, in plain words - " +
+  "and details for the other agent if there is more to say";
+
 /**
  * Compose the stored body from what the tool was given.
  *
  * `summary` + `details` is the shape agents are asked for. A bare `body`
  * (older callers, or a companion answering in one breath) passes through
- * unchanged, so nothing that worked yesterday breaks today.
+ * unchanged, so nothing that worked yesterday breaks today. Details with no
+ * summary is refused: that is a technical wall with no part for the humans,
+ * and the page would fold it as if it were one.
  */
 export function composePost(args: {
   summary?: unknown;
   details?: unknown;
   body?: unknown;
 }): Composed {
-  const summary = typeof args.summary === "string" ? args.summary.trim() : "";
+  const rawSummary = typeof args.summary === "string" ? args.summary.trim() : "";
   const body = typeof args.body === "string" ? args.body.trim() : "";
   let details = typeof args.details === "string" ? args.details.trim() : "";
 
-  if (!summary) {
-    const text = body || details;
-    if (!text) {
-      return {
-        ok: false,
-        message:
-          "a post needs a summary for the humans - what happened or what you need, in plain words - " +
-          "and details for the other agent if there is more to say"
-      };
-    }
-    return { ok: true, body: text };
+  if (!rawSummary) {
+    if (body) return { ok: true, body };
+    return { ok: false, message: NEEDS_SUMMARY };
   }
+
+  // The summary is exactly one paragraph: a blank line inside it would put
+  // its second half below the fold. Collapse any to a single line break.
+  const summary = rawSummary.replace(/\n\s*\n+/g, "\n");
 
   // A caller that sends both `summary` and `body` meant `body` as the details.
   if (!details && body) details = body;
@@ -74,8 +79,8 @@ export function composePost(args: {
   const sentences = sentenceCount(summary);
   const note =
     sentences > MAX_SUMMARY_SENTENCES
-      ? `posted. The summary is ${sentences} sentences; people read about ${MAX_SUMMARY_SENTENCES}. ` +
-        "Next time, keep the summary to the point and put the rest in details."
+      ? `Posted. The summary ran to ${sentences} sentences; people read about ${MAX_SUMMARY_SENTENCES}. ` +
+        "Next time keep it shorter and move the rest to details."
       : undefined;
   return note ? { ok: true, body: text, note } : { ok: true, body: text };
 }

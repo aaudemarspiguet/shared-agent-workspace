@@ -70,11 +70,17 @@ Input:
 ```json
 {
   "type": "intent",                  // required; one of the five types
-  "body": "I will take the login form.",   // required; ≤4000 chars
+  "summary": "I will take the login form.",   // for the humans: plain, a few sentences
+  "details": "Branch alice/login-form off main; T031 scope.",  // optional; for the other agent
+  "body": "...",                     // older callers only; summary + details replace it
   "refs": [ { "kind": "commit", "value": "a1b2c3d" } ],  // optional, ≤10
   "work_item": "login-form"          // optional feature tag; claims use this
 }
 ```
+
+`summary` and `details` are stored as one body — summary first, a blank
+line, then the details — and together must fit 4000 characters. Surfaces
+that fold a post show the summary; the other agent receives both.
 
 Output (accepted):
 

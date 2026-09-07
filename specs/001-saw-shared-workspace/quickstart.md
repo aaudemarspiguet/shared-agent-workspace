@@ -204,7 +204,7 @@ presence dots live. (Covers cli.md contract; SC-001: this setup fits in
 ## Scenario 1 — Room coordination (User Story 1, P1)
 
 1. In alice's Claude Code session, ask the agent to announce work: it
-   calls `room_post` `{type:"intent", body:"I will take the login form",
+   calls `room_post` `{type:"intent", summary:"I will take the login form",
    work_item:"login-form"}`.
 2. Expected: message appears in both web UIs within 5 s; bob's next agent
    turn receives it via hook injection (`UserPromptSubmit`).
