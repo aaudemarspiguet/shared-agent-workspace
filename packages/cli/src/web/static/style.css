@@ -593,6 +593,35 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 .badge.companion { color: var(--violet); border-color: var(--violet); }
 .msg.from-companion { border-left: 3px solid var(--violet); }
 
+/* ---- Plain speech, move 1: people's words stand out, agents' fold ---- */
+/* A human's post is the rare, valuable thing in this room: a fuller card,
+   a larger name. An agent's post is quiet - a headline and a small toggle -
+   so a hundred of them read as a list, not a wall. */
+.msg.from-human { background: #1f2531; border-color: #303a52; padding: 12px 14px; }
+.msg.from-human .sender { font-size: 15px; }
+.msg.from-agent { background: transparent; }
+.msg .headline { line-height: 1.45; }
+.msg .body { margin-top: 6px; }
+.details-toggle {
+  margin-top: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border-color: var(--line);
+}
+.details-toggle:hover { color: var(--text); }
+.postnum {
+  padding: 0 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+}
+.postnum:hover { color: var(--text); }
+
 /* A failed session control explains itself beside the control (T154). */
 .session-error {
   flex-basis: 100%;
