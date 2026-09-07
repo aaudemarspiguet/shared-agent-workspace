@@ -3,6 +3,7 @@
 // room_post is the only way an agent sends anything to the peer.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { composePost } from "../plain-speech.js";
 import {
   agentGate,
   daemonCall,
@@ -66,13 +67,38 @@ export function registerRoomTools(server: McpServer, root: string): void {
     "room_post",
     {
       description:
-        "Post one message to the shared room. Only messages and git refs cross to the peer. " +
-        "An intent with a work_item claims it; the first claim wins.",
+        "Post one message to the shared room. Two people read the room on their phones: " +
+        "`summary` is for them, `details` is for the other agent. Only messages and git refs " +
+        "cross to the peer. An intent with a work_item claims it; the first claim wins.",
       inputSchema: {
         type: z
           .enum(["intent", "question", "decision", "handoff", "status"])
           .describe("The message type."),
-        body: z.string().min(1).max(4000).describe("Plain text. No code, no diffs."),
+        summary: z
+          .string()
+          .min(1)
+          .max(2000)
+          .optional()
+          .describe(
+            "For the humans: what happened or what you need, in plain words, a few sentences " +
+              "at most. This is the part they read. No task or spec numbers, no commit hashes, " +
+              "no internal words - say \"start\" not \"wake\", \"final\" not \"binding\"."
+          ),
+        details: z
+          .string()
+          .min(1)
+          .max(4000)
+          .optional()
+          .describe(
+            "For the other agent: shorthand, task numbers, commit ids, evidence - anything " +
+              "that helps the work. The humans see it only if they open it. No code, no diffs."
+          ),
+        body: z
+          .string()
+          .min(1)
+          .max(4000)
+          .optional()
+          .describe("Older callers only. Prefer summary and details."),
         refs: z
           .array(
             z.object({
@@ -117,19 +143,31 @@ export function registerRoomTools(server: McpServer, root: string): void {
           : undefined
       );
       if (gate) return gate;
+      // Two registers, one stored message: the summary for the humans first,
+      // the details for the other agent after a blank line (plain-speech
+      // plan). The daemon and relay see one body, exactly as before.
+      const composed = composePost(args);
+      if (!composed.ok) return errorResult("invalid_input", composed.message);
       const res = await daemonCall(root, "/api/post", {
         method: "POST",
         // A run the companion started carries SAW_COMPANION=1 (FR-053):
         // its posts take the companion identity structurally, not by hoping
         // the prompt is obeyed.
         body: {
-          ...args,
+          type: args.type,
+          body: composed.body,
+          ...(args.refs !== undefined ? { refs: args.refs } : {}),
+          ...(args.work_item !== undefined ? { work_item: args.work_item } : {}),
+          ...(threadId !== undefined ? { thread_id: threadId } : {}),
           sender_kind: process.env.SAW_COMPANION === "1" ? "companion" : "agent"
         }
       });
       if (!res) return errorResult("not_connected", NOT_RUNNING);
       if (res.status !== 200) return mapDaemonError(res.status, res.json);
-      return jsonResult(res.json);
+      // The one soft guardrail: a long summary gets a sentence back, and the
+      // post has already gone through.
+      const answer = res.json as Record<string, unknown>;
+      return jsonResult(composed.note ? { ...answer, note: composed.note } : answer);
     }
   );
 }

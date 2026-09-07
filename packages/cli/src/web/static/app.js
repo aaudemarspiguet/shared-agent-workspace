@@ -124,7 +124,17 @@ function el(tag, className, text) {
  * anything. Capped, so a run-on first sentence still folds.
  */
 function headline(body) {
-  const lines = body
+  const whole = body.trim();
+  // A post written with room_post's summary and details registers stores
+  // the summary as its first paragraph. That paragraph IS the human part,
+  // so it shows whole - a few sentences, never cut.
+  const paragraphs = whole.split(/\n\s*\n/);
+  if (paragraphs.length > 1 && paragraphs[0].trim().length <= 700) {
+    return paragraphs[0].replace(/\s*\n\s*/g, " ").trim();
+  }
+  // Older posts have no registers: fall back to the first sentence, past a
+  // shouted heading line and a bare greeting line, cut at a word boundary.
+  const lines = whole
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l);
@@ -139,9 +149,29 @@ function headline(body) {
   }
   const first = line.match(/^.*?[.!?](\s|$)/);
   let text = (first ? first[0] : line).trim();
-  if (text.length > 140) text = text.slice(0, 137).trimEnd() + "…";
+  if (text.length > 140) {
+    const cut = text.lastIndexOf(" ", 137);
+    text = text.slice(0, cut > 60 ? cut : 137).trimEnd() + "…";
+  }
   return text;
 }
+
+/** A copied post link (#seq-96) opens the full feed at that post. */
+function jumpToLinkedPost() {
+  if (!location.hash.startsWith("#seq-")) return false;
+  state.selection = { mode: "all", threadId: "" };
+  renderThreads(Array.from(state.threadsById.values()));
+  renderThreadHeader();
+  renderFeed();
+  const target = document.getElementById(location.hash.slice(1));
+  if (target) target.scrollIntoView();
+  return true;
+}
+
+// A link pasted into a page that is already open changes only the hash.
+window.addEventListener("hashchange", () => {
+  jumpToLinkedPost();
+});
 
 function wordCount(body) {
   return body.trim().split(/\s+/).filter(Boolean).length;
@@ -1279,17 +1309,7 @@ function connect() {
       // must be drawn once more, now that it can answer.
       // A copied post link lands here too: #seq-96 opens the full feed and
       // scrolls to that post once the replay has drawn it.
-      const linked = location.hash.startsWith("#seq-") ? location.hash.slice(1) : "";
-      if (linked) {
-        state.selection = { mode: "all", threadId: "" };
-        renderThreads(Array.from(state.threadsById.values()));
-        renderThreadHeader();
-      }
-      renderFeed();
-      if (linked) {
-        const target = document.getElementById(linked);
-        if (target) target.scrollIntoView();
-      }
+      if (!jumpToLinkedPost()) renderFeed();
       return;
     }
     if (data.kind === "event") {
