@@ -42,6 +42,11 @@ MUST NOT require filtering a global feed (FR-011).
 - `thread_id` omitted means a project broadcast.
 - `force` defaults to `advisory`. `binding` requires authority (FR-043).
 - The relay is the only source of the verdict, as in v0.
+- At the agent's tool (not on the wire), `body` is composed from two
+  fields: `summary`, written for the humans in plain words, and `details`,
+  written for the other agent. They are stored as one body, summary first,
+  then a blank line, then the details (FR-048). A bare `body` still passes
+  through for older callers.
 
 Refusals:
 

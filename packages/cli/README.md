@@ -201,7 +201,7 @@ run goes.
 ## The five MCP tools
 
 - `room_read` — read room messages in seq order, newest last.
-- `room_post` — post one message. An intent with a `work_item` claims it.
+- `room_post` — post one message in two parts: `summary` (for the humans, plain, a few sentences) and `details` (for the other agent, where shorthand and pointers belong). Stored as one message, summary first. `body` still works for older callers. An intent with a `work_item` claims it.
   The first claim wins.
 - `work_log` — query stored run summaries by member, work item, and time.
 - `peer_activity` — report what your teammate did since a time. Works

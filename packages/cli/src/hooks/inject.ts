@@ -29,7 +29,13 @@ function renderMessage(m: StoredMessage): string {
   const refs =
     m.refs.length > 0 ? ` [refs: ${m.refs.map((r) => `${r.kind}:${r.value}`).join(", ")}]` : "";
   const item = m.work_item ? ` (work_item: ${m.work_item})` : "";
-  return `- #${m.seq} ${m.sender} (${m.sender_kind}) ${m.type}${target}: ${m.body}${refs}${item}`;
+  // The header is plain on purpose. It used to open with "#96", and the
+  // agents learned to talk in message numbers from their own inbox. The
+  // number stays - last, for the details register - but a person could
+  // read this line aloud. A registered post carries a blank line between
+  // its two parts; indenting keeps the details inside their bullet.
+  const body = m.body.replace(/\n/g, "\n  ");
+  return `- ${m.sender} (${m.sender_kind}) ${m.type}${target}, post ${m.seq}: ${body}${refs}${item}`;
 }
 
 /**

@@ -28,9 +28,10 @@ export function companionPrompt(member: string, q: CompanionQuestion): string {
     `You are ${member}'s SAW companion for the thread "${q.threadTitle}". ` +
     `${q.asker} asked: ${q.question} ` +
     `Answer from the stored record only: room_read (thread_id ${q.threadId}), ` +
-    `work_log, workspace_status, and peer_activity. Post ONE plain answer ` +
-    `into the thread with room_post (thread_id ${q.threadId}), leading with ` +
-    `the point. You must not edit files, run code, claim work, hand off, ` +
+    `work_log, workspace_status, and peer_activity. Post ONE answer into the ` +
+    `thread with room_post (thread_id ${q.threadId}): a plain summary a person ` +
+    `can read, with anything technical in details. ` +
+    `You must not edit files, run code, claim work, hand off, ` +
     `bind refs, or use binding force - you answer, nothing else. If the ` +
     `record cannot answer, say so plainly and name who can.`
   );

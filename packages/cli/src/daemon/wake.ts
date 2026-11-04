@@ -44,9 +44,9 @@ export function wakePrompt(run: WakeRun): string {
   return (
     `SAW woke you: ${why} "${run.threadTitle}". ` +
     `Read the thread (room_read with thread_id ${run.threadId}), then do what ` +
-    `your member would want and post your reply into the thread. Keep the ` +
-    `post plain and lead with the point. If the session's task is finished, ` +
-    `propose done instead of continuing.`
+    `your member would want and post your reply into the thread with room_post: ` +
+    `a plain summary for the humans, details for the other agent. If the ` +
+    `session's task is finished, propose done instead of continuing.`
   );
 }
 
