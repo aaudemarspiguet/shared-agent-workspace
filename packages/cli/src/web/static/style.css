@@ -12,6 +12,54 @@
   --red: #ff6b6b;
   --violet: #b48cff;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Solid colours that used to be written inline, so the light palette can swap them. */
+  --dot-off: #4a5266;
+  --ref-bg: #10131a;
+  --ref-fg: #9cc0ff;
+  --type-intent-bg: #17325e; --type-intent-fg: #9cc0ff;
+  --type-question-bg: #33235c; --type-question-fg: #cdb2ff;
+  --type-decision-bg: #123d2c; --type-decision-fg: #7fe3b4;
+  --type-handoff-bg: #4a3413; --type-handoff-fg: #ffd096;
+  --type-status-bg: #262c3a;
+  --mention-bg: #221c11;
+  --human-bg: #1f2531;
+  --human-line: #303a52;
+  --hover: rgba(255, 255, 255, 0.05);
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-dialog: 0 10px 30px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+/* Light palette, picked from the OS setting. Dark stays the default above. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-2: #f0f2f5;
+    --line: #dde1e8;
+    --text: #1b1f27;
+    --muted: #5d6576;
+    --accent: #2f6fe0;
+    --green: #1f9d68;
+    --amber: #c27a12;
+    --red: #d64545;
+    --violet: #7c4fd6;
+    --dot-off: #b4bac6;
+    --ref-bg: #eef2f8;
+    --ref-fg: #2754a8;
+    --type-intent-bg: #e3ecfd; --type-intent-fg: #1f4fa8;
+    --type-question-bg: #ede6fb; --type-question-fg: #5b3aa8;
+    --type-decision-bg: #ddf3e8; --type-decision-fg: #17704a;
+    --type-handoff-bg: #fbeedb; --type-handoff-fg: #8a5a12;
+    --type-status-bg: #eceef2;
+    --mention-bg: #fdf5e6;
+    --human-bg: #f2f5fb;
+    --human-line: #cfd8ea;
+    --hover: rgba(0, 0, 0, 0.04);
+    --shadow-menu: 0 8px 24px rgba(16, 24, 40, 0.14);
+    --shadow-dialog: 0 10px 30px rgba(16, 24, 40, 0.18);
+    color-scheme: light;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -57,7 +105,7 @@ body {
 .member.me { color: var(--text); }
 .dot {
   width: 8px; height: 8px; border-radius: 50%;
-  background: #4a5266;
+  background: var(--dot-off);
 }
 .dot.online { background: var(--green); }
 .member .paused-tag {
@@ -177,22 +225,22 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   padding: 1px 7px;
   border-radius: 10px;
 }
-.type.intent { background: #17325e; color: #9cc0ff; }
-.type.question { background: #33235c; color: #cdb2ff; }
-.type.decision { background: #123d2c; color: #7fe3b4; }
-.type.handoff { background: #4a3413; color: #ffd096; }
-.type.status { background: #262c3a; color: var(--muted); }
+.type.intent { background: var(--type-intent-bg); color: var(--type-intent-fg); }
+.type.question { background: var(--type-question-bg); color: var(--type-question-fg); }
+.type.decision { background: var(--type-decision-bg); color: var(--type-decision-fg); }
+.type.handoff { background: var(--type-handoff-bg); color: var(--type-handoff-fg); }
+.type.status { background: var(--type-status-bg); color: var(--muted); }
 .msg .target { color: var(--amber); }
 .msg .body { white-space: pre-wrap; word-break: break-word; }
 .msg .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .ref {
   font-family: var(--mono);
   font-size: 12px;
-  background: #10131a;
+  background: var(--ref-bg);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 6px;
-  color: #9cc0ff;
+  color: var(--ref-fg);
 }
 .work-item {
   font-size: 12px;
@@ -293,7 +341,7 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 }
 
 /* ---- Pings (FR-045: an addressed message reads like a mention) ---- */
-.msg.mention { border-left: 3px solid var(--amber); background: #221c11; }
+.msg.mention { border-left: 3px solid var(--amber); background: var(--mention-bg); }
 #ping-btn { font-size: 12px; padding: 2px 8px; border-radius: 10px; color: var(--muted); }
 #ping-btn.on { color: var(--amber); border-color: var(--amber); }
 
@@ -559,7 +607,7 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 /* A human's post is the rare, valuable thing in this room: a fuller card,
    a larger name. An agent's post is quiet - a headline and a small toggle -
    so a hundred of them read as a list, not a wall. */
-.msg.from-human { background: #1f2531; border-color: #303a52; padding: 12px 14px; }
+.msg.from-human { background: var(--human-bg); border-color: var(--human-line); padding: 12px 14px; }
 .msg.from-human .sender { font-size: 15px; }
 .msg.from-agent { background: transparent; }
 .msg .headline { line-height: 1.45; }
@@ -650,7 +698,7 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--panel-2);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-menu);
 }
 
 /* The mode control, by the composer: where you act, not in the title bar. */
@@ -690,7 +738,7 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--panel-2);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-dialog);
 }
 .mode-opt {
   display: flex;
@@ -705,7 +753,7 @@ main { flex: 1; min-height: 0; padding: 0 16px 16px; }
   color: var(--text);
   cursor: pointer;
 }
-.mode-opt:hover { background: rgba(255, 255, 255, 0.05); }
+.mode-opt:hover { background: var(--hover); }
 .mode-opt.on { background: rgba(79, 140, 255, 0.14); }
 .mode-opt-name { font-size: 12px; font-weight: 600; }
 .mode-opt-desc { font-size: 11px; color: var(--muted); }
